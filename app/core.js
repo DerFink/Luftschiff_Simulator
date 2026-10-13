@@ -1,4 +1,4 @@
-// 2026-10-13 19:40 · core.js 0.5: Gondel nach Stirnfläche/Form/Abstand, Seile, Zahl der Motorgondeln, Leitwerk bis 8 Flossen
+// 2026-10-13 20:00 · core.js 0.6: Räume im Rumpf mindern Gasraum, 4-Mann-Steuergondel, Motorgondel offen/verkleidet (LZ 126 / NT), Flossen-Zuspitzung und -Pfeilung, Nasenlatten
 //                    Widerstand, Leistung nach Burgess, Gipfelhöhe, Leitwerk im Überschlag, Speicher-Code)
 /* =================================================================================================
    LUFTSCHIFF-SIMULATOR · RECHENKERN
@@ -175,28 +175,38 @@
        2 Flossen V / umgekehrtes V: beide Ebenen (Höhenruder vorhanden), je Flosse A.
        ab 3 Flossen (+, X, Y, umgek. Y): beide Ebenen, je Flosse 2·A/n.
      ----------------------------------------------------------------------------------------------- */
-  const LTW_ANNAHMEN = { ar: 1.6, lam: 0.6, xTE: 0.97, eta: 0.85, K: 1.3 };   // Seitenverhältnis Flossenpaar, Zuspitzung, Lage Hinterkante, η, K
+  // Seitenverhältnis Flossenpaar Λ, Zuspitzung λ = c_t/c_r, Pfeilung der Vorderkante φ [°], Lage der Hinterkante an der Wurzel, η, K
+  const LTW_ANNAHMEN = { ar: 1.6, lam: 0.6, sweep: 32, xTE: 0.97, eta: 0.85, K: 1.3 };
   function lamb(LD) {                       // zusätzliche Massen k1 (längs), k2 (quer) nach Lamb
     const e = Math.sqrt(1 - 1 / (LD * LD)), l = Math.log((1 + e) / (1 - e));
     const a0 = 2 * (1 - e * e) / (e * e * e) * (0.5 * l - e), b0 = 1 / (e * e) - (1 - e * e) / (2 * e * e * e) * l;
     return { k1: a0 / (2 - a0), k2: b0 / (2 - b0) };
   }
-  const helmbold = A => 2 * Math.PI * A / (2 + Math.sqrt(4 + A * A));        // Auftriebsanstieg [1/rad]
-  // Flossengeometrie: Trapez mit senkrechter Hinterkante bei xTE·L; liefert Spannweite, Tiefen, Neutralpunkt
+  // Auftriebsanstieg [1/rad] nach Helmbold/DATCOM mit Pfeilung der halben Profiltiefe Λ_c/2:
+  //   a = 2π·A / (2 + √(A²·(1 + tan²Λ_c/2) + 4))      (ohne Pfeilung: Helmbold)
+  const helmbold = (A, tanC2) => 2 * Math.PI * A / (2 + Math.sqrt(A * A * (1 + (tanC2 || 0) * (tanC2 || 0)) + 4));
+  // Pfeilung einer beliebigen Linie n (Anteil der Profiltiefe) aus der Vorderkanten-Pfeilung:
+  //   tan Λ_n = tan Λ_VK − (4/A)·n·(1 − λ)/(1 + λ)      (A = Seitenverhältnis des Flossenpaares)
+  const tanSweep = (o, nfrac) => Math.tan(o.sweep * Math.PI / 180) - 4 / o.ar * nfrac * (1 - o.lam) / (1 + o.lam);
+  // Flossengeometrie: Trapez, Wurzel-Hinterkante bei xTE·L, Vorderkante um φ gepfeilt;
+  // liefert Spannweite, Tiefen, mittlere Profiltiefe (MAC), Neutralpunkt (25 % MAC) und Hebelarm
   function finGeo(Sf, L, xB, o) {
     const b = Math.sqrt(o.ar * Sf / 2);                   // Seitenverhältnis des Paares: (2b)² / (2·Sf)
     const cr = 2 * Sf / (b * (1 + o.lam)), ct = cr * o.lam;
     const mac = 2 / 3 * cr * (1 + o.lam + o.lam * o.lam) / (1 + o.lam);       // mittlere Profiltiefe
     const ym = b / 3 * (1 + 2 * o.lam) / (1 + o.lam);                          // Lage der MAC über der Wurzel
-    const xLE = o.xTE * L - (cr - (cr - ct) * ym / b);                         // Vorderkante an der MAC
+    const tLE = Math.tan(o.sweep * Math.PI / 180);
+    const xLEr = o.xTE * L - cr;                                               // Vorderkante an der Wurzel
+    const xLE = xLEr + ym * tLE;                                               // Vorderkante an der MAC
     const xAC = xLE + 0.25 * mac;                                              // Neutralpunkt
-    return { b, cr, ct, mac, xAC, lt: xAC - xB * L };
+    return { b, cr, ct, mac, xAC, lt: xAC - xB * L, xLEr, tLE };
   }
   function tail(ltw, geo, vmax) {
-    const o = Object.assign({}, LTW_ANNAHMEN, ltw.ar ? { ar: ltw.ar } : {});
+    const o = Object.assign({}, LTW_ANNAHMEN);
+    if (ltw.ar) o.ar = ltw.ar; if (ltw.lam != null) o.lam = ltw.lam; if (ltw.sweep != null) o.sweep = ltw.sweep;
     const n = ltw.n, an = ltw.anord, f = ltw.faktor || 1;
     const LD = geo.L / geo.D, lk = lamb(LD), dk = lk.k2 - lk.k1;
-    const a = helmbold(o.ar), aeff = a * o.eta * o.K;
+    const tC2 = tanSweep(o, 0.5), a = helmbold(o.ar, tC2), aeff = a * o.eta * o.K;
     const vee = n === 2 && (an === 'V' || an === 'A');
     const planes = (n <= 2 && !vee) ? 1 : 2;
     const elevator = planes === 2;
@@ -214,7 +224,7 @@
     const Atot = Afin * n;                                            // gesamte Flossenfläche (Masse, Widerstand)
     const load = 0.026 * geo.Vs * (Aplane / (0.13 * geo.Vs)) * 1.225 * vmax * vmax;   // Burgess S. 110, je Ebene
     return { n, anord: an, Aplane, Atot, Afin, elevator, planes, load, A_jones, A_static, A_burgess: 0.13 * geo.Vs,
-             k1: lk.k1, k2: lk.k2, dk, a, aeff, o, b: g.b, cr: g.cr, ct: g.ct, mac: g.mac, xAC: g.xAC, lt: g.lt, finShare };
+             k1: lk.k1, k2: lk.k2, dk, a, aeff, o, tC2, b: g.b, cr: g.cr, ct: g.ct, mac: g.mac, xAC: g.xAC, lt: g.lt, xLEr: g.xLEr, tLE: g.tLE, finShare };
   }
 
   /* -----------------------------------------------------------------------------------------------
@@ -256,6 +266,7 @@
     m.armaturen = geo.V > 50 ? 0.01 * geo.V + 15 : 0.004 * geo.V + 0.01;         // Ventile, Reißbahn, Füllansatz, Steuerseile
     if (d.bauweise === 'H') m.kiel = 0.045 * lift0 * Math.pow(geo.L / 60, 0.5);  // Kiel trägt Lasten über die Länge
     if (d.bauweise === 'P' || d.bauweise === 'H') m.nasenlatten = geo.V > 50 ? 0.004 * geo.V : 0;
+    if (d.bauweise === 'O' && d.latten && d.latten.len > 0) m.nasenlatten = d.latten.n * d.latten.len * lattenKgM(geo);
     return m;
   }
 
@@ -277,7 +288,7 @@
     let l = 0, b = 0, h = 0, m = 0, cd = 0;
     if (t === 'K') { b = 1.2; h = 1.15; l = Math.max(1.2, 0.6 * n + 0.6); m = 25 + 22 * n; cd = 1.0; }
     else if (t === 'F') { b = Math.min(3, 1.4 + 0.02 * n); h = n <= 2 ? 1.4 : 1.9; l = 2 + 0.75 * n; m = 150 + 60 * n; cd = f === 'S' ? 0.25 : 0.8; }
-    else if (t === 'I') { b = 2.0; h = 1.8; l = Math.min(15, Math.max(2, 0.05 * geo.L)); m = 100 + 45 * n; cd = 0.25; }
+    else if (t === 'I') { b = 2.0; h = 1.8; l = 5; m = 390 + 45 * n; cd = 0.25; }   // 4-Mann-Steuergondel (Stromlinie) + Räume im Rumpf
     else if (t === 'R') { return { m: 0, CdA: 0.004, l: 0.1, b: 0.05, h: 0.04, ropes: null }; }
     else return { m: 0, CdA: 0, l: 0, b: 0, h: 0, ropes: null };
     if (d.gl) l = d.gl; if (d.gb) b = d.gb; if (d.gh) h = d.gh;
@@ -305,6 +316,12 @@
     if (Re < 5e5) return 1.328 / Math.sqrt(Math.max(Re, 1e3));                 // laminar
     return 0.455 / Math.pow(Math.log10(Re), 2.58);                              // turbulent (Hüllen sind nie glatt: Nähte, Falten)
   }
+  /* Motorgondeln: Widerstandsfläche je Gondel = k · (Leistung je Gondel in kW)^(2/3)
+       k = 0,063 offen mit Kühlern und Streben (bis 1930er), abgeglichen an der LZ 126 (122 km/h)
+       k = 0,036 verkleidet (modern),                         bestätigt am Zeppelin NT (125 km/h)
+       k = 0,010 Motoren im Rumpf                                                                      */
+  const NACELLE = { O: 0.063, V: 0.036 };
+  function kNacelle(a) { return a.lage === 'I' ? 0.01 : NACELLE[a.mg || 'V']; }
   function dragCoeff(d, geo, tl, v, rho) {
     const Re = Math.max(v, 0.5) * geo.L / NU0 * (rho / 1.225);
     const cf = cfOf(Re), LD = geo.L / geo.D;
@@ -314,7 +331,7 @@
     const gon = g.CdA / geo.Vs;
     // Motorgondeln: Zahl der Gondeln (z. B. LZ 120: 4 Motoren in 3 Gondeln), Widerstand ~ (Leistung je Gondel)^(2/3)
     const ant = d.antrieb, ng = Math.max(1, ant.gondeln || ant.n), Pg = ant.n * Math.max(ant.kW, 0.01) / ng;
-    const engines = ng * (ant.lage === 'I' ? 0.01 : 0.036) * Math.pow(Pg, 2 / 3) / geo.Vs;
+    const engines = ng * kNacelle(ant) * Math.pow(Pg, 2 / 3) / geo.Vs;
     const seile = g.ropes ? g.ropes.CdA / geo.Vs : 0;
     const extra = (d.anbauten || 0) / geo.Vs;
     return { Re, cf, hull, fins, gon, engines, seile, extra, total: hull + fins + gon + engines + seile + extra };
@@ -351,12 +368,41 @@
      9. GESAMTRECHNUNG EINES LUFTSCHIFFS
      Eingabe: Entwurf d (siehe DEFAULTS); Ausgabe: alle Eckdaten, Massenliste, Warnungen.
      ----------------------------------------------------------------------------------------------- */
+  /* Nase bei offenem Appendix (Gasballon-Prinzip, kein Gebläse):
+     außen:  p = q · Cp(x), Druckbeiwert nach der Potentialtheorie des Rotationskörpers
+             Cp = 1 − (1 + k1)² · cos²β   (β = Neigung der Hülle gegen die Längsachse, k1 nach Lamb)
+     innen:  Überdruck nur aus der Gassäule über dem Appendix (unten): Δp = g · Auftrieb je m³ · Höhe;
+             am ungünstigsten ist die Unterseite des Hüllenrings: Höhe = R − r(x)
+     Die Hülle beult ein, wo q · Cp(x) > Δp(x). Nasenlatten versteifen die Hülle von der Spitze bis zur
+     Bogenlänge len; geprüft wird nur dahinter.                                                    */
+  function noseScan(geo, lpm, fn) {
+    const k1 = lamb(geo.L / geo.D).k1; let s = 0, px = 0, pr = 0;
+    for (let i = 1; i <= 600; i++) {
+      const x = i / 600 * 0.6, r = geo.R * Math.sqrt(Math.max(0, y2(geo.a, x))), X = x * geo.L;
+      const ds = Math.hypot(X - px, r - pr); s += ds;
+      const cosb = (X - px) / ds, cp = 1 - (1 + k1) * (1 + k1) * cosb * cosb;
+      px = X; pr = r;
+      if (fn(s, cp, G0 * lpm * (geo.R - r)) === false) break;
+    }
+  }
+  function nose(geo, lpm, len) {           // Geschwindigkeit, ab der die Nase hinter den Latten einbeult
+    let vmin = Infinity;
+    noseScan(geo, lpm, (s, cp, dp) => { if (s >= (len || 0) && cp > 0) vmin = Math.min(vmin, Math.sqrt(2 * dp / (1.225 * cp))); });
+    return { v: vmin };
+  }
+  function noseNeed(geo, lpm, v) {         // nötige Lattenlänge (Bogenlänge ab Spitze) für Geschwindigkeit v
+    const q = 0.5 * 1.225 * v * v; let need = 0;
+    noseScan(geo, lpm, (s, cp, dp) => { if (q * cp > dp) need = s; });
+    return need;
+  }
+  const lattenKgM = geo => 0.3 + 0.02 * geo.D;     // Masse je m Latte (Aluminium-/CFK-Rohr, wächst mit Ø)
+
   const DEFAULTS = {
     name: 'Neues Luftschiff', bauweise: 'P', gas: 'He', reinheit: 0.98,
     V: 2000, form: Object.assign({}, FORMS.blimp), huelle_gm2: 250, zellen_gm2: 170, werkstoff: 1,
     prallhoehe: 1000, ballonet: 25, ltw: { n: 4, anord: '+', faktor: 1 },
     gondel: 'F', crew: 1, pax: 1, m_person: 80, nutzlast: 0, avionik: 0,
-    antrieb: { art: 'E', n: 2, kW: 10, lage: 'G', eta: 0.7, kWh: 30, whkg: 180, kraftstoff: 0, sfc: 0.30, kgkW: null },
+    antrieb: { art: 'E', n: 2, kW: 10, lage: 'G', mg: 'V', eta: 0.7, kWh: 30, whkg: 180, kraftstoff: 0, sfc: 0.30, kgkW: null },
     v_reise: 40, ballast: 50, schlepptau: 0, anbauten: 0,
   };
 
@@ -374,7 +420,10 @@
     else fill = atmos(d.prallhoehe).sigma;                          // Prall/halbstarr: geplante Prallhöhe (Burgess Aufg. 4)
     const prallhoehe = hOfSigma(fill);
     const lpm = liftPerM3(d.gas, d.reinheit, 0);
-    const lift0 = geo.V * gasShare * fill * lpm;                    // [kg] Bruttoauftrieb am Boden
+    // Fahrgast- und Mannschaftsräume im Rumpf (Gondelart I) nehmen Gasraum weg: 20 m³ je Fahrgast, 8 m³ je Besatzung
+    const Vraum = d.gondel === 'I' ? 20 * (d.pax || 0) + 8 * (d.crew || 0) : 0;
+    const Vgas = Math.max(0, geo.V * gasShare - Vraum);
+    const lift0 = Vgas * fill * lpm;                                // [kg] Bruttoauftrieb am Boden
 
     // --- Hängende Last für die Seile der Gondel (Gondel, Personen, Energie, Nutzlast, Ballast, Motoren an der Gondel) ---
     const pr0 = propulsion(d, geo), g0 = gondola(d, geo, 0);
@@ -417,12 +466,18 @@
 
     // --- Druck und Formhaltung ---
     const q = 0.5 * 1.225 * vmax * vmax;                            // Staudruck bei vmax [Pa]
-    let v_beulen = null;
+    let v_beulen = null, latten = null;
+    const vorschlaege = [];          // Vorschläge mit Knopf in der App: { text, set: {…} }
     if (d.bauweise === 'O') {
-      // Innendruck nur aus der Gassäule über dem Appendix (unten): Δp(z) = g·(ρLuft − ρGas)·z
-      const dpNase = G0 * lpm * geo.R;                               // Nase auf Höhe der Mittellinie
-      v_beulen = Math.sqrt(2 * dpNase / 1.225);
-      if (vmax > v_beulen) warn.push(`Appendix offen: Ab etwa ${Math.round(v_beulen * 3.6)} km/h beult die Nase ein (Innendruck an der Nase ≈ ${Math.round(dpNase)} Pa). Abhilfe: Nasenlatten, Gebläse oder langsamer fahren.`);
+      const nl = nose(geo, lpm, d.latten ? d.latten.len : 0);
+      v_beulen = nl.v;
+      latten = { need: noseNeed(geo, lpm, vmax), n: d.latten ? d.latten.n : 0, len: d.latten ? d.latten.len : 0 };
+      if (vmax > v_beulen) {
+        const need = latten.need, nL = Math.max(8, Math.round(Math.PI * geo.D / 2.5));
+        const mL = nL * need * lattenKgM(geo);
+        warn.push(`Appendix offen: Ab etwa ${Math.round(v_beulen * 3.6)} km/h drückt der Fahrtwind die Nase ein` + (d.latten && d.latten.len ? ` (Latten ${d.latten.len.toFixed(1).replace('.', ',')} m zu kurz)` : '') + `. Für ${Math.round(vmax * 3.6)} km/h reichen Nasenlatten von ${need.toFixed(1).replace('.', ',')} m Länge ab Nasenspitze (${nL} Stück, rund ${fmtMass(mL)}).`);
+        vorschlaege.push({ text: `Nasenlatten einbauen: ${nL} × ${need.toFixed(1).replace('.', ',')} m`, set: { latten: { n: nL, len: Math.ceil(need * 10) / 10 } } });
+      }
       warn.push('Wasserstoff kann am offenen Appendix austreten: Abstand zu Motoren und Zündquellen beachten.');
     }
     let huelleAuslastung = null;
@@ -441,11 +496,11 @@
     if (d.bauweise === 'S' && d.V < 28300) warn.push('Burgess: Starrluftschiffe unter rund 28.000 m³ sind nicht effizient. Prall oder halbstarr prüfen.');
 
     return {
-      d, geo, tail: tl, lift0, lpm, fill, prallhoehe, gasShare,
+      d, geo, tail: tl, lift0, lpm, fill, prallhoehe, gasShare, Vraum, Vgas,
       leer, mLeer, zuladung, mGesamt, frei,
       vmax, vmax_kmh: vmax * 3.6, v_reise_kmh: vr * 3.6, Preise, dauer_h, reichweite_km, gipfel,
       drag: dragCoeff(d, geo, tl, vmax, 1.225), gondel: gon, K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
-      P_burgess, v_beulen, huelleAuslastung, propulsion: pr, warn,
+      P_burgess, v_beulen, latten, huelleAuslastung, propulsion: pr, warn, vorschlaege,
     };
   }
 
@@ -481,8 +536,8 @@
       ['Gas ' + (d.gas === 'H2' ? 'H₂' : 'He') + ' rein', 'ρ_Gas = p·M_Gas/(R·T) mit M = ' + n(M_GAS[d.gas] * 1000, 3) + ' g/mol', n(rhoG, 4) + ' kg/m³'],
       ['Auftrieb je m³', 'ρ_Luft − (Reinheit·ρ_Gas + (1 − Reinheit)·ρ_Luft), Reinheit ' + n(d.reinheit * 100, 1) + ' %', n(r.lpm, 4) + ' kg/m³'],
       ['Füllung am Boden', d.bauweise === 'O' ? 'offener Appendix: beim Start prall' : 'σ(Prallhöhe ' + n(d.prallhoehe) + ' m) = ρ(h)/ρ₀', n(r.fill * 100, 1) + ' %'],
-      ['Gasraum', d.bauweise === 'S' ? 'Starr: 95 % der Luftverdrängung (Burgess 90–96 %)' : 'Prallhülle: 99 % (Gondel, Leitwerk außen)', n(r.gasShare * 100) + ' %'],
-      ['Bruttoauftrieb', 'V · Gasraum · Füllung · Auftrieb je m³ = ' + nn(g.V) + ' · ' + n(r.gasShare, 2) + ' · ' + n(r.fill, 3) + ' · ' + n(r.lpm, 4), m(r.lift0)],
+      ['Gasraum', (d.bauweise === 'S' ? 'Starr: 95 % der Luftverdrängung (Burgess 90–96 %)' : 'Prallhülle: 99 % (Gondel, Leitwerk außen)') + (r.Vraum ? ' − Räume im Rumpf (20 m³ je Fahrgast, 8 m³ je Besatzung) ' + nn(r.Vraum) + ' m³' : ''), nn(r.Vgas) + ' m³'],
+      ['Bruttoauftrieb', 'Gasraum · Füllung · Auftrieb je m³ = ' + nn(r.Vgas) + ' · ' + n(r.fill, 3) + ' · ' + n(r.lpm, 4), m(r.lift0)],
     ] });
     // Massen: je Bauteil die Formel
     const e = r.leer, Z = [];
@@ -521,10 +576,10 @@
     S.push({ titel: '4 Leitwerk nach Jones (Burgess S. 100–103)', zeilen: [
       ['Zusätzliche Massen (Lamb)', 'L/D = ' + nn(g.L / g.D) + ' ⇒ k₁ = ' + n(t.k1, 3) + ', k₂ = ' + n(t.k2, 3), 'k₂ − k₁ = ' + n(t.dk, 3)],
       ['Munk-Moment des Rumpfes', 'M = q · Vol · (k₂ − k₁) · sin 2α ≈ q · ' + nn(2 * g.V * t.dk) + ' m³ · α', 'je rad Anstellung'],
-      ['Auftriebsanstieg Flosse (Helmbold)', 'a = 2π·Λ / (2 + √(4 + Λ²)) mit Λ = ' + nn(t.o.ar) + ' (Flossenpaar)', n(t.a, 3) + ' /rad'],
+      ['Auftriebsanstieg Flosse (Helmbold/DATCOM)', 'a = 2π·Λ / (2 + √(Λ²·(1 + tan²Λ_c/2) + 4)) mit Λ = ' + nn(t.o.ar) + ' (Flossenpaar), Pfeilung Vorderkante ' + n(t.o.sweep) + '° ⇒ tan Λ_c/2 = ' + n(t.tC2, 3), n(t.a, 3) + ' /rad'],
       ['Wirksamer Anstieg', 'a_eff = a · η · K = ' + n(t.a, 3) + ' · ' + n(t.o.eta, 2) + ' (Staudruck am Heck) · ' + n(t.o.K, 2) + ' (Rumpf-Flossen-Interferenz)', n(t.aeff, 3) + ' /rad'],
-      ['Flosse (Trapez, Zuspitzung ' + n(t.o.lam, 1) + ')', 'Spannweite b = √(Λ·S_Flosse/2), Wurzeltiefe c_r = 2·S_Flosse/(b·(1+λ)), mittlere Tiefe MAC = ⅔·c_r·(1+λ+λ²)/(1+λ)', 'b ' + nn(t.b) + ' m, c_r ' + nn(t.cr) + ' m, MAC ' + nn(t.mac) + ' m'],
-      ['Neutralpunkt der Flosse', 'Hinterkante bei ' + n(t.o.xTE, 2) + ' · L; Kraftangriff bei 25 % MAC (wie beim Flügel)', nn(t.xAC) + ' m ab Nase = ' + n(t.xAC / g.L, 3) + ' · L'],
+      ['Flosse (Trapez, Zuspitzung ' + n(t.o.lam, 2) + ')', 'Spannweite b = √(Λ·S_Flosse/2), Wurzeltiefe c_r = 2·S_Flosse/(b·(1+λ)), mittlere Tiefe MAC = ⅔·c_r·(1+λ+λ²)/(1+λ)', 'b ' + nn(t.b) + ' m, c_r ' + nn(t.cr) + ' m, MAC ' + nn(t.mac) + ' m'],
+      ['Neutralpunkt der Flosse', 'Wurzel-Hinterkante bei ' + n(t.o.xTE, 2) + ' · L, Vorderkante der MAC um y_MAC · tan φ versetzt; Kraftangriff bei 25 % MAC (wie beim Flügel)', nn(t.xAC) + ' m ab Nase = ' + n(t.xAC / g.L, 3) + ' · L'],
       ['Hebelarm', 'l_t = Neutralpunkt − Auftriebsschwerpunkt = ' + nn(t.xAC) + ' − ' + nn(g.xB * g.L), nn(t.lt) + ' m'],
       ['Statisch neutral', 'A = 2 · Vol · (k₂−k₁) / (a_eff · l_t)  (ohne Dämpfung, zu groß laut Burgess S. 103)', nn(t.A_static) + ' m² je Ebene'],
       ['Jones-Kriterium', 'A = 1,8 · Vol · (k₂−k₁) / (1,9 · a_eff · l_t) = 1,8 · ' + nn(g.V) + ' · ' + n(t.dk, 3) + ' / (1,9 · ' + n(t.aeff, 3) + ' · ' + nn(t.lt) + ')', nn(t.A_jones) + ' m² je Ebene'],
@@ -537,7 +592,7 @@
       ['Rumpf (Hoerner)', 'C_D = C_f · [4·(L/D)^(1/3) + 6·(L/D)^(−7/6) + 24·(L/D)^(−8/3)], L/D ' + nn(g.L / g.D), n(dr.hull, 4)],
       ['Leitwerk', '2 · Flossenfläche · C_f(Flosse) · 1,25 / V^(2/3)', n(dr.fins, 4)],
       ['Gondel', (() => { const G = r.gondel; return G.l ? 'Maße ' + nn(G.l) + ' × ' + nn(G.b) + ' × ' + nn(G.h) + ' m; C_D ' + n(G.cd || 0, 2) + (G.ga > 0 ? '' : ' · 0,8 (an der Hülle)') + ' · ' + nn(G.b * G.h) + ' m² + 0,004 · benetzte Fläche = ' + nn(G.CdA) + ' m², / V^(2/3)' : 'keine'; })(), n(dr.gon, 4)],
-      ['Motorgondeln', Math.max(1, a.gondeln || a.n) + ' Gondel(n) · ' + (a.lage === 'I' ? '0,01' : '0,036') + ' · (P je Gondel ' + nn(a.n * a.kW / Math.max(1, a.gondeln || a.n)) + ' kW)^(2/3) / V^(2/3)', n(dr.engines, 4)],
+      ['Motorgondeln', Math.max(1, a.gondeln || a.n) + ' Gondel(n) · ' + n(kNacelle(a), 3) + ' (' + (a.lage === 'I' ? 'im Rumpf' : a.mg === 'O' ? 'offen mit Kühler, abgeglichen an LZ 126' : 'verkleidet, bestätigt am Zeppelin NT') + ') · (P je Gondel ' + nn(a.n * a.kW / Math.max(1, a.gondeln || a.n)) + ' kW)^(2/3) / V^(2/3)', n(dr.engines, 4)],
       ['Seile', r.gondel.ropes ? r.gondel.ropes.n + ' · 1,2 · Ø ' + nn(r.gondel.ropes.dmm) + ' mm · ' + nn(r.gondel.ropes.len) + ' m (Ø aus 2-facher Last ' + m(d._hang) + ' bei 60 N/mm²) / V^(2/3)' : 'keine außen (Gondel an der Hülle)', n(dr.seile, 4)],
       ['Zusatzfläche', nn(d.anbauten || 0) + ' m² / V^(2/3)', n(dr.extra, 4)],
       ['Summe', 'C_D bezogen auf V^(2/3)', n(dr.total, 4)],
@@ -555,7 +610,12 @@
     ] });
     const abw = d.ballast + (pr.verbrauchMasse ? pr.mEnergie : 0);
     const Z2 = [['Statische Gipfelhöhe (Burgess Kap. II)', 'σ = Füllung · (Masse am Start − abwerfbar ' + m(abw) + ') / Bruttoauftrieb; Höhe mit ρ(h)/ρ₀ = σ, mindestens Prallhöhe', nn(r.gipfel) + ' m']];
-    if (r.v_beulen) Z2.push(['Nase beult ein (offener Appendix)', 'Δp = g · Auftrieb je m³ · R = 9,81 · ' + n(r.lpm, 3) + ' · ' + nn(g.R) + ' m; v = √(2·Δp/ρ)', nn(r.v_beulen * 3.6) + ' km/h']);
+    if (r.v_beulen) {
+      Z2.push(['Druck außen an der Nase', 'p = q · Cp, Cp = 1 − (1 + k₁)² · cos²β (β = Neigung der Hülle), k₁ = ' + n(lamb(g.L / g.D).k1, 3), 'Cp = 1 an der Spitze']);
+      Z2.push(['Druck innen (offener Appendix)', 'Δp = g · Auftrieb je m³ · (R − r(x)) an der Unterseite des Hüllenrings', 'Spitze ' + nn(G0 * r.lpm * g.R) + ' Pa']);
+      Z2.push(['Nase beult ein ab', 'kleinstes √(2·Δp / (ρ·Cp)) hinter den Latten' + (d.latten && d.latten.len ? ' (' + d.latten.n + ' × ' + nn(d.latten.len) + ' m)' : ' (keine Latten)'), nn(r.v_beulen * 3.6) + ' km/h']);
+      Z2.push(['Nötige Nasenlatten für v max', 'Bogenlänge ab Spitze, bis q · Cp ≤ Δp überall', nn(r.latten.need) + ' m']);
+    }
     if (r.huelleAuslastung != null) Z2.push(['Hülle (Prall)', 'Überdruck max(1,2 · ½ρv²; 150 Pa); Umfangsspannung T = Δp · R; Festigkeit 60 N/m je g/m², Sicherheit 4', n(r.huelleAuslastung * 100) + ' % ausgelastet']);
     S.push({ titel: '7 Höhe und Druck', zeilen: Z2 });
     return S;
@@ -577,11 +637,12 @@
     if (d.bauweise === 'S') p.push('Z:' + num(d.zellen_gm2), 'W:' + num(d.werkstoff));
     if (d.bauweise !== 'O') p.push('HP:' + num(d.prallhoehe));          // Prallhöhe für Starr, Prall und Halbstarr
     if (d.bauweise === 'P' || d.bauweise === 'H') p.push('BO:' + num(d.ballonet));
-    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : ''].join(',').replace(/,+$/, ''));
+    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : ''].join(',').replace(/,+$/, ''));
     p.push('K:' + d.gondel + (d.gform ? ',' + d.gform : '') + (d.gabstand != null ? ',' + num(d.gabstand) : '') + (d.gseile ? ',' + d.gseile : ''), 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
     // Antrieb: Art, Zahl, kW je Motor, Lage, η, Energie (kWh, Wh/kg bzw. kg Kraftstoff, sfc), Motorgondeln, kg/kW
-    p.push('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (a.gondeln && a.gondeln !== a.n ? a.gondeln : '') + ',' + (a.kgkW ? num(a.kgkW) : ''));
+    p.push('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (a.gondeln && a.gondeln !== a.n ? a.gondeln : '') + ',' + (a.kgkW ? num(a.kgkW) : '') + ',' + (a.mg === 'O' ? 'O' : ''));
+    if (d.latten && d.latten.len) p.push('LA:' + d.latten.n + ',' + num(d.latten.len));
     p.push('S:' + num(d.v_reise), 'BL:' + num(d.ballast));
     if (d.nutzlast) p.push('NL:' + num(d.nutzlast));
     if (d.avionik) p.push('AV:' + num(d.avionik));
@@ -610,7 +671,7 @@
         case 'W': d.werkstoff = +v; break;
         case 'HP': d.prallhoehe = +v; break;
         case 'BO': d.ballonet = +v; break;
-        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; break;
+        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; break;
         case 'K': d.gondel = n[0]; if (n[1]) d.gform = n[1]; if (n[2] !== undefined && n[2] !== '') d.gabstand = +n[2]; if (n[3]) d.gseile = +n[3]; break;
         case 'C': d.crew = +v; break;
         case 'P': d.pax = +v; break;
@@ -618,7 +679,7 @@
           const art = n[0];
           d.antrieb = Object.assign({}, DEFAULTS.antrieb, { art, n: +n[1], kW: +n[2], lage: n[3], eta: +n[4] });
           if (n[7]) d.antrieb.gondeln = +n[7];
-          d.antrieb.kgkW = n[8] ? +n[8] : null;
+          d.antrieb.kgkW = n[8] ? +n[8] : null; d.antrieb.mg = n[9] === 'O' ? 'O' : 'V';
           if (art === 'E' || art === 'S') { d.antrieb.kWh = +n[5]; d.antrieb.whkg = +n[6]; }
           else { d.antrieb.kraftstoff = +n[5]; d.antrieb.sfc = +n[6]; d.antrieb.kWh = 0; }
           break;
@@ -629,6 +690,7 @@
         case 'AV': d.avionik = +v; break;
         case 'X': d.anbauten = +v; break;
         case 'ST': d.schlepptau = +v; break;
+        case 'LA': d.latten = { n: +n[0], len: +n[1] }; break;
         case 'MP': d.m_person = +v; break;
         case 'GD': if (n[0]) d.gl = +n[0]; if (n[1]) d.gb = +n[1]; if (n[2]) d.gh = +n[2]; break;
       }
@@ -657,8 +719,8 @@
   }
 
   const LSCore = {
-    VERSION: '0.5', G0, LB, FT, HP,
-    atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN,
+    VERSION: '0.6', G0, LB, FT, HP,
+    atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nose, noseNeed,
     dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSCore;

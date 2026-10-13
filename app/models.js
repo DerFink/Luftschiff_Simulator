@@ -1,4 +1,4 @@
-// 2026-10-13 19:30 · models.js 0.3: Gondelform und -abstand, Seile C-7, LZ 120 mit 3 Motorgondeln (Nutzer)
+// 2026-10-13 20:00 · models.js 0.4: Motorgondel-Bauart (offen: LZ 126, LZ 129, Norge, C-7; verkleidet: LZ 120 als windschnittiger Jaray-Entwurf, NT, Skyship)
 /* =================================================================================================
    FESTE AUSWAHL
    -------------------------------------------------------------------------------------------------
@@ -29,7 +29,7 @@
         huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 1500,                   // [A] Bauweise wie L-49 (Stand 1917)
         ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (2335 + 2870) / 2 * 0.0929 },               // [B] Tab. 4: Mittel senkrecht/waagerecht je Ebene
         gondel: 'F', gform: 'S', crew: 30, pax: 0, m_person: 80,                             // [W] stromlinienförmige Führergondel
-        antrieb: { art: 'V', n: 5, kW: 298, lage: 'R', eta: 0.72, kraftstoff: 15000, sfc: 0.33, kgkW: 3.5 }, // [G] Leistung; Rest [A]
+        antrieb: { art: 'V', n: 5, kW: 298, lage: 'R', mg: 'O', eta: 0.72, kraftstoff: 15000, sfc: 0.33, kgkW: 3.5 }, // [G] Leistung; Rest [A]
         v_reise: 100, ballast: 3000,                                                         // [A]
       },
     },
@@ -43,7 +43,7 @@
         huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 1000,                   // [A] Stand wie L-49
         ltw: { n: 4, anord: '+', faktor: 1 },
         gondel: 'F', gform: 'S', crew: 12, pax: 20, m_person: 80,                            // [W] schlanke Fahrgastgondel
-        antrieb: { art: 'V', n: 4, kW: 176, gondeln: 3, lage: 'R', eta: 0.72, kraftstoff: 3000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; [N] 3 Motorgondeln (hinten 2 Motoren); Rest [A]
+        antrieb: { art: 'V', n: 4, kW: 176, gondeln: 3, lage: 'R', mg: 'V', eta: 0.72, kraftstoff: 3000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; [N] 3 Motorgondeln (hinten 2 Motoren); Rest [A]
         v_reise: 110, ballast: 1500,                                                         // [A]
       },
     },
@@ -57,7 +57,7 @@
         huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 1000,                   // [A] Bauweise wie L-49 (Stand 1917)
         ltw: { n: 4, anord: '+', faktor: 1 },
         gondel: 'I', crew: 55, pax: 50, m_person: 80,                                        // [W] Fahrgasträume im Rumpf
-        antrieb: { art: 'V', n: 4, kW: 883, lage: 'R', eta: 0.75, kraftstoff: 60000, sfc: 0.23, kgkW: 4.0 }, // [W] Leistung; Diesel [A]
+        antrieb: { art: 'V', n: 4, kW: 883, lage: 'R', mg: 'O', eta: 0.75, kraftstoff: 60000, sfc: 0.23, kgkW: 4.0 }, // [W] Leistung; Diesel [A]
         v_reise: 125, ballast: 10000,                                                        // [W] Reise; Ballast [A]
       },
     },
@@ -73,7 +73,7 @@
         huelle_gm2: 400, ballonet: 25, prallhoehe: 1500,                                      // [A] gummierter Stoff
         ltw: { n: 4, anord: '+', faktor: 1 },
         gondel: 'F', crew: 16, pax: 0, m_person: 80,                                         // [W]
-        antrieb: { art: 'V', n: 3, kW: 180, lage: 'R', eta: 0.70, kraftstoff: 5000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; Rest [A]
+        antrieb: { art: 'V', n: 3, kW: 180, lage: 'R', mg: 'O', eta: 0.70, kraftstoff: 5000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; Rest [A]
         v_reise: 70, ballast: 1500,                                                          // [A]
       },
     },
@@ -103,7 +103,7 @@
         huelle_gm2: 475, ballonet: 25, prallhoehe: 1219,                                      // [B] 14 oz/yd²; 4.000 ft
         ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (424 + 536) / 2 * 0.0929 },                 // [B] Tab. 4: Mittel senkrecht/waagerecht je Ebene
         gondel: 'F', gform: 'E', gabstand: 4, gseile: 24, crew: 4, pax: 0, m_person: 80,     // [A] offene Gondel an rund 24 Seilen, ca. 4 m unter der Hülle
-        antrieb: { art: 'V', n: 2, kW: 112, lage: 'G', eta: 0.65, kraftstoff: 800, sfc: 0.365, kgkW: 3.65 }, // [W]/[B]
+        antrieb: { art: 'V', n: 2, kW: 112, lage: 'G', mg: 'O', eta: 0.65, kraftstoff: 800, sfc: 0.365, kgkW: 3.65 }, // [W]/[B]
         v_reise: 70, ballast: 200,
       },
     },

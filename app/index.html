@@ -1,4 +1,5 @@
-<!-- 2026-10-13 19:50 · Build 2026-10-13.3: Leitwerk bis 8 Flossen (ZMC-2), Gondel nach Stirnfläche (Rechnung), Speicher-Code vollständig
+<!-- 2026-10-13 20:10 · Build 2026-10-13.4: Motorgondel-Bauart, Flossen-Zuspitzung/-Pfeilung, Vorschlag Nasenlatten, Räume im Rumpf
+     2026-10-13 19:50 · Build 2026-10-13.3: Leitwerk bis 8 Flossen (ZMC-2), Gondel nach Stirnfläche (Rechnung), Speicher-Code vollständig
      2026-10-13 19:00 · Build 2026-10-13.2: Leitwerk nach Jones (Λ einstellbar), Rechenweg im Ergebnis
      2026-10-13 18:00 · Build 2026-10-13.1 · Version 1: Auswahl (9 Modelle + eigene), Baukasten in 12 Schritten mit Vorschlägen,
      Eckdaten-Leiste mit Änderungsanzeige, 3D-Vorschau, Ergebnis mit Massenliste, Speicher-Code laden/kopieren/teilen, lokal speichern -->
@@ -118,7 +119,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-13.3';
+const BUILD = '2026-10-13.4';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -219,7 +220,9 @@ const STEPS = [
       { typ: 'seg', key: 'ltw.anord', label: 'Anordnung', opts: d => ({ 1: [['|', 'oben']], 2: [['|', 'oben/unten'], ['V', 'V'], ['A', 'umgek. V']], 3: [['Y', 'Y'], ['L', 'umgek. Y']] }[d.ltw.n] || [['+', '+ Kreuz'], ['X', 'X']]) },
       { typ: 'num', key: 'ltw.faktor', label: 'Größe gegenüber Vorschlag nach Jones', min: 0.3, max: 2, step: 0.05, k: 0, pct: true, vorschlag: () => 1 },
       { typ: 'num', key: 'ltw.ar', label: 'Seitenverhältnis Flossenpaar Λ (schlanke Flossen wirken stärker)', min: 0.6, max: 3, step: 0.1, k: 1, vorschlag: () => C.LTW_ANNAHMEN.ar, def: () => C.LTW_ANNAHMEN.ar },
-    ], text: (d, r) => { const t = r.tail; return `<b>Vorschlag nach Jones</b> (Burgess S. 103): ${de(t.A_jones, 1)} m² je Ebene bei Hebelarm ${de(t.lt, 1)} m (Auftriebsschwerpunkt → Neutralpunkt der Flossen) und k₂−k₁ = ${de(t.dk, 3)} aus L/D ${de(r.geo.L / r.geo.D, 2)}. Statisch neutral wären ${de(t.A_static, 1)} m², Burgess-Faustwert ${de(t.A_burgess, 1)} m².<br>` +
+      { typ: 'num', key: 'ltw.lam', label: 'Zuspitzung λ = Endtiefe / Wurzeltiefe', min: 0.2, max: 1, step: 0.05, k: 2, vorschlag: () => C.LTW_ANNAHMEN.lam, def: () => C.LTW_ANNAHMEN.lam },
+      { typ: 'num', key: 'ltw.sweep', label: 'Pfeilung der Vorderkante', unit: '°', min: 0, max: 60, step: 1, k: 0, vorschlag: () => C.LTW_ANNAHMEN.sweep, def: () => C.LTW_ANNAHMEN.sweep },
+    ], text: (d, r) => { const t = r.tail; return `<b>Vorschlag nach Jones</b> (Burgess S. 103): ${de(t.A_jones, 1)} m² je Ebene bei Hebelarm ${de(t.lt, 1)} m (Auftriebsschwerpunkt → Neutralpunkt der Flossen), k₂−k₁ = ${de(t.dk, 3)} aus L/D ${de(r.geo.L / r.geo.D, 2)} und Auftriebsanstieg ${de(t.a, 2)}/rad (Λ, Pfeilung). Statisch neutral wären ${de(t.A_static, 1)} m², Burgess-Faustwert ${de(t.A_burgess, 1)} m².<br>` +
       (d.ltw.A_ebene ? `Dieses Modell hat die bekannte Fläche ${de(t.Aplane, 1)} m² je Ebene (Quelle im Modell). Der Regler „Größe“ ersetzt sie.` : `Gewählt: ${de(t.Aplane, 1)} m² je Ebene, ${t.n} Flossen à ${de(t.Afin, 1)} m², Masse ${fm(r.leer.leitwerk)}.`) +
       (t.elevator ? '' : '<br>Ohne Höhenruder: Die Höhe wird nur über Schub, Ballast und Gas geregelt.') + '<br><i>Rechenweg siehe Ergebnis.</i>'; } },
   { id: 'gas', titel: 'Traggas', frage: 'Mit welchem Gas wird gefüllt?', fields: [
@@ -239,7 +242,7 @@ const STEPS = [
     ], text: (d, r) => `Hülle ${fm(r.leer.huelle)}` + (r.leer.zellen ? `, Gaszellen ${fm(r.leer.zellen)}` : '') + (r.leer.laengstraeger ? `, Gerüst ${fm(r.leer.laengstraeger + r.leer.ringe)}` : '') + '.' },
   { id: 'gondel', titel: 'Gondel', frage: 'Welche Gondel?', fields: [
       { typ: 'seg', key: 'gondel', label: '', opts: [['K', 'Korb'], ['F', 'Fest am Rumpf'], ['I', 'Im Rumpf'], ['R', 'RC-Kapsel'], ['N', 'Keine']] },
-    ], text: (d, r) => `Masse der Gondel: ${fm(r.leer.gondel)}. ` + ({ K: 'Offener Korb an Seilen, wie beim Gasballon; großer Luftwiderstand.', F: 'Geschlossene Gondel direkt unter dem Rumpf.', I: 'Räume im Rumpf, außen nur eine kleine Führergondel (Starrschiffe).', R: 'Kleine Kapsel für Empfänger und Regler (RC-Blimp).', N: 'Keine Gondel, z. B. für autonome Schiffe.' })[d.gondel] },
+    ], text: (d, r) => `Masse der Gondel: ${fm(r.leer.gondel)}. ` + ({ K: 'Offener Korb an Seilen, wie beim Gasballon; großer Luftwiderstand.', F: 'Geschlossene Gondel direkt unter dem Rumpf.', I: `Fahrgast- und Mannschaftsräume im Rumpf (sie nehmen ${de(r.Vraum)} m³ Gasraum weg), außen nur eine 4-Mann-Steuergondel in Stromlinienform.`, R: 'Kleine Kapsel für Empfänger und Regler (RC-Blimp).', N: 'Keine Gondel, z. B. für autonome Schiffe.' })[d.gondel] },
   { id: 'pax', titel: 'Personen', frage: 'Wer und was fährt mit?', fields: [
       { typ: 'num', key: 'crew', label: 'Besatzung (0 = autonom)', min: 0, max: 80, step: 1, k: 0 },
       { typ: 'num', key: 'pax', label: 'Fahrgäste', min: 0, max: 80, step: 1, k: 0 },
@@ -252,6 +255,8 @@ const STEPS = [
       { typ: 'num', key: 'antrieb.n', label: 'Zahl der Motoren', min: 1, max: 8, step: 1, k: 0, vorschlag: d => d.antrieb.n },
       { typ: 'num', key: 'antrieb.kW', label: 'Leistung je Motor', unit: 'kW', min: 0.002, max: 1500, log: true, k: 3, vorschlag: (d, r) => r.P_burgess / 1000 / d.antrieb.n },
       { typ: 'seg', key: 'antrieb.lage', label: 'Lage', opts: [['G', 'An der Gondel'], ['R', 'Am Rumpf'], ['H', 'Am Heck']] },
+      { typ: 'seg', key: 'antrieb.mg', label: 'Bauart der Motorgondeln', opts: [['O', 'Offen, mit Kühler (bis 1930er)'], ['V', 'Verkleidet (modern)']] },
+      { typ: 'num', key: 'antrieb.gondeln', label: 'Zahl der Motorgondeln', min: 1, max: 8, step: 1, k: 0, when: d => d.antrieb.lage === 'R', vorschlag: d => d.antrieb.n, def: () => S.d.antrieb.n },
       { typ: 'num', key: 'antrieb.kWh', label: 'Akku', unit: 'kWh', min: 0.001, max: 5000, log: true, k: 3, when: d => d.antrieb.art !== 'V', vorschlag: (d, r) => r.Preise * 8 / 3.6e6 / 0.85 * 3.6 },
       { typ: 'num', key: 'antrieb.whkg', label: 'Energiedichte Akku', unit: 'Wh/kg', min: 80, max: 400, step: 5, k: 0, when: d => d.antrieb.art !== 'V', vorschlag: () => 180 },
       { typ: 'num', key: 'antrieb.kraftstoff', label: 'Kraftstoff', unit: 'kg', min: 0, max: 100000, log0: true, k: 0, when: d => d.antrieb.art === 'V', vorschlag: (d, r) => r.Preise * 24 / 3.6e6 * (d.antrieb.sfc || 0.3) },
@@ -311,7 +316,10 @@ function renderBody() {
   });
   if (st.text) h += `<div class="${st.id === 'antrieb' || st.id === 'ltw' ? 'sug' : 'info'}">${st.text(d, r)}</div>`;
   for (const w of r.warn) h += `<div class="warn">⚠ ${w}</div>`;
+  (r.vorschlaege || []).forEach((v, i) => { h += `<button class="btn s" data-vs="${i}">✓ ${v.text}</button>`; });
   $('#body').innerHTML = h;
+  // Vorschläge aus Warnungen übernehmen (z. B. Nasenlatten)
+  $('#body').querySelectorAll('button[data-vs]').forEach(b => b.onclick = () => { Object.assign(d, clone(r.vorschlaege[+b.dataset.vs].set)); change(); toast('Übernommen'); });
   // Ereignisse der Felder
   $('#body').querySelectorAll('button[data-f]').forEach(b => b.onclick = () => {
     const f = st.fields[+b.dataset.f]; let v = b.dataset.v;
@@ -396,10 +404,10 @@ function showErgebnis() {
   const G = [];   // Gruppen der Massenliste je nach Bauweise
   if (e.laengstraeger) G.push(['Struktur', '#5b6f8a', [['Gerüst: Längsträger, Laufgang', e.laengstraeger], ['Gerüst: Ringe, Drähte, Netze', e.ringe]]]);
   if (e.kiel) G.push(['Struktur', '#5b6f8a', [['Kiel / Innengerüst', e.kiel], ['Nasenlatten', e.nasenlatten || 0]]]);
-  else if (e.nasenlatten) G.push(['Struktur', '#5b6f8a', [['Nasenlatten', e.nasenlatten]]]);
+  else if (e.nasenlatten) G.push(['Struktur', '#5b6f8a', [[d.latten ? `Nasenlatten (${d.latten.n} × ${de(d.latten.len, 1)} m)` : 'Nasenlatten', e.nasenlatten]]]);
   G.push(['Hülle und Gas', '#5b8fd6', [['Hülle außen', e.huelle], ['Gaszellen', e.zellen || 0], ['Ballonets', e.ballonet || 0], ['Gebläse', e.geblaese || 0]]]);
   G.push(['Leitwerk', '#d65a3c', [[`Flossen und Ruder (${d.ltw.n})`, e.leitwerk]]]);
-  G.push(['Gondel', '#7d6bd1', [[{ K: 'Korb', F: 'Gondel', I: 'Führergondel, Räume im Rumpf', R: 'RC-Kapsel', N: 'keine' }[d.gondel], e.gondel], ['Aufhängung, Seile', e.aufhaengung || 0]]]);
+  G.push(['Gondel', '#7d6bd1', [[{ K: 'Korb', F: 'Gondel', I: 'Steuergondel, Räume im Rumpf', R: 'RC-Kapsel', N: 'keine' }[d.gondel], e.gondel], ['Aufhängung', e.aufhaengung || 0], ['Seile', e.seile || 0]]]);
   G.push(['Antrieb', '#c55d9d', [['Motoren, Propeller', e.antrieb]]]);
   G.push(['Ausrüstung', '#8a96a3', [['Armaturen, Ventile, Ballastanlage', e.armaturen || 0], ['Elektrik', e.elektrik || 0], ['Avionik', e.avionik || 0]]]);
   const ZG = [['Zuladung', '#3fa37a', [[d.antrieb.art === 'V' ? 'Kraftstoff' : 'Akku', z.energie], ['Personen', z.personen], ['Nutzlast', z.nutzlast], ['Ballast', z.ballast], ['Schlepptau', z.schlepptau]]]];
@@ -411,6 +419,7 @@ function showErgebnis() {
     <div class="kpis" id="kpis"></div>
     <div class="scroll">
       ${r.warn.map(w => `<div class="warn" style="margin:8px 14px 0">⚠ ${w}</div>`).join('')}
+      ${(r.vorschlaege || []).map((v, i) => `<button class="btn s" data-vs="${i}" style="margin:6px 14px 0;width:calc(100% - 28px)">✓ ${v.text}</button>`).join('')}
       <div class="sec">Massen · Bruttoauftrieb ${fm(L0)}</div>
       <div class="mg">${block(G)}<div class="mrow sum"><span>Leermasse</span><span>${fm(r.mLeer)} · ${de(r.mLeer / L0 * 100, 1)} %</span></div>${block(ZG)}<div class="mrow sum"><span>${r.frei >= 0 ? 'Noch frei' : 'Fehlt'}</span><span style="color:${r.frei >= 0 ? 'var(--ok)' : 'var(--bad)'}">${fm(Math.abs(r.frei))}</span></div></div>
       <div class="sec">Eckdaten</div>
@@ -439,6 +448,7 @@ function showErgebnis() {
   $('#bCopy').onclick = () => copy(code);
   $('#bShare').onclick = () => { if (navigator.share) navigator.share({ title: d.name, text: code }).catch(() => {}); else copy(code); };
   $('#bSave').onclick = saveDialog;
+  document.querySelectorAll('button[data-vs]').forEach(b => b.onclick = () => { Object.assign(S.d, clone(S.r.vorschlaege[+b.dataset.vs].set)); recompute(); showErgebnis(); toast('Übernommen'); });
   mountView($('#view'));
   renderKpis(true);
 }

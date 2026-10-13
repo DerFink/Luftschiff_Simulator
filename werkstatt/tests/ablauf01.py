@@ -1,4 +1,4 @@
-# 2026-10-13 19:15 · ablauf01.py: zusätzlich Rechenweg (Leitwerk) und Leitwerksschritt am Zeppelin NT
+# 2026-10-13 20:15 · ablauf01.py: Nasenlatten-Vorschlag und Leitwerk mit Zuspitzung/Pfeilung
 # Aufruf: python3 -m http.server 8765 im Repository starten, dann  python3 werkstatt/tests/ablauf01.py <Ausgabeordner>
 import sys, os
 from playwright.sync_api import sync_playwright
@@ -28,5 +28,9 @@ with sync_playwright() as p:
     pg.click('#bBack'); pg.click('button.card[data-id="nt07"]'); pg.click('#bOpen')
     pg.eval_on_selector_all('.rw details', "els => { els[3].open = true; els[3].scrollIntoView(); }"); shot('11_rechenweg_leitwerk.png')
     pg.click('#bEdit'); pg.click('#steps .chip[data-i="2"]'); shot('12_nt_leitwerk.png')
+    # LuffiHopper: Nasenlatten-Vorschlag im Ergebnis übernehmen
+    pg.click('#bBack'); pg.click('button.card[data-id="luffihopper"]'); pg.click('#bOpen'); shot('13_luffi_vorschlag.png')
+    pg.click('button[data-vs="0"]'); shot('14_luffi_latten.png')
+    pg.click('#bEdit'); pg.click('#steps .chip[data-i="2"]'); pg.eval_on_selector('#body', "e => e.parentElement.scrollTop = 400"); shot('15_leitwerk_pfeilung.png')
     print('Fehler:', errs); print('Code:', code)
     b.close()

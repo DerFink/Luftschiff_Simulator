@@ -1,4 +1,4 @@
-// 2026-10-13 19:50 · pruef02.js: Rundlauf Speicher-Code für alle Modelle
+// 2026-10-13 20:15 · pruef02.js: Nasenlatten-Vorschlag LuffiHopper
 /* =================================================================================================
    Prüft das unveränderte Grundmodell (ohne Abgleich je Schiff) an den festen Modellen.
    Widerstand: Bezugsschiffe LZ 126 (groß) und Zeppelin NT (klein), Entscheidung Nutzer 13.10.2026.
@@ -43,6 +43,11 @@ row('Norge', 'Leermasse', 12490, run('norge').mLeer, 'kg', 'de.wikipedia');
   const s = run('sky600');
   row('Skyship 600', 'Zuladung (He, Prallhöhe 1.500 m)', 1740, s.lift0 - s.mLeer, 'kg', 'de.wikipedia');
 }
+
+// ---- Nasenlatten LuffiHopper: Vorschlag übernehmen ⇒ Nase hält bis über v max ----
+{ const r = run('luffihopper'), r2 = C.compute(C.merge(get('luffihopper').d, r.vorschlaege[0].set));
+  row('LuffiHopper', 'Nase hält ohne Latten bis', null, r.v_beulen * 3.6, 'km/h', 'Druckverteilung Cp, Innendruck Gassäule');
+  row('LuffiHopper', 'mit vorgeschlagenen Latten: Nase hält bis (soll ≥ v max ' + r2.vmax_kmh.toFixed(1) + ')', null, r2.v_beulen * 3.6, 'km/h', r.vorschlaege[0].text); }
 
 // ---- Speicher-Code: jedes Modell speichern und wieder laden ⇒ gleiche Ergebnisse (Rundung < 0,2 %) ----
 for (const m of M) { const d = C.merge(C.DEFAULTS, m.d), r1 = C.compute(d), r2 = C.compute(C.decode(C.encode(d)));

@@ -1,4 +1,4 @@
-// 2026-10-13 15:05 · pruef01.js: Name des kleinen H₂-Luftschiffs auf „LuffiHopper“ geändert
+// 2026-10-13 15:15 · pruef01.js: C-Klasse und LZ 126 mit Wikipedia-Daten (Maße, Leistung, Fahrt, Nutzlast)
 /* =================================================================================================
    Prüfung des Rechenkerns gegen geschlossene Formeln und gegen Werte aus Burgess (1927).
    Aufruf:  node werkstatt/tests/pruef01.js        (gibt eine Tabelle aus und schreibt pruef01.json)
@@ -83,8 +83,8 @@ const ft3 = Math.pow(C.FT, 3);
 
 /* ---- 5. US Navy C-7 (C-Klasse): Burgess Tabelle 4, Leistung und Fahrt aus Literatur (zu prüfen) ----- */
 {
-  const V = 180000 * ft3, L = 192 * C.FT, Cp = 0.62;
-  const D = Math.sqrt(V / (Cp * Math.PI / 4 * L));
+  // Maße laut Wikipedia „C-class blimp“: 59,76 m × 12,80 m, 5.125 m³; Burgess Tab. 4: 180.000 ft³, 192 ft
+  const V = 5125, L = 59.76, D = 12.80, Cp = V / (Math.PI / 4 * D * D * L);
   const d = {
     name: 'US Navy C-7', bauweise: 'P', gas: 'He', reinheit: 0.94, V,
     form: { LD: L / D, m: 0.42, Cp, r0: 0.5, r1: 0.1 },
@@ -97,28 +97,32 @@ const ft3 = Math.pow(C.FT, 3);
   const r = C.compute(d);
   const Dm = 1.225 * V;                                 // Burgess „D“: Masse der verdrängten Luft
   const fest = r.mLeer - r.leer.antrieb;
-  row('C-7', 'Länge', L, r.geo.L, 'm', 'Burgess Tab. 4', 0.01);
+  row('C-7', 'Länge', L, r.geo.L, 'm', 'Wikipedia (196 ft)', 0.01);
   row('C-7', 'Feste Massen ohne Antrieb / D', 0.40, fest / Dm, '-', 'Burgess Kap. II Aufgabe 4 (Blimp)', 0.15);
   row('C-7', 'Leitwerk senkrecht', 424 * C.FT * C.FT, r.tail.Aplane, 'm²', 'Burgess Tab. 4 (Abgleich)', 0.15);
-  row('C-7', 'Höchstgeschwindigkeit (2 × 150 PS)', Math.cbrt(300 * C.HP * 40 / (1.225 * r.geo.Vs)) * 3.6, r.vmax_kmh, 'km/h', 'Burgess K = 40 für Blimps (Leistung 2 × 150 PS aus Literatur, unsicher)', 0.10);
+  row('C-7', 'Höchstgeschwindigkeit (2 × 150 PS)', 97, r.vmax_kmh, 'km/h', 'Wikipedia (60 mph, 2 × 150 hp Hispano-Suiza)', 0.10);
+  row('C-7', 'Höchstgeschwindigkeit nach Burgess K = 40', Math.cbrt(300 * C.HP * 40 / (1.225 * r.geo.Vs)) * 3.6, r.vmax_kmh, 'km/h', 'Burgess Kap. II', 0.10);
+  { const rH = C.compute(Object.assign({}, d, { gas: 'H2', reinheit: 0.97 }));
+    row('C-7', 'Nutzlast mit H₂ (Auftrieb − Leermasse)', 1837, rH.lift0 - rH.mLeer, 'kg', 'Wikipedia (4.050 lb; Gas nicht genannt)', 0.15); }
   row('C-7', 'Gesamtwirkungsgrad K', 40, r.K_eff, '-', 'Burgess Kap. II Aufgabe 4', 0.20);
   globalThis.__C7 = r;
 }
 
 /* ---- 6. USS Los Angeles (ZR-3): Volumen und Länge Burgess Tab. 4; Ø, Leistung, Fahrt GlobalSecurity -- */
 {
-  const V = 2760000 * ft3, L = 656 * C.FT, D = 90.5 * C.FT;
+  const V = 2760000 * ft3, L = 200.0, D = 27.64;      // Burgess Tab. 4; Maße de.wikipedia „LZ 126“
   const d = {
     name: 'USS Los Angeles', bauweise: 'S', gas: 'He', reinheit: 0.95, V,
     form: { LD: L / D, m: 0.42, Cp: V / (Math.PI / 4 * D * D * L), r0: 0.5, r1: 0.1 },
     huelle_gm2: 148.5, zellen_gm2: 168.7, werkstoff: 0.85, prallhoehe: 1500,
     ltw: { n: 4, anord: '+', faktor: (2335 + 2870) / 2 / 0.13 / Math.pow(2760000, 2 / 3) },
-    gondel: 'F', crew: 40, pax: 0, m_person: 80,
+    gondel: 'F', crew: 30, pax: 0, m_person: 80,
     antrieb: { art: 'V', n: 5, kW: 400 * C.HP / 1000, lage: 'R', eta: 0.72, kraftstoff: 15000, sfc: 0.33, kgkW: 3.5 },
     v_reise: 100, ballast: 3000,
   };
   const r = C.compute(d);
-  row('Los Angeles', 'Länge', L, r.geo.L, 'm', 'Burgess Tab. 4', 0.01);
+  row('Los Angeles', 'Länge', L, r.geo.L, 'm', 'de.wikipedia (200,00 m)', 0.01);
+  row('Los Angeles', 'Gasinhalt prall', 73680, r.geo.V * r.gasShare, 'm³', 'de.wikipedia (73.680 m³)', 0.03);
   row('Los Angeles', 'Höchstgeschwindigkeit (5 × 400 PS)', 76 * 1.609, r.vmax_kmh, 'km/h', 'GlobalSecurity (76 mph)', 0.10);
   row('Los Angeles', 'Gesamtwirkungsgrad K', 63.5, r.K_eff, '-', 'Burgess Kap. II (moderne Starrschiffe)', 0.25);
   row('Los Angeles', 'Leermasse (ohne Kraftstoff, Ballast, Besatzung)', null, r.mLeer, 'kg', 'keine verlässliche Quelle zur Hand');

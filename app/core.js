@@ -1,3 +1,4 @@
+// 2026-10-14 02:30 · core.js 0.12: Lage des Leitwerks (ltw.xTE) und der Tanks/Akkus (xtank) wählbar
 // 2026-10-14 01:30 · core.js 0.11: Längslage der Motorgondeln wählbar (antrieb.xs, antrieb.xm), Größe der Motorgondeln nach Leistung, Gondellage (gx) und Trimm (Schwerpunkt gegen Auftriebsmitte)
 // 2026-10-13 23:20 · core.js 0.10: Flächengewicht Leitwerk als Parameter (ltw.gm2), ungerader Motor wahlweise am Heck (antrieb.ungerade = 'H', Zeppelin NT), 1 Flosse unten
 // 2026-10-13 22:15 · core.js 0.9: Motorgondeln nach fester Regel (Paare seitlich, ungerade Zahl ⇒ Mittelgondel, Sonderfall Motorpaar in Mittelgondel)
@@ -207,6 +208,7 @@
   function tail(ltw, geo, vmax) {
     const o = Object.assign({}, LTW_ANNAHMEN);
     if (ltw.ar) o.ar = ltw.ar; if (ltw.lam != null) o.lam = ltw.lam; if (ltw.sweep != null) o.sweep = ltw.sweep;
+    if (ltw.xTE != null) o.xTE = ltw.xTE;          // Lage der Flossen-Hinterkante (Anteil der Länge ab Bug), sonst 0,97
     const n = ltw.n, an = ltw.anord, f = ltw.faktor || 1;
     const LD = geo.L / geo.D, lk = lamb(LD), dk = lk.k2 - lk.k1;
     const tC2 = tanSweep(o, 0.5), a = helmbold(o.ar, tC2), aeff = a * o.eta * o.K;
@@ -476,13 +478,16 @@
     add(leer.nasenlatten || 0, 0.05, 0); add(leer.leitwerk || 0, xF, 0); add(leer.armaturen || 0, xB, -0.3 * R); add(leer.elektrik || 0, xB, -0.5 * R);
     mot.forEach(([m, x, z]) => add(m, x, z));
     add(zul.ballast, xB, -0.85 * R);
-    if (keel) add(zul.energie, xB, -0.85 * R);
+    // Tanks bzw. Akkus: an der gewählten Lage (xtank), sonst neben dem Laufgang verteilt (Starr, Halbstarr) bzw. in der Gondel
+    const tankFest = d.xtank != null;
+    const xT = tankFest ? d.xtank : (keel ? xB : null);
+    if (xT != null) add(zul.energie, xT, keel ? -0.85 * R : zG);
     // Räume im Rumpf (Gondelart I): die kleine Steuergondel sitzt fest vorn (0,15 L); verschoben werden die Räume
     // mit Fahrgästen, Besatzung und Nutzlast (gx = Lage der Räume)
     const raeume = d.gondel === 'I';
     if (raeume) add(leer.gondel || 0, 0.15, zG);
     let mG = (raeume ? 0 : (leer.gondel || 0)) + (leer.seile || 0) + (leer.aufhaengung || 0) + (leer.geblaese || 0) + (leer.avionik || 0) + zul.nutzlast + zul.schlepptau
-           + (keel ? 0 : zul.energie) + zul.personen + (a.lage === 'G' ? leer.antrieb : 0);
+           + (xT != null ? 0 : zul.energie) + zul.personen + (a.lage === 'G' ? leer.antrieb : 0);
     const mF = fix.reduce((t, q) => t + q[0], 0), Mx = fix.reduce((t, q) => t + q[0] * q[1], 0), M = mF + mG;
     // Gondellage für Gleichgewicht und erlaubter Bereich (Gondel ganz unter der Hülle)
     const lr = (gon.l || 0) / L, lo = Math.max(0.10, lr / 2 + 0.05), hi = Math.min(0.75, 0.85 - lr / 2);
@@ -492,7 +497,7 @@
     const zGes = (fix.reduce((t, q) => t + q[0] * q[2], 0) + mG * (raeume ? -0.75 * R : zG)) / M, BG = Math.max(0.02 * R, -zGes);
     const dx = (xG - xB) * L;                                                 // > 0: Schwerpunkt hinter der Auftriebsmitte (Bug hoch)
     const theta = Math.atan2(dx, BG) * 180 / Math.PI;
-    return { xB, xS, xF, gx, xReq, lo, hi, xG, dx, BG, theta, mG, M, frei: xReq != null && xReq >= lo && xReq <= hi };
+    return { xT: xT != null ? xT : gx, xB, xS, xF, gx, xReq, lo, hi, xG, dx, BG, theta, mG, M, frei: xReq != null && xReq >= lo && xReq <= hi };
   }
 
   function compute(dIn) {
@@ -778,7 +783,7 @@
     if (d.bauweise === 'S') p.push('Z:' + num(d.zellen_gm2), 'W:' + num(d.werkstoff));
     if (d.bauweise !== 'O') p.push('HP:' + num(d.prallhoehe));          // Prallhöhe für Starr, Prall und Halbstarr
     if (d.bauweise === 'P' || d.bauweise === 'H') p.push('BO:' + num(d.ballonet));
-    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : '', d.ltw.gm2 ? num(d.ltw.gm2) : ''].join(',').replace(/,+$/, ''));
+    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : '', d.ltw.gm2 ? num(d.ltw.gm2) : '', d.ltw.xTE != null ? num(d.ltw.xTE) : ''].join(',').replace(/,+$/, ''));
     p.push(('K:' + [d.gondel, d.gform || '', d.gabstand != null ? num(d.gabstand) : '', d.gseile || '', d.gx != null ? num(d.gx) : ''].join(',')).replace(/,+$/, ''), 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
     // Antrieb: Art, Zahl, kW je Motor, Lage, η, Energie (kWh, Wh/kg bzw. kg Kraftstoff, sfc), Motorgondeln, kg/kW
@@ -790,6 +795,7 @@
     if (d.anbauten) p.push('X:' + num(d.anbauten));
     if (d.schlepptau) p.push('ST:' + num(d.schlepptau));
     if (d.gasanteil) p.push('GA:' + num(d.gasanteil));
+    if (d.xtank != null) p.push('XT:' + num(d.xtank));                  // Lage der Tanks/Akkus
     if (d.m_person && d.m_person !== 80) p.push('MP:' + num(d.m_person));
     if (d.gl || d.gb || d.gh) p.push('GD:' + [d.gl ? num(d.gl) : '', d.gb ? num(d.gb) : '', d.gh ? num(d.gh) : ''].join(','));
     return p.join('|').replace(/,+(?=\||$)/g, '');
@@ -813,7 +819,7 @@
         case 'W': d.werkstoff = +v; break;
         case 'HP': d.prallhoehe = +v; break;
         case 'BO': d.ballonet = +v; break;
-        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; if (n[7]) d.ltw.gm2 = +n[7]; break;
+        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; if (n[7]) d.ltw.gm2 = +n[7]; if (n[8]) d.ltw.xTE = +n[8]; break;
         case 'K': d.gondel = n[0]; if (n[1]) d.gform = n[1]; if (n[2] !== undefined && n[2] !== '') d.gabstand = +n[2]; if (n[3]) d.gseile = +n[3]; if (n[4]) d.gx = +n[4]; break;
         case 'C': d.crew = +v; break;
         case 'P': d.pax = +v; break;
@@ -833,6 +839,7 @@
         case 'X': d.anbauten = +v; break;
         case 'ST': d.schlepptau = +v; break;
         case 'GA': d.gasanteil = +v; break;
+        case 'XT': d.xtank = +v; break;
         case 'LA': d.latten = { n: +n[0], len: +n[1] }; break;
         case 'MP': d.m_person = +v; break;
         case 'GD': if (n[0]) d.gl = +n[0]; if (n[1]) d.gb = +n[1]; if (n[2]) d.gh = +n[2]; break;
@@ -862,7 +869,7 @@
   }
 
   const LSCore = {
-    VERSION: '0.11', G0, LB, FT, HP,
+    VERSION: '0.12', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nacelles, nose, noseNeed,
     dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };

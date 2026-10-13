@@ -1,6 +1,6 @@
-// 2026-10-14 01:30 · sw.js v10: Build 2026-10-14.1
+// 2026-10-14 02:30 · sw.js v11: Build 2026-10-14.2
 /* Bei jedem neuen Build VER erhöhen, damit Handys die neuen Dateien laden. */
-const VER = 'ls-v10';
+const VER = 'ls-v11';
 const FILES = ['./', 'index.html', 'core.js', 'models.js', 'viewer.js', 'lib/three.module.min.js', 'lib/OrbitControls.js', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VER).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

@@ -1,4 +1,5 @@
-<!-- 2026-10-14 01:30 · Build 2026-10-14.1: eckigere Knöpfe, Gondel nach Seitenriss, Schnittansicht, Lage der Gondel und der Motorgondeln in m ab Bug, Trimm
+<!-- 2026-10-14 02:30 · Build 2026-10-14.2: Lage des Leitwerks und der Tanks/Akkus wählbar
+     2026-10-14 01:30 · Build 2026-10-14.1: eckigere Knöpfe, Gondel nach Seitenriss, Schnittansicht, Lage der Gondel und der Motorgondeln in m ab Bug, Trimm
      2026-10-14 00:30 · ENTWURF: eckigere Knöpfe, Schalter Schnittansicht
      2026-10-13 23:20 · Build 2026-10-13.9: Überschrift der Schieberegler in derselben Zeile wie der Wert, Selbstdrehung ein/aus, Flächengewicht Leitwerk, 1 Flosse unten, ungerader Motor am Heck
      2026-10-13 22:15 · Build 2026-10-13.8: Schrittleiste mit Pfeilen, Mausrad und Ziehen seitlich scrollbar; Einheiten (kg/Anzahl) an allen Zahlen; Mittelgondel für Motorpaar
@@ -142,7 +143,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-14.1';
+const BUILD = '2026-10-14.2';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -247,6 +248,7 @@ const STEPS = [
       { typ: 'num', key: 'ltw.ar', label: 'Seitenverhältnis Flossenpaar Λ (schlanke Flossen wirken stärker)', min: 0.6, max: 3, step: 0.1, k: 1, vorschlag: () => C.LTW_ANNAHMEN.ar, def: () => C.LTW_ANNAHMEN.ar },
       { typ: 'num', key: 'ltw.lam', label: 'Zuspitzung λ = Endtiefe / Wurzeltiefe', min: 0.2, max: 1, step: 0.05, k: 2, vorschlag: () => C.LTW_ANNAHMEN.lam, def: () => C.LTW_ANNAHMEN.lam },
       { typ: 'num', key: 'ltw.gm2', label: 'Flächengewicht Leitwerk (Gerüst, Bespannung, Ruder je m² Flossenfläche)', unit: 'g/m²', min: 20, max: 5000, log: true, k: 0, def: () => S.r.ltw_gm2_calc, vorschlag: (d, r) => r.ltw_gm2_calc },
+      { typ: 'num', key: 'ltw.xTE', label: 'Lage der Flossen-Hinterkante', lfrac: true, min: 0.6, max: 1, step: 0.001, k: 3, def: () => C.LTW_ANNAHMEN.xTE, vorschlag: () => C.LTW_ANNAHMEN.xTE },
       { typ: 'num', key: 'ltw.sweep', label: 'Pfeilung der Vorderkante', unit: '°', min: 0, max: 75, step: 1, k: 0, vorschlag: () => C.LTW_ANNAHMEN.sweep, def: () => C.LTW_ANNAHMEN.sweep },
     ], text: (d, r) => { const t = r.tail; return `<b>Vorschlag nach Jones</b> (Burgess S. 103): ${de(t.A_jones, 1)} m² je Ebene bei Hebelarm ${de(t.lt, 1)} m (Auftriebsschwerpunkt → Neutralpunkt der Flossen), k₂−k₁ = ${de(t.dk, 3)} aus L/D ${de(r.geo.L / r.geo.D, 2)} und Auftriebsanstieg ${de(t.a, 2)}/rad (Λ, Pfeilung). Statisch neutral wären ${de(t.A_static, 1)} m², Burgess-Faustwert ${de(t.A_burgess, 1)} m².<br>` +
       (d.ltw.A_ebene ? `Dieses Modell hat die bekannte Fläche ${de(t.Aplane, 1)} m² je Ebene (Quelle im Modell). Der Regler „Größe“ ersetzt sie.` : `Gewählt: ${de(t.Aplane, 1)} m² je Ebene, ${t.n} Flossen à ${de(t.Afin, 1)} m², Masse ${fm(r.leer.leitwerk)}.`) +
@@ -293,6 +295,8 @@ const STEPS = [
       { typ: 'num', key: 'antrieb.kWh', label: 'Akku', unit: 'kWh', min: 0.001, max: 5000, log: true, k: 3, when: d => d.antrieb.art !== 'V', vorschlag: (d, r) => r.Preise * 8 / 3.6e6 / 0.85 * 3.6 },
       { typ: 'num', key: 'antrieb.whkg', label: 'Energiedichte Akku', unit: 'Wh/kg', min: 80, max: 400, step: 5, k: 0, when: d => d.antrieb.art !== 'V', vorschlag: () => 180 },
       { typ: 'num', key: 'antrieb.kraftstoff', label: 'Kraftstoff', unit: 'kg', min: 0, max: 100000, log0: true, k: 0, when: d => d.antrieb.art === 'V', vorschlag: (d, r) => r.Preise * 24 / 3.6e6 * (d.antrieb.sfc || 0.3) },
+      // Lage der Tanks bzw. Akkus (Trimm); ohne Wahl: Starr/Halbstarr neben dem Laufgang verteilt, sonst in der Gondel
+      { typ: 'num', key: 'xtank', label: d => d.antrieb.art === 'V' ? 'Lage der Tanks (Mitte)' : 'Lage der Akkus (Mitte)', lfrac: true, min: 0.05, max: 0.95, step: 0.001, k: 3, def: () => S.r.trim.xT },
       { typ: 'num', key: 'antrieb.eta', label: 'Propellerwirkungsgrad', min: 0.3, max: 0.9, step: 0.01, k: 0, pct: true, vorschlag: d => d.V < 50 ? 0.5 : 0.7 },
     ], text: (d, r) => `<b>Vorschlag nach Burgess:</b> P = ρ·v³·V<sup>2/3</sup>/K mit K = ${d.bauweise === 'S' ? '63,5' : '40'} für ${de((d.v_ziel || d.v_reise * 1.3))} km/h ⇒ ${fp(r.P_burgess)} gesamt. Antrieb ${fm(r.leer.antrieb)}, Energie ${fm(r.propulsion.mEnergie)}.` + (d.antrieb.lage === 'R' ? (N => `<br>Motorgondeln am Rumpf: ${N.paare ? N.paare + (N.paare > 1 ? ' Paare' : ' Paar') + ' links/rechts auf gleicher Länge' : ''}${N.paare && N.mitte ? ', ' : ''}${N.heck ? 'ein Motor ganz am Heck' : N.mitte ? 'Mittelgondel unter der Hülle mit ' + (N.mitte === 2 ? 'zwei Motoren hintereinander auf einen Propeller' : 'einem Motor') : ''} ⇒ ${N.g} Gondeln.`)(C.nacelles(d.antrieb)) : '') },
   { id: 'v', titel: 'Geschwindigkeit', frage: 'Mit welcher Reisegeschwindigkeit fährt es?', fields: [

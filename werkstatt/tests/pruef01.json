@@ -61,11 +61,11 @@
  },
  {
   "gruppe": "Gertler",
-  "groesse": "Flächenbeiwert Cs, Form „schlank“",
+  "groesse": "Flächenbeiwert Cs, Form „Albacore“",
   "soll": 3.45,
-  "ist": 3.3824806019327323,
+  "ist": 3.398721494668226,
   "einheit": "-",
-  "abw": -0.019570840019497947,
+  "abw": -0.014863334878775112,
   "ok": "ok",
   "quelle": "Burgess S. 54: 3,45 ± 3 %"
  },

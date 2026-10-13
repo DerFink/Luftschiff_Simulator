@@ -142,11 +142,16 @@
     };
   }
 
-  // Drei feste Formen (Vorschlag, mit dem Nutzer noch abzustimmen: OP-04 im Projektplan)
+  /* Drei feste Formen (Entscheidung Nutzer 13.10.2026: Albacore-Form plus zwei nach Wahl).
+     - Albacore: Series-58-Grundform m 0,4 / r0 0,5 / r1 0,1 / Cp 0,65 (aus den veröffentlichten
+       Koeffizienten des Modells 4155 nachgerechnet) mit der Schlankheit des U-Boots USS Albacore
+       (62,6 m / 8,32 m ≈ 7,5). Die genaue Modellnummer der Albacore ist nicht belegt.
+     - Zeppelin: völliger, langer Mittelteil wie LZ 120 bis LZ 129 (Cp 0,64), stumpfe Nase, schlankes Heck.
+     - Blimp: kurz und bauchig wie Prallluftschiffe (C-Klasse, Skyship 600, LuffiHopper).            */
   const FORMS = {
-    schlank:  { name: 'Schlank (Starrschiffe)', LD: 7.5, m: 0.40, Cp: 0.62, r0: 0.50, r1: 0.10 },
-    standard: { name: 'Standard (Blimp)',       LD: 4.2, m: 0.40, Cp: 0.64, r0: 0.55, r1: 0.12 },
-    voellig:  { name: 'Völlig (kurz, klein)',   LD: 3.2, m: 0.43, Cp: 0.66, r0: 0.60, r1: 0.15 },
+    albacore: { name: 'Albacore (Series 58)', LD: 7.5, m: 0.40, Cp: 0.65, r0: 0.50, r1: 0.10 },
+    zeppelin: { name: 'Zeppelin',             LD: 6.5, m: 0.45, Cp: 0.64, r0: 0.60, r1: 0.06 },
+    blimp:    { name: 'Blimp',                LD: 4.0, m: 0.42, Cp: 0.65, r0: 0.55, r1: 0.12 },
   };
 
   /* -----------------------------------------------------------------------------------------------
@@ -277,7 +282,7 @@
      ----------------------------------------------------------------------------------------------- */
   const DEFAULTS = {
     name: 'Neues Luftschiff', bauweise: 'P', gas: 'He', reinheit: 0.98,
-    V: 2000, form: Object.assign({}, FORMS.standard), huelle_gm2: 250, zellen_gm2: 170, werkstoff: 1,
+    V: 2000, form: Object.assign({}, FORMS.blimp), huelle_gm2: 250, zellen_gm2: 170, werkstoff: 1,
     prallhoehe: 1000, ballonet: 25, ltw: { n: 4, anord: '+', faktor: 1 },
     gondel: 'F', crew: 1, pax: 1, m_person: 80, nutzlast: 0, avionik: 0,
     antrieb: { art: 'E', n: 2, kW: 10, lage: 'G', eta: 0.7, kWh: 30, whkg: 180, kraftstoff: 0, sfc: 0.30, kgkW: null },

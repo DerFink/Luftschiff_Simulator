@@ -1,0 +1,142 @@
+[
+ {
+  "schiff": "LZ 126",
+  "groesse": "Höchstgeschwindigkeit",
+  "soll": 122,
+  "ist": 124.62940937593908,
+  "einheit": "km/h",
+  "abw": 0.021552535868353085,
+  "quelle": "GlobalSecurity (76 mph)",
+  "rolle": "Bezug groß"
+ },
+ {
+  "schiff": "Zeppelin NT 07",
+  "groesse": "Höchstgeschwindigkeit",
+  "soll": 125,
+  "ist": 122.74330007564382,
+  "einheit": "km/h",
+  "abw": -0.01805359939484947,
+  "quelle": "de.wikipedia",
+  "rolle": "Bezug klein"
+ },
+ {
+  "schiff": "LZ 120",
+  "groesse": "Höchstgeschwindigkeit",
+  "soll": 132.5,
+  "ist": 119.63950060318396,
+  "einheit": "km/h",
+  "abw": -0.09706037280615878,
+  "quelle": "de.wikipedia",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "LZ 129",
+  "groesse": "Fahrt mit Dauerleistung 4 × 625 kW",
+  "soll": 125,
+  "ist": 127.07216335406878,
+  "einheit": "km/h",
+  "abw": 0.01657730683255022,
+  "quelle": "de.wikipedia (Marschfahrt ≈ 125 km/h)",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "Skyship 600",
+  "groesse": "Höchstgeschwindigkeit",
+  "soll": 105,
+  "ist": 116.48091622430387,
+  "einheit": "km/h",
+  "abw": 0.10934205927908446,
+  "quelle": "de.wikipedia",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "US Navy C-7",
+  "groesse": "Höchstgeschwindigkeit",
+  "soll": 97,
+  "ist": 107.63934426118976,
+  "einheit": "km/h",
+  "abw": 0.10968396145556457,
+  "quelle": "en.wikipedia C-class",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "Norge",
+  "groesse": "Höchstgeschwindigkeit",
+  "soll": 85,
+  "ist": 116.42131673855675,
+  "einheit": "km/h",
+  "abw": 0.36966254986537356,
+  "quelle": "de.wikipedia (Wert fraglich)",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "LZ 120",
+  "groesse": "Leermasse",
+  "soll": 13646,
+  "ist": 13667.268080547765,
+  "einheit": "kg",
+  "abw": 0.0015585578592821954,
+  "quelle": "de.wikipedia",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "LZ 129",
+  "groesse": "Leermasse",
+  "soll": 118000,
+  "ist": 107688.17326447656,
+  "einheit": "kg",
+  "abw": -0.0873883621654529,
+  "quelle": "de.wikipedia (etwa 118 t)",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "Norge",
+  "groesse": "Leermasse",
+  "soll": 12490,
+  "ist": 9344.564544840137,
+  "einheit": "kg",
+  "abw": -0.25183630545715474,
+  "quelle": "de.wikipedia",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "LZ 120",
+  "groesse": "Nutzlast (volle Füllung, H₂ 99 %)",
+  "soll": 9593,
+  "ist": 8898.800626152926,
+  "einheit": "kg",
+  "abw": -0.0723652010681824,
+  "quelle": "de.wikipedia",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "Norge",
+  "groesse": "Nutzlast (volle Füllung, H₂ 99 %)",
+  "soll": 8600,
+  "ist": 11553.194121022698,
+  "einheit": "kg",
+  "abw": 0.3433946652351974,
+  "quelle": "de.wikipedia",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "US Navy C-7",
+  "groesse": "Nutzlast (H₂, Prallhöhe 1.219 m)",
+  "soll": 1837,
+  "ist": 1953.1687359955026,
+  "einheit": "kg",
+  "abw": 0.06323828851143311,
+  "quelle": "en.wikipedia C-class",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "Skyship 600",
+  "groesse": "Zuladung (He, Prallhöhe 1.500 m)",
+  "soll": 1740,
+  "ist": 2287.4346815753024,
+  "einheit": "kg",
+  "abw": 0.3146176330892543,
+  "quelle": "de.wikipedia",
+  "rolle": "Prüfung"
+ }
+]

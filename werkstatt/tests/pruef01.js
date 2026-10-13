@@ -29,8 +29,8 @@ const ft3 = Math.pow(C.FT, 3);
   const gs = C.shape({ LD: 4, m: 0.42, Cp: 0.62, r0: 0.5, r1: 0 }, V);
   row('Gertler', 'Spitzes Heck: Warnungen (soll 0)', 0, gs.warn.length, 'Stück', 'Gültigkeitsprüfung', 0);
   // Flächenbeiwert nach Burgess für übliche Formen ≈ 3,45 (S = Cs·√(V·L))
-  const gb = C.shape(C.FORMS.schlank, 60000);
-  row('Gertler', 'Flächenbeiwert Cs, Form „schlank“', 3.45, gb.Cs, '-', 'Burgess S. 54: 3,45 ± 3 %', 0.03);
+  const gb = C.shape(C.FORMS.albacore, 60000);
+  row('Gertler', 'Flächenbeiwert Cs, Form „Albacore“', 3.45, gb.Cs, '-', 'Burgess S. 54: 3,45 ± 3 %', 0.03);
 }
 
 /* ---- 2. Traggas und Ballonet ------------------------------------------------------------------ */

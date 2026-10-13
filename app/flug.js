@@ -1,3 +1,4 @@
+// 2026-10-14 06:45 · flug.js 0.4: Landung erst nach dem Abheben (nicht schon beim Loslassen am Boden)
 // 2026-10-14 05:00 · flug.js 0.3: Höhenruder ±25°, Ruder- und induzierter Widerstand, Schublinie aus dem Rechenkern
 // 2026-10-14 04:10 · flug.js 0.2: Hülle als Streifenrechnung (Potential bis zur Ablösung + Querströmung, nach Jones & DeLaurier) statt festem Munk-Moment
 // 2026-10-14 03:30 · flug.js 0.1: erstes Flugmodell (Längsbewegung mit Nicken, Kurs, Gas, Ballast, Verbrauch, Assistenten)
@@ -202,10 +203,12 @@
     else { s.E = Math.max(0, s.E - Math.max(0, P - K.solarW) * dt); s.energie = K.energie0; }   // Akku: Masse bleibt
 
     // --- Boden ---
-    if (!s.amBoden && s.h <= s.hGrund) {
+    if (!s.amBoden && s.h > s.hGrund + 1) s.warOben = true;                    // erst nach dem Abheben zählt ein Aufsetzen als Landung
+    if (!s.amBoden && s.h <= s.hGrund && s.w <= 0 && !s.warOben) { s.h = s.hGrund; s.w = Math.max(s.w, 0); }   // noch beim Abheben
+    else if (!s.amBoden && s.h <= s.hGrund) {
       const vg = Math.hypot(s.U * Math.sin(s.psi) + wind.e, s.U * Math.cos(s.psi) + wind.n);
       s.landung = { sinken: -s.w, ueberGrund: vg, gut: -s.w <= 1.0 && vg <= 2.0, t: s.t };
-      s.h = s.hGrund; s.amBoden = true;
+      s.h = s.hGrund; s.amBoden = true; s.warOben = false;
     }
     s.t += dt;
     // Anzeigewerte für die Oberfläche
@@ -263,7 +266,7 @@
     return F.s;
   }
 
-  const LSFlug = { VERSION: '0.3', kennwerte, start, schritt, lauf };
+  const LSFlug = { VERSION: '0.4', kennwerte, start, schritt, lauf };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSFlug;
   else root.LSFlug = LSFlug;
 })(typeof window !== 'undefined' ? window : globalThis);

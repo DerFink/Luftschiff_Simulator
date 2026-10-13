@@ -1,4 +1,5 @@
-<!-- 2026-10-14 02:30 · Build 2026-10-14.2: Lage des Leitwerks und der Tanks/Akkus wählbar
+<!-- 2026-10-14 06:30 · Build 2026-10-14.3: Fliegen: Startdialog (Ort, Wetter), Flugbildschirm mit Karte, Seitenansicht, Bedienung per Touch und Tastatur
+     2026-10-14 02:30 · Build 2026-10-14.2: Lage des Leitwerks und der Tanks/Akkus wählbar
      2026-10-14 01:30 · Build 2026-10-14.1: eckigere Knöpfe, Gondel nach Seitenriss, Schnittansicht, Lage der Gondel und der Motorgondeln in m ab Bug, Trimm
      2026-10-14 00:30 · ENTWURF: eckigere Knöpfe, Schalter Schnittansicht
      2026-10-13 23:20 · Build 2026-10-13.9: Überschrift der Schieberegler in derselben Zeile wie der Wert, Selbstdrehung ein/aus, Flächengewicht Leitwerk, 1 Flosse unten, ungerader Motor am Heck
@@ -127,6 +128,8 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 .toast{position:absolute;left:50%;bottom:86px;transform:translateX(-50%);background:#1d2733;color:#fff;font-size:13px;padding:8px 14px;border-radius:10px;z-index:6;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.on{opacity:.95}
 </style>
+<link rel="stylesheet" href="lib/leaflet/leaflet.css">
+<link rel="stylesheet" href="fahrt.css">
 </head>
 <body>
 <div id="app"></div>
@@ -135,6 +138,11 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 <!-- Rechenkern und feste Modelle (klassische Skripte, globale Objekte LSCore und LSModels) -->
 <script src="core.js"></script>
 <script src="models.js"></script>
+<!-- Fahrt: Karte (Leaflet 1.9.4, lokal), Flugmodell, Wetter, Flugbildschirm -->
+<script src="lib/leaflet/leaflet.js"></script>
+<script src="flug.js"></script>
+<script src="wetter.js"></script>
+<script src="fahrt.js"></script>
 
 <script>
 /* ================================================================================================
@@ -143,7 +151,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-14.2';
+const BUILD = '2026-10-14.3';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -515,9 +523,10 @@ function showErgebnis() {
       <div class="code" id="code">${escapeHtml(code)}</div>
       <div class="foot">Abschätzung nach Burgess (1927) und Gertler (Series 58), kein Festigkeits- oder Zulassungsnachweis.</div>
     </div>
-    <div class="btns"><button class="btn s" id="bCopy">Kopieren</button><button class="btn s" id="bSave">Speichern</button><button class="btn s" id="bShare">Teilen</button><button class="btn p" id="bFly" disabled title="folgt in Phase 4">Fliegen</button></div>`;
+    <div class="btns"><button class="btn s" id="bCopy">Kopieren</button><button class="btn s" id="bSave">Speichern</button><button class="btn s" id="bShare">Teilen</button><button class="btn p" id="bFly">Fliegen</button></div>`;
   $('#bBack').onclick = showAuswahl;
   $('#bEdit').onclick = () => { S.prev = null; showBau(); };
+  $('#bFly').onclick = () => showStart();   // Fahrt vorbereiten (fahrt.js)
   $('#bCopy').onclick = () => copy(code);
   $('#bShare').onclick = () => { if (navigator.share) navigator.share({ title: d.name, text: code }).catch(() => {}); else copy(code); };
   $('#bSave').onclick = saveDialog;

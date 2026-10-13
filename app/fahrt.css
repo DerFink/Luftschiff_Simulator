@@ -1,0 +1,70 @@
+/* 2026-10-14 07:00 · fahrt.css 0.2: Zeitraffer am Handy ohne Beschriftung in einer Zeile
+   2026-10-14 06:30 · fahrt.css 0.1: Startdialog und Flugbildschirm (Handy hochkant, Computer breit) nach Entwurf vom 13.10.2026 */
+
+/* ---------- Startdialog: Startort und Wetter ---------- */
+.vb{padding:10px 16px 16px;display:flex;flex-direction:column;gap:9px}
+.vbmap{height:210px;border-radius:7px;overflow:hidden;border:1px solid var(--line);position:relative;background:#e9efe4}
+.vb input[type=datetime-local]{font:inherit;border:1px solid var(--line);border-radius:5px;padding:6px 8px}
+
+/* ---------- Flugbildschirm ---------- */
+#app.wide{max-width:none}
+.fz{display:flex;flex-direction:column;height:100%;min-height:0}
+.fz .top{flex:none}
+.zr{display:flex;gap:4px;padding:0 12px 8px;align-items:center;flex-wrap:wrap}
+.zr span{font-size:11px;color:var(--mut);margin-right:2px}
+.zr button{font-size:11.5px;padding:4px 7px;border-radius:5px;background:#eef2f6;color:#4a5866}
+.zr button.on{background:var(--acc);color:#fff;font-weight:700}
+@media (max-width:899px){.zr{flex-wrap:nowrap;gap:3px}.zr .zrl{display:none}.zr button{padding:4px 6px;flex:1}}
+.fmap{position:relative;flex:1;min-height:120px;background:#e9efe4;overflow:hidden}
+.fmap .lmap{position:absolute;inset:0}
+.badge{position:absolute;z-index:500;background:rgba(255,255,255,.92);border-radius:6px;padding:4px 8px;font-size:11.5px;color:#33424f;box-shadow:0 1px 3px rgba(0,0,0,.12);pointer-events:none}
+.badge b{color:#1d2733}
+.aps{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;z-index:500;pointer-events:none}
+.aps .badge{position:static;background:var(--acc);color:#fff}
+.cbtn{position:absolute;z-index:500;right:8px;bottom:8px;background:#fff;border-radius:6px;padding:5px 9px;font-size:12px;font-weight:700;color:var(--acc);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.fside{height:88px;flex:none;border-top:1px solid var(--line);position:relative;background:linear-gradient(#d6e7f8,#eef5fc)}
+.fside canvas{position:absolute;inset:0;width:100%;height:100%}
+.fside .x{position:absolute;right:6px;top:6px;z-index:2;background:rgba(255,255,255,.92);border-radius:5px;padding:2px 7px;font-size:11px;color:#33424f}
+.inst{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:#fbfcfd;flex:none}
+.inst div{padding:3px 2px;text-align:center;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.inst div:nth-child(4n){border-right:none}
+.inst i{display:block;font-style:normal;font-size:10px;color:var(--mut)}.inst b{font-size:13.5px;white-space:nowrap}
+.inst .up{color:var(--ok)}.inst .dn{color:var(--bad)}
+.ctl{flex:none;display:grid;grid-template-columns:62px 1fr 120px;gap:10px;padding:8px 12px 4px;align-items:center}
+.thr{height:120px;display:flex;flex-direction:column;align-items:center;gap:3px;touch-action:none}
+.thr .rail{flex:1;width:34px;border-radius:7px;background:#eef2f6;position:relative;overflow:hidden;cursor:ns-resize}
+.thr .fill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(#5b9be6,#1f6fd1)}
+.thr .knob{position:absolute;left:-3px;right:-3px;height:12px;border-radius:4px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.thr i{font-style:normal;font-size:11px;color:var(--mut)}.thr b{font-size:12.5px}
+.fbtns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.fbtns button{background:var(--acc-soft);color:var(--acc);font-weight:700;font-size:12.5px;border-radius:6px;padding:7px 4px;line-height:1.15;touch-action:none;user-select:none}
+.fbtns button small{display:block;font-weight:500;font-size:10.5px;color:#4b6077}
+.fbtns button.gas{background:#fdf0e4;color:#b8641a}
+.fbtns button.akt{outline:2px solid var(--acc)}
+.joy{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,#f6f8fb 0,#e6ebf1 70%);border:1px solid var(--line);position:relative;touch-action:none;cursor:grab}
+.joy:before{content:'';position:absolute;left:50%;top:8px;bottom:8px;border-left:1px dashed #c3ccd6}
+.joy:after{content:'';position:absolute;top:50%;left:8px;right:8px;border-top:1px dashed #c3ccd6}
+.joy .stick{position:absolute;width:44px;height:44px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3);left:38px;top:38px;z-index:2;pointer-events:none}
+.joy .l{position:absolute;font-size:10px;color:var(--mut);pointer-events:none}
+.apsrow{display:flex;gap:5px;padding:4px 12px 10px;flex-wrap:wrap;flex:none}
+.apsrow button{font-size:11.5px;padding:6px 8px;border-radius:5px;background:#eef2f6;color:#4a5866}
+.apsrow button.on{background:#e3f4ea;color:#1b7a47;font-weight:700}
+.keys{padding:8px 14px;font-size:12px;display:grid;grid-template-columns:auto 1fr;gap:5px 10px;align-content:start}
+.keys kbd{font-family:inherit;font-size:11px;font-weight:700;background:#eef2f6;border:1px solid #d5dce4;border-bottom-width:2px;border-radius:4px;padding:1px 6px;white-space:nowrap}
+.fz .rp{display:none}
+.ship-ico{pointer-events:none}
+/* Computer: Karte links groß, rechts Anzeigen, Bedienung und Tasten */
+@media (min-width:900px){
+  #app.wide .fz{display:grid;grid-template-columns:1fr 360px;grid-template-rows:auto auto 1fr auto;height:100%}
+  #app.wide .fz .top{grid-column:1/3}
+  #app.wide .fz .zr{grid-column:1/3;border-bottom:1px solid var(--line);padding-top:6px}
+  #app.wide .fz .fmap{grid-column:1/2;grid-row:3/4}
+  #app.wide .fz .fside{grid-column:1/2;grid-row:4/5;height:120px}
+  #app.wide .fz .rp{display:flex;flex-direction:column;grid-column:2/3;grid-row:3/5;border-left:1px solid var(--line);overflow-y:auto}
+  #app.wide .fz>.inst,#app.wide .fz>.ctl,#app.wide .fz>.apsrow{display:none}
+  #app.wide .fz .rp .inst{grid-template-columns:repeat(3,1fr)}
+  #app.wide .fz .rp .inst div:nth-child(4n){border-right:1px solid var(--line)}
+  #app.wide .fz .rp .inst div:nth-child(3n){border-right:none}
+}
+.ende{position:absolute;inset:0;z-index:900;background:rgba(20,30,40,.45);display:flex;align-items:center;justify-content:center;padding:20px}
+.ende .box{background:#fff;border-radius:9px;padding:16px;max-width:360px;display:flex;flex-direction:column;gap:8px;font-size:13.5px}

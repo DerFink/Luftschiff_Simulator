@@ -17,3 +17,11 @@ eigene Luftschiffe auf dem Gerät speichern. Fliegen folgt in Phase 4.
   - `plan/` – Skripte für den Projektplan (`v01.py`), dazu `ProjektPlan_Luftschiff_0.1.xlsx`.
   - `tests/` – `pruef01.js` (Rechenkern), `pruef02.js` (feste Modelle gegen Quellen),
     `ablauf01.py` (Durchlauf der App im Handyformat mit Playwright).
+
+## Fahrt (ab Build 2026-10-14.3)
+Im Ergebnis „Fliegen“: Startort (Friedrichshafen, eigener Standort, Punkt auf der Karte) und Wetter wählen
+(ruhiger, mittlerer oder stürmischer Tag 2025 am Ort, aktuelle Vorhersage, Datum; Quelle Open-Meteo, CC BY 4.0).
+Karte: OpenStreetMap über Leaflet 1.9.4 (lokal in `app/lib/leaflet`, BSD-2-Lizenz).
+Tastatur: ←→ Seitenruder, ↑↓ Nicklage, W/S Schub, X Schub aus, B Ballast, G Gas, Q/E Trimm,
+H/K/F/P Höhe/Kurs/Fahrt/Position halten, N Höhensteuerer, 1–7 Zeitraffer, Leertaste Pause, V Seitenansicht.
+Flugmodell: `app/flug.js`, Prüfungen `werkstatt/tests/pruef04.js`, Ablauf im Browser `werkstatt/tests/ablauf02.py`.

@@ -1,4 +1,4 @@
-// 2026-10-13 20:00 · core.js 0.6: Räume im Rumpf mindern Gasraum, 4-Mann-Steuergondel, Motorgondel offen/verkleidet (LZ 126 / NT), Flossen-Zuspitzung und -Pfeilung, Nasenlatten
+// 2026-10-13 20:30 · core.js 0.7: Gondel-Reibung aus Reynolds-Zahl, Tropfenform (Hoerner), Hoerner-Exponenten 1,2/2,7, Quellen im Rechenweg
 //                    Widerstand, Leistung nach Burgess, Gipfelhöhe, Leitwerk im Überschlag, Speicher-Code)
 /* =================================================================================================
    LUFTSCHIFF-SIMULATOR · RECHENKERN
@@ -283,18 +283,28 @@
      Seile (nur bei Abstand > 0 m, Prall/offen/halbstarr): Zahl nS, Länge je Seil ≈ 1,3 · Abstand,
        Ø aus der hängenden Last: 2-fache Last / nS bei 60 N/mm² ⇒ Ø = √(4A/π), mindestens 3 mm;
        Widerstand 1,2 · Ø · Länge je Seil, Masse 0,002 kg/m je mm² Ø².                                 */
-  function gondola(d, geo, hangLast) {
+  function gondola(d, geo, hangLast, v) {
     const n = (d.crew || 0) + (d.pax || 0), t = d.gondel, f = d.gform || 'E';
     let l = 0, b = 0, h = 0, m = 0, cd = 0;
     if (t === 'K') { b = 1.2; h = 1.15; l = Math.max(1.2, 0.6 * n + 0.6); m = 25 + 22 * n; cd = 1.0; }
-    else if (t === 'F') { b = Math.min(3, 1.4 + 0.02 * n); h = n <= 2 ? 1.4 : 1.9; l = 2 + 0.75 * n; m = 150 + 60 * n; cd = f === 'S' ? 0.25 : 0.8; }
+    else if (t === 'F') { b = Math.min(3, 1.4 + 0.02 * n); h = n <= 2 ? 1.4 : 1.9; l = 2 + 0.75 * n; m = 150 + 60 * n; cd = f === 'T' ? 0 : f === 'S' ? 0.25 : 0.8; }
     else if (t === 'I') { b = 2.0; h = 1.8; l = 5; m = 390 + 45 * n; cd = 0.25; }   // 4-Mann-Steuergondel (Stromlinie) + Räume im Rumpf
     else if (t === 'R') { return { m: 0, CdA: 0.004, l: 0.1, b: 0.05, h: 0.04, ropes: null }; }
     else return { m: 0, CdA: 0, l: 0, b: 0, h: 0, ropes: null };
     if (d.gl) l = d.gl; if (d.gb) b = d.gb; if (d.gh) h = d.gh;
     const ga = (d.bauweise === 'S' || t === 'I') ? 0 : (d.gabstand ?? (t === 'K' ? 2.5 : 0));
     const anliegend = ga <= 0;
-    const CdA = cd * (anliegend ? 0.8 : 1) * b * h + 0.004 * 2 * (b + h) * l;
+    // Reibung aus der Reynolds-Zahl der Gondel (statt fest 0,004)
+    const vv = Math.max(v || 20, 0.5), Re = vv * l / NU0, cf = cfOf(Re), Af = b * h, Aw = 2 * (b + h) * l, k0 = anliegend ? 0.8 : 1;
+    let form, fric;
+    if (t === 'F' && f === 'T') {
+      // Tropfenform (windkanalgeformt): Hoerner, Stromlinienkörper bezogen auf die Stirnfläche
+      //   C_D = C_f · [3·(l/d) + 4,5·(d/l)^0,5 + 21·(d/l)²],  d = Durchmesser gleicher Stirnfläche
+      const dq = Math.sqrt(4 * Af / Math.PI), ld = l / dq;
+      const cdT = cf * (3 * ld + 4.5 * Math.pow(1 / ld, 0.5) + 21 / (ld * ld));
+      form = k0 * cdT * Af; fric = 0; cd = cdT;
+    } else { form = k0 * cd * Af; fric = cf * Aw; }
+    const CdA = form + fric;
     let ropes = null;
     if (!anliegend) {
       const nS = d.gseile || (t === 'K' ? 4 : Math.max(4, 2 * Math.round(Math.sqrt(hangLast || 100) / 6)));
@@ -302,12 +312,12 @@
       const dmm = Math.max(3, Math.sqrt(4 * A_mm2 / Math.PI));
       ropes = { n: nS, len, dmm, CdA: 1.2 * nS * len * dmm / 1000, m: nS * len * 0.002 * dmm * dmm };
     }
-    return { m, CdA, l, b, h, cd, ga, ropes };
+    return { m, CdA, l, b, h, cd, ga, ropes, Re, cf, form, fric, form_t: (t === 'F' ? f : t) };
   }
 
   /* -----------------------------------------------------------------------------------------------
      7. WIDERSTAND
-     Rumpf nach Hoerner:  Cd(V^(2/3)) = Cf · [4·(L/D)^(1/3) + 6·(L/D)^(−7/6) + 24·(L/D)^(−8/3)]
+     Rumpf nach Hoerner:  Cd(V^(2/3)) = Cf · [4·(L/D)^(1/3) + 6·(D/L)^1,2 + 24·(D/L)^2,7]
      Cf = Reibungsbeiwert aus der Reynolds-Zahl (Prandtl-Schlichting, mit Übergangsanteil für kleine
      Schiffe). Dazu kommen Anbauten (Gondel, Motoren, Leitwerk, Seile) als Widerstandsfläche Cd·A,
      bezogen auf V^(2/3). „anbauten“ (Zusatz Cd·A in m²) erlaubt den Abgleich historischer Schiffe.
@@ -325,9 +335,9 @@
   function dragCoeff(d, geo, tl, v, rho) {
     const Re = Math.max(v, 0.5) * geo.L / NU0 * (rho / 1.225);
     const cf = cfOf(Re), LD = geo.L / geo.D;
-    const hull = cf * (4 * Math.cbrt(LD) + 6 * Math.pow(LD, -7 / 6) + 24 * Math.pow(LD, -8 / 3));
+    const hull = cf * (4 * Math.cbrt(LD) + 6 * Math.pow(LD, -1.2) + 24 * Math.pow(LD, -2.7));   // Hoerner (1965) Kap. 6
     const fins = 2 * tl.Atot * cfOf(Re * 0.15) * 1.25 / geo.Vs;                 // beidseitig benetzt, Profildicke
-    const g = gondola(d, geo, d._hang);
+    const g = gondola(d, geo, d._hang, v);
     const gon = g.CdA / geo.Vs;
     // Motorgondeln: Zahl der Gondeln (z. B. LZ 120: 4 Motoren in 3 Gondeln), Widerstand ~ (Leistung je Gondel)^(2/3)
     const ant = d.antrieb, ng = Math.max(1, ant.gondeln || ant.n), Pg = ant.n * Math.max(ant.kW, 0.01) / ng;
@@ -436,7 +446,7 @@
     // --- Massen ---
     const pr = propulsion(d, geo);
     const struct = d.bauweise === 'S' ? massRigid(d, geo, vmax, tl) : massPressure(d, geo, vmax, tl, lift0);
-    const gon = gondola(d, geo, d._hang);
+    const gon = gondola(d, geo, d._hang, 25);
     const leer = Object.assign({}, struct, { gondel: gon.m, seile: gon.ropes ? gon.ropes.m : 0, antrieb: pr.mMotor, avionik: d.avionik || 0 });
     const mLeer = sum(leer);
     const personen = ((d.crew || 0) + (d.pax || 0)) * d.m_person;
@@ -499,7 +509,7 @@
       d, geo, tail: tl, lift0, lpm, fill, prallhoehe, gasShare, Vraum, Vgas,
       leer, mLeer, zuladung, mGesamt, frei,
       vmax, vmax_kmh: vmax * 3.6, v_reise_kmh: vr * 3.6, Preise, dauer_h, reichweite_km, gipfel,
-      drag: dragCoeff(d, geo, tl, vmax, 1.225), gondel: gon, K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
+      drag: dragCoeff(d, geo, tl, vmax, 1.225), gondel: gondola(d, geo, d._hang, vmax), K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
       P_burgess, v_beulen, latten, huelleAuslastung, propulsion: pr, warn, vorschlaege,
     };
   }
@@ -589,9 +599,12 @@
     S.push({ titel: '5 Widerstand bei Höchstfahrt', zeilen: [
       ['Reynolds-Zahl', 'Re = v · L / ν = ' + nn(r.vmax) + ' · ' + nn(g.L) + ' / 1,46·10⁻⁵', n(dr.Re / 1e6, 2) + ' Mio.'],
       ['Reibungsbeiwert (turbulent)', 'C_f = 0,455 / (log₁₀ Re)^2,58', n(dr.cf, 5)],
-      ['Rumpf (Hoerner)', 'C_D = C_f · [4·(L/D)^(1/3) + 6·(L/D)^(−7/6) + 24·(L/D)^(−8/3)], L/D ' + nn(g.L / g.D), n(dr.hull, 4)],
+      ['Rumpf (Hoerner)', 'C_D = C_f · [4·(L/D)^(1/3) + 6·(D/L)^1,2 + 24·(D/L)^2,7], L/D ' + nn(g.L / g.D) + ' (Reibung + Druckwiderstand eines Stromlinienkörpers, bezogen auf V^(2/3))', n(dr.hull, 4)],
       ['Leitwerk', '2 · Flossenfläche · C_f(Flosse) · 1,25 / V^(2/3)', n(dr.fins, 4)],
-      ['Gondel', (() => { const G = r.gondel; return G.l ? 'Maße ' + nn(G.l) + ' × ' + nn(G.b) + ' × ' + nn(G.h) + ' m; C_D ' + n(G.cd || 0, 2) + (G.ga > 0 ? '' : ' · 0,8 (an der Hülle)') + ' · ' + nn(G.b * G.h) + ' m² + 0,004 · benetzte Fläche = ' + nn(G.CdA) + ' m², / V^(2/3)' : 'keine'; })(), n(dr.gon, 4)],
+      ['Gondel', (() => { const G = r.gondel; if (!G.l) return 'keine';
+        const kopf = 'Maße ' + nn(G.l) + ' × ' + nn(G.b) + ' × ' + nn(G.h) + ' m, Stirnfläche ' + nn(G.b * G.h) + ' m², Re = ' + n(G.Re / 1e6, 1) + ' Mio., C_f = ' + n(G.cf, 4) + (G.ga > 0 ? '' : ', an der Hülle · 0,8');
+        if (G.form_t === 'T') return kopf + '; Tropfenform: C_D = C_f · [3·(l/d) + 4,5·(d/l)^0,5 + 21·(d/l)²] = ' + n(G.cd, 3) + ' ⇒ C_D·A = ' + nn(G.CdA) + ' m², / V^(2/3)';
+        return kopf + '; Form C_D ' + n(G.cd, 2) + ' · Stirnfläche = ' + nn(G.form) + ' m² + Reibung C_f · benetzte Fläche ' + nn(2 * (G.b + G.h) * G.l) + ' m² = ' + nn(G.fric) + ' m² ⇒ ' + nn(G.CdA) + ' m², / V^(2/3)'; })(), n(dr.gon, 4)],
       ['Motorgondeln', Math.max(1, a.gondeln || a.n) + ' Gondel(n) · ' + n(kNacelle(a), 3) + ' (' + (a.lage === 'I' ? 'im Rumpf' : a.mg === 'O' ? 'offen mit Kühler, abgeglichen an LZ 126' : 'verkleidet, bestätigt am Zeppelin NT') + ') · (P je Gondel ' + nn(a.n * a.kW / Math.max(1, a.gondeln || a.n)) + ' kW)^(2/3) / V^(2/3)', n(dr.engines, 4)],
       ['Seile', r.gondel.ropes ? r.gondel.ropes.n + ' · 1,2 · Ø ' + nn(r.gondel.ropes.dmm) + ' mm · ' + nn(r.gondel.ropes.len) + ' m (Ø aus 2-facher Last ' + m(d._hang) + ' bei 60 N/mm²) / V^(2/3)' : 'keine außen (Gondel an der Hülle)', n(dr.seile, 4)],
       ['Zusatzfläche', nn(d.anbauten || 0) + ' m² / V^(2/3)', n(dr.extra, 4)],
@@ -618,6 +631,30 @@
     }
     if (r.huelleAuslastung != null) Z2.push(['Hülle (Prall)', 'Überdruck max(1,2 · ½ρv²; 150 Pa); Umfangsspannung T = Δp · R; Festigkeit 60 N/m je g/m², Sicherheit 4', n(r.huelleAuslastung * 100) + ' % ausgelastet']);
     S.push({ titel: '7 Höhe und Druck', zeilen: Z2 });
+    // Quellen je Zeile (vierte Spalte) und Literaturliste
+    const Q = {
+      'Kontur': 'Gertler 1950', 'Durchmesser': 'Gertler 1950', 'Oberfläche': 'Burgess 1927, S. 54', 'Auftriebsschwerpunkt': 'Burgess 1927, Kap. III',
+      'Luft am Boden (ISA)': 'ISO 2533 (Normatmosphäre)', 'Auftrieb je m³': 'Burgess 1927, Kap. II', 'Füllung am Boden': 'Burgess 1927, Kap. II',
+      'Gasraum': 'Burgess 1927, Kap. III', 'Außenhülle': 'Burgess 1927, Tab. 1 (L-49)', 'Gaszellen': 'Burgess 1927, Kap. II', 'Gerüst: Längsträger, Laufgang': 'Burgess 1927, Kap. II (Normand), Tab. 1',
+      'Gerüst: Ringe, Drähte, Netze': 'Burgess 1927, Tab. 1', 'Armaturen, Ballastanlage': 'Burgess 1927, Tab. 1', 'Elektrik, Ausrüstung': 'Burgess 1927, Tab. 1',
+      'Zusätzliche Massen (Lamb)': 'Lamb 1932, §§ 104–115', 'Munk-Moment des Rumpfes': 'Munk 1924 (NACA TR 184)', 'Auftriebsanstieg Flosse (Helmbold/DATCOM)': 'Helmbold 1942; USAF DATCOM',
+      'Neutralpunkt der Flosse': 'Flügeltheorie (25 % MAC)', 'Statisch neutral': 'Burgess 1927, S. 101–103', 'Jones-Kriterium': 'Burgess 1927, S. 103 (Jones, NPL)', 'Burgess-Faustwert (Vergleich)': 'Burgess 1927, S. 57',
+      'Reynolds-Zahl': 'Schlichting, Grenzschicht-Theorie', 'Reibungsbeiwert (turbulent)': 'Prandtl-Schlichting', 'Rumpf (Hoerner)': 'Hoerner 1965, Kap. 6', 'Leitwerk': 'Hoerner 1965, Kap. 6',
+      'Gondel': 'Hoerner 1965, Kap. 3 und 6', 'Motorgondeln': 'abgeglichen an LZ 126 bzw. Zeppelin NT', 'Seile': 'Hoerner 1965, Kap. 3 (Zylinder quer)',
+      'Leistungsbedarf': 'Burgess 1927, Kap. II', 'Gesamtwirkungsgrad K (Burgess)': 'Burgess 1927, Kap. II', 'Vorschlag Burgess': 'Burgess 1927, Kap. II',
+      'Statische Gipfelhöhe (Burgess Kap. II)': 'Burgess 1927, Kap. II', 'Druck außen an der Nase': 'Lamb 1932; Potentialtheorie', 'Hülle (Prall)': 'Burgess 1927, Kap. VI',
+    };
+    for (const sec of S) for (const z of sec.zeilen) if (z.length < 4) z.push(Q[z[0]] || '');
+    S.push({ titel: 'Literatur', zeilen: [
+      ['Burgess 1927', 'C. P. Burgess: Airship Design. Ronald Press, New York 1927', ''],
+      ['Gertler 1950', 'M. Gertler: Resistance Experiments on a Systematic Series of Streamlined Bodies of Revolution (Series 58). DTMB Report C-297, 1950', ''],
+      ['Hoerner 1965', 'S. F. Hoerner: Fluid-Dynamic Drag. Selbstverlag, 1965', ''],
+      ['Lamb 1932', 'H. Lamb: Hydrodynamics, 6. Aufl. Cambridge 1932', ''],
+      ['Munk 1924', 'M. M. Munk: The Aerodynamic Forces on Airship Hulls. NACA Report 184, 1924', ''],
+      ['Helmbold 1942', 'H. B. Helmbold: Der unverwundene Ellipsenflügel als tragende Fläche. Jahrbuch der Deutschen Luftfahrtforschung 1942; USAF DATCOM', ''],
+      ['Schlichting', 'H. Schlichting: Grenzschicht-Theorie. Braun, Karlsruhe', ''],
+      ['ISO 2533', 'Normatmosphäre (ISA)', ''],
+    ].map(z => z.concat([''])) });
     return S;
   }
 
@@ -719,7 +756,7 @@
   }
 
   const LSCore = {
-    VERSION: '0.6', G0, LB, FT, HP,
+    VERSION: '0.7', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nose, noseNeed,
     dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };

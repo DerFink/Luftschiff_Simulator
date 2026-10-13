@@ -1,4 +1,4 @@
-// 2026-10-13 20:00 · models.js 0.4: Motorgondel-Bauart (offen: LZ 126, LZ 129, Norge, C-7; verkleidet: LZ 120 als windschnittiger Jaray-Entwurf, NT, Skyship)
+// 2026-10-13 20:30 · models.js 0.5: LZ 120 mit Gondel in Tropfenform (Jaray, Hinweis Nutzer)
 /* =================================================================================================
    FESTE AUSWAHL
    -------------------------------------------------------------------------------------------------
@@ -42,7 +42,7 @@
         form: { LD: 120.8 / 18.71, m: 0.45, Cp: cp(20000 / 0.95, 120.8, 18.71), r0: 0.6, r1: 0.06 }, // [W]/[A]
         huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 1000,                   // [A] Stand wie L-49
         ltw: { n: 4, anord: '+', faktor: 1 },
-        gondel: 'F', gform: 'S', crew: 12, pax: 20, m_person: 80,                            // [W] schlanke Fahrgastgondel
+        gondel: 'F', gform: 'T', crew: 12, pax: 20, m_person: 80,                            // [W]; [N] Tropfenform, von Jaray im Windkanal entwickelt
         antrieb: { art: 'V', n: 4, kW: 176, gondeln: 3, lage: 'R', mg: 'V', eta: 0.72, kraftstoff: 3000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; [N] 3 Motorgondeln (hinten 2 Motoren); Rest [A]
         v_reise: 110, ballast: 1500,                                                         // [A]
       },

@@ -1,3 +1,4 @@
+// 2026-10-14 05:00 · flug.js 0.3: Höhenruder ±25°, Ruder- und induzierter Widerstand, Schublinie aus dem Rechenkern
 // 2026-10-14 04:10 · flug.js 0.2: Hülle als Streifenrechnung (Potential bis zur Ablösung + Querströmung, nach Jones & DeLaurier) statt festem Munk-Moment
 // 2026-10-14 03:30 · flug.js 0.1: erstes Flugmodell (Längsbewegung mit Nicken, Kurs, Gas, Ballast, Verbrauch, Assistenten)
 /* =================================================================================================
@@ -47,7 +48,7 @@
     const propD = Math.max(0.25, 0.55 * Math.pow(Math.max(a.kW, 0.005), 0.33));
     const Aprop = a.n * Math.PI * propD * propD / 4;
     // Schublinie: Motoren am Rumpf etwa 0,6 R unter der Achse, an der Gondel unter der Hülle, am Heck in der Achse
-    const zT = a.lage === 'H' ? 0 : a.lage === 'G' ? geo.R + (r.gondel.ga || 0) + (r.gondel.h || 0) / 2 : 0.6 * geo.R;
+    const zT = C.schubHebel(d, geo);
     // Masse ohne Traggas beim Start (Leermasse + Zuladung); Traggas kommt als eigene Größe dazu
     const z = r.zuladung;
     // Hülle in Streifen (Jones & DeLaurier 1983, nach Munk und Allen-Perkins):
@@ -66,7 +67,7 @@
     // Wenderadius bei vollem Seitenruder: Erfahrungswert 3,5 L, größer bei kleinem Seitenleitwerk
     const Rturn = 3.5 * L * Math.sqrt(clamp(tl.A_jones / Math.max(Av, 1e-6), 0.5, 4));
     return {
-      d, L, D, Vol, Vs, R: geo.R, st, x0, xB: geo.xB * L, vTab, cdTab, Ah, Av, aeff: tl.aeff, lt: tl.lt, k1: tl.k1, k2: tl.k2, Cdc, Aseit, Aprop, zT, Rturn,
+      d, L, D, Vol, Vs, R: geo.R, st, x0, bh: 2 * tl.b + 0.3 * geo.D, xB: geo.xB * L, vTab, cdTab, Ah, Av, aeff: tl.aeff, lt: tl.lt, k1: tl.k1, k2: tl.k2, Cdc, Aseit, Aprop, zT, Rturn,
       P: a.n * a.kW * 1000, eta: a.eta || 0.7, verbrenner: a.art === 'V', sfc: a.sfc || 0.3, solarW: r.propulsion.solarW || 0,
       mLeer: r.mLeer, mPers: z.personen + z.nutzlast + z.schlepptau, ballast0: z.ballast, energie0: r.propulsion.mEnergie, E0: r.propulsion.E_J,
       Vgas: r.Vgas, lpm0: r.lpm, dx: r.trim.dx, BG: r.trim.BG, vmax: r.vmax,
@@ -149,10 +150,15 @@
 
     // --- Luftkräfte ---
     const cd = cdAt(K, Math.abs(va)) * (schlaff ? 1.3 : 1);
-    const X = T - 0.5 * rho * K.Vs * cd * va * Math.abs(va);                       // längs
+    let X = T - 0.5 * rho * K.Vs * cd * va * Math.abs(va);                         // längs
     // Flossen: Anstellwinkel am Leitwerk −vnt/va; Höhenruder: + = Kraft nach oben am Heck ⇒ Bug tief,
     // Ruderwirkung 45 % der Flossenwirkung je Einheit Ausschlag (Ruder etwa ein Drittel der Flossentiefe)
-    const Zf = -0.5 * rho * K.aeff * K.Ah * va * vnt + 0.5 * rho * K.aeff * K.Ah * 0.45 * s.hr * va * Math.abs(va);
+    // Ausschlag: hr = ±1 entspricht ±25° (0,44 rad); Ruderwirkung τ = 0,45 (Ruder etwa ein Drittel der Flossentiefe)
+    const dRud = s.hr * 0.44;
+    const Zf = -0.5 * rho * K.aeff * K.Ah * va * vnt + 0.5 * rho * K.aeff * K.Ah * 0.45 * dRud * va * Math.abs(va);
+    // Widerstand durch Ruderausschlag (Hoerner, einfache Klappe) und induzierter Widerstand der Flossenkraft
+    const qa = 0.5 * rho * va * va;
+    const Drud = K.Ah > 0 ? qa * K.Ah * 0.27 * Math.sin(dRud) ** 2 + (qa > 1 ? Zf * Zf / (qa * Math.PI * 0.8 * K.bh * K.bh) : 0) : 0;
     // Hülle in Streifen: Normalkraft und Moment um die Auftriebsmitte
     let Zh = 0, Mh = 0;
     for (const e of K.st) {
@@ -162,6 +168,7 @@
       Zh += f * e.dx; Mh += f * e.dx * (K.xB - e.x);
     }
     const Z = Zf + Zh;
+    X -= Drud * Math.sign(va);                                                    // Ruder- und induzierter Widerstand
 
     // --- Momente um die Auftriebsmitte (Bug hoch = positiv) ---
     const Mfl = -Zf * K.lt;                                                        // Flossenkraft am Hebelarm hinten
@@ -243,7 +250,7 @@
     // Höhensteuerer (wie der Mann am Höhenruder der Zeppeline): hält den vorgegebenen Nickwinkel ap.nick.
     // Luftschiffe mit Flossen unter dem Jones-Kriterium sind im Nicken leicht instabil; ohne ihn muss man
     // selbst dauernd nachsteuern. Bei kleiner Fahrt wirkt das Ruder kaum.
-    if (ap.nick != null) s.hr = clamp(-4 * (ap.nick - s.th) + 12 * s.q, -1, 1);   // Ruder + = Bug tief
+    if (ap.nick != null) s.hr = clamp(-12 * (ap.nick - s.th) + 40 * s.q, -1, 1);   // Ruder + = Bug tief
   }
 
   /* -----------------------------------------------------------------------------------------------
@@ -256,7 +263,7 @@
     return F.s;
   }
 
-  const LSFlug = { VERSION: '0.2', kennwerte, start, schritt, lauf };
+  const LSFlug = { VERSION: '0.3', kennwerte, start, schritt, lauf };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSFlug;
   else root.LSFlug = LSFlug;
 })(typeof window !== 'undefined' ? window : globalThis);

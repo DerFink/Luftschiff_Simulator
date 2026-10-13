@@ -1,3 +1,4 @@
+// 2026-10-14 05:00 · core.js 0.13: Trimmwiderstand aus der Schublinie unter der Achse (Höhenruder gleicht das aufnickende Moment aus)
 // 2026-10-14 02:30 · core.js 0.12: Lage des Leitwerks (ltw.xTE) und der Tanks/Akkus (xtank) wählbar
 // 2026-10-14 01:30 · core.js 0.11: Längslage der Motorgondeln wählbar (antrieb.xs, antrieb.xm), Größe der Motorgondeln nach Leistung, Gondellage (gx) und Trimm (Schwerpunkt gegen Auftriebsmitte)
 // 2026-10-13 23:20 · core.js 0.10: Flächengewicht Leitwerk als Parameter (ltw.gm2), ungerader Motor wahlweise am Heck (antrieb.ungerade = 'H', Zeppelin NT), 1 Flosse unten
@@ -379,9 +380,32 @@
     return { Re, cf, hull, fins, gon, engines, seile, extra, total: hull + fins + gon + engines + seile + extra };
   }
   // Leistungsbedarf an der Welle bei Geschwindigkeit v [W]
+  /* Trimmwiderstand aus der Schublinie (Hinweis des Nutzers, 13.10.2026):
+     Motoren unter der Achse (an der Gondel, am Rumpf unten) erzeugen mit dem Schub T ein aufnickendes Moment
+     T · z_T. Um waagerecht zu fahren, drückt das Höhenruder dagegen: Kraft am Leitwerk Z_e = T · z_T / l_t.
+       Ruderausschlag δ aus C_L = Z_e / (q · A_h) = a_eff · τ · δ  (τ = 0,45, Ruder etwa ein Drittel der Flossentiefe)
+       Ruderwiderstand  ΔC_D = 0,9 · 0,3 · sin²δ  auf A_h   (Hoerner 1965, Kap. 13, einfache Klappe c_R/c ≈ 0,3)
+       induzierter Widerstand  Z_e² / (q · π · e · b_h²),  e = 0,8, b_h = Spannweite des Höhenleitwerks samt Rumpf
+     Ohne Höhenleitwerk (1 oder 2 senkrechte Flossen) bleibt nur Neigen: dann kein Ruderwiderstand (Schiff fährt schräg). */
+  function schubHebel(d, geo) {
+    const a = d.antrieb;
+    if (a.lage === 'H') return 0;
+    if (a.lage === 'G') { const g = gondola(d, geo, d._hang || 0, 20); return geo.R + Math.max(g.ga || 0, 0) + (g.h || 0) / 2; }
+    return 0.6 * geo.R;
+  }
+  function trimDrag(d, geo, tl, v, rho, T) {
+    if (!tl.elevator || T <= 0 || v <= 0.1) return { D: 0, Ze: 0, delta: 0 };
+    const q = 0.5 * rho * v * v, Ah = tl.Aplane, Ze = T * schubHebel(d, geo) / Math.max(tl.lt, 0.1);
+    const CL = Ze / (q * Ah), delta = Math.min(Math.abs(CL) / (tl.aeff * 0.45), 0.44);          // höchstens 25° Ruder
+    const bh = 2 * tl.b + 0.3 * geo.D;
+    const D = q * Ah * 0.27 * Math.pow(Math.sin(delta), 2) + Ze * Ze / (q * Math.PI * 0.8 * bh * bh);
+    return { D, Ze, delta };
+  }
   function powerAt(d, geo, tl, v, h) {
     const rho = atmos(h || 0).rho, cd = dragCoeff(d, geo, tl, v, rho);
-    return 0.5 * rho * v * v * v * cd.total * geo.Vs / (d.antrieb.eta || 0.7);
+    const D0 = 0.5 * rho * v * v * cd.total * geo.Vs;
+    let T = D0; for (let i = 0; i < 4; i++) T = D0 + trimDrag(d, geo, tl, v, rho, T).D;   // Schub = Widerstand samt Trimmwiderstand
+    return T * v / (d.antrieb.eta || 0.7);
   }
 
   /* -----------------------------------------------------------------------------------------------
@@ -610,7 +634,7 @@
       leer, mLeer, zuladung, mGesamt, frei,
       vmax, vmax_kmh: vmax * 3.6, v_reise_kmh: vr * 3.6, Preise, dauer_h, reichweite_km, gipfel,
       drag: dragCoeff(d, geo, tl, vmax, 1.225), gondel: gondola(d, geo, d._hang, vmax), K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
-      P_burgess, v_beulen, latten, huelleAuslastung, propulsion: pr, warn, vorschlaege, ltw_gm2_calc, trim: tr, nac: N,
+      P_burgess, v_beulen, latten, huelleAuslastung, propulsion: pr, warn, vorschlaege, ltw_gm2_calc, trim: tr, nac: N, trimV: (() => { const rh = 1.225, cd0 = dragCoeff(d, geo, tl, vmax, rh).total, D0 = 0.5 * rh * vmax * vmax * cd0 * geo.Vs; let T = D0, td; for (let i = 0; i < 4; i++) { td = trimDrag(d, geo, tl, vmax, rh, T); T = D0 + td.D; } return Object.assign(td, { D0, zT: schubHebel(d, geo) }); })(),
     };
   }
 
@@ -709,6 +733,7 @@
       ['Seile', r.gondel.ropes ? r.gondel.ropes.n + ' · 1,2 · Ø ' + nn(r.gondel.ropes.dmm) + ' mm · ' + nn(r.gondel.ropes.len) + ' m (Ø aus 2-facher Last ' + m(d._hang) + ' bei 60 N/mm²) / V^(2/3)' : 'keine außen (Gondel an der Hülle)', n(dr.seile, 4)],
       ['Zusatzfläche', nn(d.anbauten || 0) + ' m² / V^(2/3)', n(dr.extra, 4)],
       ['Summe', 'C_D bezogen auf V^(2/3)', n(dr.total, 4)],
+      ['Trimmwiderstand (Schublinie)', 'Schub ' + nn(r.trimV.D0 / 1000) + ' kN · ' + nn(r.trimV.zT) + ' m unter der Achse / Hebelarm ' + nn(t.lt) + ' m ⇒ Ruderkraft ' + nn(r.trimV.Ze / 1000) + ' kN, Ruder ' + n(r.trimV.delta * 180 / Math.PI, 1) + '°; ΔC_D = 0,27·sin²δ · A_h + Z_e²/(q·π·0,8·b_h²)', '+' + n(r.trimV.D / Math.max(r.trimV.D0, 1e-9) * 100, 1) + ' % Widerstand', 'Hoerner 1965, Kap. 13; Hinweis Nutzer'],
     ] });
     const Pin = a.n * a.kW * 1000;
     S.push({ titel: '6 Leistung und Geschwindigkeit', zeilen: [
@@ -871,7 +896,7 @@
   const LSCore = {
     VERSION: '0.12', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nacelles, nose, noseNeed,
-    dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
+    dragCoeff, trimDrag, schubHebel, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSCore;
   else root.LSCore = LSCore;

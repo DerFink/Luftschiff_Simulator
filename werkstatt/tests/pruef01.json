@@ -1,0 +1,342 @@
+[
+ {
+  "gruppe": "Gertler",
+  "groesse": "Ellipsoid: Koeffizient a1 (soll 4)",
+  "soll": 4,
+  "ist": 4,
+  "einheit": "-",
+  "abw": 0,
+  "ok": "ok",
+  "quelle": "y² = 4x − 4x²"
+ },
+ {
+  "gruppe": "Gertler",
+  "groesse": "Ellipsoid: Koeffizient a2 (soll −4)",
+  "soll": -4,
+  "ist": -4.000000000000023,
+  "einheit": "-",
+  "abw": 5.773159728050814e-15,
+  "ok": "ok",
+  "quelle": "y² = 4x − 4x²"
+ },
+ {
+  "gruppe": "Gertler",
+  "groesse": "Ellipsoid L/D 4: Oberfläche",
+  "soll": 618.4850031329619,
+  "ist": 618.4535943333409,
+  "einheit": "m²",
+  "abw": -0.000050783445777785756,
+  "ok": "ok",
+  "quelle": "geschlossene Formel"
+ },
+ {
+  "gruppe": "Gertler",
+  "groesse": "Ellipsoid: Volumen aus L und D",
+  "soll": 999.9999999999998,
+  "ist": 1000,
+  "einheit": "m³",
+  "abw": 2.273736754432321e-16,
+  "ok": "ok",
+  "quelle": "geschlossene Formel"
+ },
+ {
+  "gruppe": "Gertler",
+  "groesse": "Ellipsoid: Auftriebsschwerpunkt x/L",
+  "soll": 0.5,
+  "ist": 0.5000000000000004,
+  "einheit": "-",
+  "abw": 8.881784197001252e-16,
+  "ok": "ok",
+  "quelle": "Symmetrie"
+ },
+ {
+  "gruppe": "Gertler",
+  "groesse": "Spitzes Heck: Warnungen (soll 0)",
+  "soll": 0,
+  "ist": 0,
+  "einheit": "Stück",
+  "abw": null,
+  "ok": "–",
+  "quelle": "Gültigkeitsprüfung"
+ },
+ {
+  "gruppe": "Gertler",
+  "groesse": "Flächenbeiwert Cs, Form „schlank“",
+  "soll": 3.45,
+  "ist": 3.3824806019327323,
+  "einheit": "-",
+  "abw": -0.019570840019497947,
+  "ok": "ok",
+  "quelle": "Burgess S. 54: 3,45 ± 3 %"
+ },
+ {
+  "gruppe": "Statik",
+  "groesse": "Luftdichte Boden ISA",
+  "soll": 1.225,
+  "ist": 1.2249782345244133,
+  "einheit": "kg/m³",
+  "abw": -0.000017767735172851898,
+  "ok": "ok",
+  "quelle": "ISA"
+ },
+ {
+  "gruppe": "Statik",
+  "groesse": "Auftrieb He 94 % (Burgess .064 lb/ft³)",
+  "soll": 1.0251816559334488,
+  "ist": 0.9923562025409955,
+  "einheit": "kg/m³",
+  "abw": -0.03201915797309599,
+  "ok": "ABWEICHUNG",
+  "quelle": "Burgess Kap. II Aufgabe 1"
+ },
+ {
+  "gruppe": "Statik",
+  "groesse": "Auftrieb H₂ 97 % (Burgess .068 lb/ft³)",
+  "soll": 1.0892555094292895,
+  "ist": 1.1055290692881163,
+  "einheit": "kg/m³",
+  "abw": 0.014940075783828988,
+  "ok": "ok",
+  "quelle": "Burgess Kap. II Aufgabe 4"
+ },
+ {
+  "gruppe": "Statik",
+  "groesse": "Ballonet 20 %: größte Höhe",
+  "soll": 2286,
+  "ist": 2264.3323857578253,
+  "einheit": "m",
+  "abw": -0.009478396431397529,
+  "ok": "ok",
+  "quelle": "Burgess Kap. II, Beispiel"
+ },
+ {
+  "gruppe": "Statik",
+  "groesse": "Füllgrad für Prallhöhe 4.000 ft",
+  "soll": 0.888,
+  "ist": 0.888072862052645,
+  "einheit": "-",
+  "abw": 0.00008205186108671885,
+  "ok": "ok",
+  "quelle": "Burgess Kap. II Aufgabe 4"
+ },
+ {
+  "gruppe": "Leistung",
+  "groesse": "Aufgabe 1: Leistung für 60 kn",
+  "soll": 1404,
+  "ist": 1412.1064669597122,
+  "einheit": "PS",
+  "abw": 0.005773836865891865,
+  "ok": "ok",
+  "quelle": "Burgess Kap. II (1.404 PS)"
+ },
+ {
+  "gruppe": "L-49",
+  "groesse": "Länge",
+  "soll": 195.9864,
+  "ist": 196,
+  "einheit": "m",
+  "abw": 0.00006939257009668388,
+  "ok": "ok",
+  "quelle": "Burgess Kap. II"
+ },
+ {
+  "gruppe": "L-49",
+  "groesse": "Außenhülle",
+  "soll": 1769.0102430000002,
+  "ist": 1747.3001687265714,
+  "einheit": "kg",
+  "abw": -0.01227244124749183,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 1 (Abgleich)"
+ },
+ {
+  "gruppe": "L-49",
+  "groesse": "Gaszellen",
+  "soll": 4018.8283982000003,
+  "ist": 3993.0728874337947,
+  "einheit": "kg",
+  "abw": -0.006408711249711798,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 1 (Abgleich)"
+ },
+ {
+  "gruppe": "L-49",
+  "groesse": "Längsträger + Laufgang",
+  "soll": 4989.516070000001,
+  "ist": 4989.973218674746,
+  "einheit": "kg",
+  "abw": 0.00009162184635381683,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 1 (Abgleich)"
+ },
+ {
+  "gruppe": "L-49",
+  "groesse": "Ringe, Drähte, Netze",
+  "soll": 5511.1472955,
+  "ist": 5511,
+  "einheit": "kg",
+  "abw": -0.000026726830567602167,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 1 (Abgleich)"
+ },
+ {
+  "gruppe": "L-49",
+  "groesse": "Leitwerk",
+  "soll": 816.466266,
+  "ist": 827.4234493115232,
+  "einheit": "kg",
+  "abw": 0.013420252333515492,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 1 (Abgleich)"
+ },
+ {
+  "gruppe": "L-49",
+  "groesse": "Ballastanlage, Armaturen, Steuerung",
+  "soll": 4309.127515,
+  "ist": 4306.3859744470265,
+  "einheit": "kg",
+  "abw": -0.0006362170865054278,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 1 (Abgleich)"
+ },
+ {
+  "gruppe": "L-49",
+  "groesse": "Triebwerke",
+  "soll": 5443.10844,
+  "ist": 5443.10844,
+  "einheit": "kg",
+  "abw": 0,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 1 (Abgleich)"
+ },
+ {
+  "gruppe": "L-49",
+  "groesse": "Leistung bei 60 mph (Wellenleistung)",
+  "soll": 1100,
+  "ist": 1098.9948995166526,
+  "einheit": "PS",
+  "abw": -0.0009137277121340048,
+  "ok": "ok",
+  "quelle": "Burgess Kap. II (Höchstfahrt)"
+ },
+ {
+  "gruppe": "C-7",
+  "groesse": "Länge",
+  "soll": 58.52160000000001,
+  "ist": 58.52160000000001,
+  "einheit": "m",
+  "abw": 0,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 4"
+ },
+ {
+  "gruppe": "C-7",
+  "groesse": "Feste Massen ohne Antrieb / D",
+  "soll": 0.4,
+  "ist": 0.3469651247674578,
+  "einheit": "-",
+  "abw": -0.1325871880813556,
+  "ok": "ok",
+  "quelle": "Burgess Kap. II Aufgabe 4 (Blimp)"
+ },
+ {
+  "gruppe": "C-7",
+  "groesse": "Leitwerk senkrecht",
+  "soll": 39.390888960000005,
+  "ist": 44.593459200000005,
+  "einheit": "m²",
+  "abw": 0.13207547169811318,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 4 (Abgleich)"
+ },
+ {
+  "gruppe": "C-7",
+  "groesse": "Höchstgeschwindigkeit (2 × 150 PS)",
+  "soll": 104.79099354221599,
+  "ist": 107.60072172320804,
+  "einheit": "km/h",
+  "abw": 0.026812687674920545,
+  "ok": "ok",
+  "quelle": "Burgess K = 40 für Blimps (Leistung 2 × 150 PS aus Literatur, unsicher)"
+ },
+ {
+  "gruppe": "C-7",
+  "groesse": "Gesamtwirkungsgrad K",
+  "soll": 40,
+  "ist": 43.30456399476608,
+  "einheit": "-",
+  "abw": 0.08261409986915194,
+  "ok": "ok",
+  "quelle": "Burgess Kap. II Aufgabe 4"
+ },
+ {
+  "gruppe": "Los Angeles",
+  "groesse": "Länge",
+  "soll": 199.9488,
+  "ist": 199.9488,
+  "einheit": "m",
+  "abw": 0,
+  "ok": "ok",
+  "quelle": "Burgess Tab. 4"
+ },
+ {
+  "gruppe": "Los Angeles",
+  "groesse": "Höchstgeschwindigkeit (5 × 400 PS)",
+  "soll": 122.28399999999999,
+  "ist": 123.16980522053827,
+  "einheit": "km/h",
+  "abw": 0.007243835829203113,
+  "ok": "ok",
+  "quelle": "GlobalSecurity (76 mph)"
+ },
+ {
+  "gruppe": "Los Angeles",
+  "groesse": "Gesamtwirkungsgrad K",
+  "soll": 63.5,
+  "ist": 60.13350591881349,
+  "einheit": "-",
+  "abw": -0.0530156548218348,
+  "ok": "ok",
+  "quelle": "Burgess Kap. II (moderne Starrschiffe)"
+ },
+ {
+  "gruppe": "Los Angeles",
+  "groesse": "Leermasse (ohne Kraftstoff, Ballast, Besatzung)",
+  "soll": null,
+  "ist": 35240.3257871479,
+  "einheit": "kg",
+  "abw": null,
+  "ok": "–",
+  "quelle": "keine verlässliche Quelle zur Hand"
+ },
+ {
+  "gruppe": "Klein H₂",
+  "groesse": "Nase beult ein ab",
+  "soll": 33,
+  "ist": 35.15284815072058,
+  "einheit": "km/h",
+  "abw": 0.06523782274910847,
+  "ok": "ok",
+  "quelle": "Überschlag im Chat"
+ },
+ {
+  "gruppe": "Speicher-Code",
+  "groesse": "Freie Nutzlast nach Laden",
+  "soll": 1017.6299276003297,
+  "ist": 1017.6299276003297,
+  "einheit": "kg",
+  "abw": 0,
+  "ok": "ok",
+  "quelle": "encode → decode"
+ },
+ {
+  "gruppe": "Speicher-Code",
+  "groesse": "Länge des Codes",
+  "soll": null,
+  "ist": 120,
+  "einheit": "Zeichen",
+  "abw": null,
+  "ok": "–",
+  "quelle": "LS1|N:Kleines H2-LS|B:O|G:H2|R:.98|V:2000|F:3.5,.43,.6,.5,.2|H:200|T:4,+,1|K:K|C:1|P:1|A:E,2,12,G,.65,40,160|S:30|BL:300"
+ }
+]

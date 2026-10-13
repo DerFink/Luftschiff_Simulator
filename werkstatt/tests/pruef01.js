@@ -1,4 +1,4 @@
-// 2026-10-13 14:45 · pruef01.js: erste Prüfung des Rechenkerns (Gertler, Auftrieb, Burgess-Beispiele, L-49, C-7, Los Angeles)
+// 2026-10-13 15:05 · pruef01.js: Name des kleinen H₂-Luftschiffs auf „LuffiHopper“ geändert
 /* =================================================================================================
    Prüfung des Rechenkerns gegen geschlossene Formeln und gegen Werte aus Burgess (1927).
    Aufruf:  node werkstatt/tests/pruef01.js        (gibt eine Tabelle aus und schreibt pruef01.json)
@@ -128,12 +128,12 @@ const ft3 = Math.pow(C.FT, 3);
 /* ---- 7. Kleines H₂-Luftschiff und RC-Blimp: Plausibilität ------------------------------------- */
 {
   const r = C.compute({
-    name: 'Kleines H2-LS', bauweise: 'O', gas: 'H2', reinheit: 0.98, V: 2000,
+    name: 'LuffiHopper', bauweise: 'O', gas: 'H2', reinheit: 0.98, V: 2000,
     form: { LD: 3.5, m: 0.43, Cp: 0.60, r0: 0.5, r1: 0.2 }, huelle_gm2: 200, prallhoehe: 0,
     ltw: { n: 4, anord: '+', faktor: 1 }, gondel: 'K', crew: 1, pax: 1,
     antrieb: { art: 'E', n: 2, kW: 12, lage: 'G', eta: 0.65, kWh: 40, whkg: 160 }, v_reise: 30, ballast: 300,
   });
-  row('Klein H₂', 'Nase beult ein ab', 33, r.v_beulen * 3.6, 'km/h', 'Überschlag im Chat', 0.15);
+  row('LuffiHopper', 'Nase beult ein ab', 33, r.v_beulen * 3.6, 'km/h', 'Überschlag im Chat', 0.15);
   globalThis.__KH = r;
   const rc = C.compute({
     name: 'RC-Blimp', bauweise: 'P', gas: 'He', reinheit: 0.99, V: 0.5,

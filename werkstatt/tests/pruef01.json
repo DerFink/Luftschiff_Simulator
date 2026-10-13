@@ -310,7 +310,7 @@
   "quelle": "keine verlässliche Quelle zur Hand"
  },
  {
-  "gruppe": "Klein H₂",
+  "gruppe": "LuffiHopper",
   "groesse": "Nase beult ein ab",
   "soll": 33,
   "ist": 35.15284815072058,
@@ -333,10 +333,10 @@
   "gruppe": "Speicher-Code",
   "groesse": "Länge des Codes",
   "soll": null,
-  "ist": 120,
+  "ist": 118,
   "einheit": "Zeichen",
   "abw": null,
   "ok": "–",
-  "quelle": "LS1|N:Kleines H2-LS|B:O|G:H2|R:.98|V:2000|F:3.5,.43,.6,.5,.2|H:200|T:4,+,1|K:K|C:1|P:1|A:E,2,12,G,.65,40,160|S:30|BL:300"
+  "quelle": "LS1|N:LuffiHopper|B:O|G:H2|R:.98|V:2000|F:3.5,.43,.6,.5,.2|H:200|T:4,+,1|K:K|C:1|P:1|A:E,2,12,G,.65,40,160|S:30|BL:300"
  }
 ]

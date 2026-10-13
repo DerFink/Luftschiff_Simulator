@@ -1,4 +1,4 @@
-// 2026-10-13 15:15 · pruef01.js: C-Klasse und LZ 126 mit Wikipedia-Daten (Maße, Leistung, Fahrt, Nutzlast)
+// 2026-10-13 15:20 · pruef01.js: Nutzlast der C-Klasse gilt für Wasserstoff (Angabe des Nutzers)
 /* =================================================================================================
    Prüfung des Rechenkerns gegen geschlossene Formeln und gegen Werte aus Burgess (1927).
    Aufruf:  node werkstatt/tests/pruef01.js        (gibt eine Tabelle aus und schreibt pruef01.json)
@@ -103,7 +103,7 @@ const ft3 = Math.pow(C.FT, 3);
   row('C-7', 'Höchstgeschwindigkeit (2 × 150 PS)', 97, r.vmax_kmh, 'km/h', 'Wikipedia (60 mph, 2 × 150 hp Hispano-Suiza)', 0.10);
   row('C-7', 'Höchstgeschwindigkeit nach Burgess K = 40', Math.cbrt(300 * C.HP * 40 / (1.225 * r.geo.Vs)) * 3.6, r.vmax_kmh, 'km/h', 'Burgess Kap. II', 0.10);
   { const rH = C.compute(Object.assign({}, d, { gas: 'H2', reinheit: 0.97 }));
-    row('C-7', 'Nutzlast mit H₂ (Auftrieb − Leermasse)', 1837, rH.lift0 - rH.mLeer, 'kg', 'Wikipedia (4.050 lb; Gas nicht genannt)', 0.15); }
+    row('C-7', 'Nutzlast mit H₂ (Auftrieb − Leermasse)', 1837, rH.lift0 - rH.mLeer, 'kg', 'Wikipedia (4.050 lb); Wasserstoff laut Nutzer (WK-I-Blimps)', 0.15); }
   row('C-7', 'Gesamtwirkungsgrad K', 40, r.K_eff, '-', 'Burgess Kap. II Aufgabe 4', 0.20);
   globalThis.__C7 = r;
 }

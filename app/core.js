@@ -1,3 +1,4 @@
+// 2026-10-14 01:30 · core.js 0.11: Längslage der Motorgondeln wählbar (antrieb.xs, antrieb.xm), Größe der Motorgondeln nach Leistung, Gondellage (gx) und Trimm (Schwerpunkt gegen Auftriebsmitte)
 // 2026-10-13 23:20 · core.js 0.10: Flächengewicht Leitwerk als Parameter (ltw.gm2), ungerader Motor wahlweise am Heck (antrieb.ungerade = 'H', Zeppelin NT), 1 Flosse unten
 // 2026-10-13 22:15 · core.js 0.9: Motorgondeln nach fester Regel (Paare seitlich, ungerade Zahl ⇒ Mittelgondel, Sonderfall Motorpaar in Mittelgondel)
 // 2026-10-13 21:00 · core.js 0.8: Gasraum-Anteil überschreibbar (LZ 120 aus Windkanalmodell)
@@ -351,7 +352,15 @@
     const mpaar = n >= 2 && n % 2 === 0 && a.gondeln === n - 1;   // Sonderfall Motorpaar in der Mittelgondel
     const mitte = mpaar ? 2 : n % 2;
     const paare = (n - mitte) / 2;
-    return { g: 2 * paare + (mitte ? 1 : 0), paare, mitte, heck: mitte === 1 && a.ungerade === 'H' };
+    // Längslage (Anteil der Länge ab Bug): Paare gleichmäßig zwischen 0,35 und 0,65, Mittelgondel 0,72 – oder vom Nutzer
+    const xp = Array.from({ length: paare }, (_, i) => (a.xs && a.xs[i] != null) ? a.xs[i] : (paare > 1 ? 0.35 + 0.3 * i / (paare - 1) : 0.5));
+    const heck = mitte === 1 && a.ungerade === 'H';
+    const xm = heck ? 0.99 : (a.xm != null ? a.xm : 0.72);
+    // Größe einer Motorgondel nach der Leistung darin (P in kW): Länge 0,88 · P^(1/3) m, Durchmesser 0,3 · Länge.
+    // Abgleich: LZ 129 (883 kW je Gondel) ≈ 8,5 m nach Bauplan, LZ 120 (176 kW) ≈ 5 m nach Foto.
+    const Pm = Math.max(a.kW, 0.001), lg = P => 0.88 * Math.cbrt(P);
+    return { g: 2 * paare + (mitte ? 1 : 0), paare, mitte, heck, xp, xm,
+             lSeite: lg(Pm), lMitte: lg(Pm * Math.max(mitte, 1)) };
   }
   function dragCoeff(d, geo, tl, v, rho) {
     const Re = Math.max(v, 0.5) * geo.L / NU0 * (rho / 1.225);
@@ -436,6 +445,55 @@
     antrieb: { art: 'E', n: 2, kW: 10, lage: 'G', mg: 'V', eta: 0.7, kWh: 30, whkg: 180, kraftstoff: 0, sfc: 0.30, kgkW: null },
     v_reise: 40, ballast: 50, schlepptau: 0, anbauten: 0,
   };
+
+  /* TRIMM (Längsgleichgewicht im Stand)
+     Jede Masse bekommt eine Lage x (Anteil der Länge ab Bug) und eine Höhe z (m, Achse = 0, nach unten negativ).
+     Gleichgewicht: Schwerpunkt x_G liegt senkrecht unter der Auftriebsmitte x_B (Schwerpunkt des Gasvolumens).
+       Hülle, Gaszellen, Gerüst, Ballonets, Ventile, Elektrik: Flächenschwerpunkt der Hülle bzw. Auftriebsmitte
+       Leitwerk: Mitte der Flossenwurzel; Motoren: an ihren Gondeln (am Heck 0,99 L); an der Gondel: dort
+       Kraftstoff (Starr, Halbstarr): in Tanks neben dem Laufgang, über die Länge verteilt ⇒ Auftriebsmitte
+       Kraftstoff/Akku (Prall, offen): in der Gondel; Ballast: verteilt ⇒ Auftriebsmitte
+       Gondel, Personen, Nutzlast, Avionik, Seile, Aufhängung, Schlepptau: an der Gondel
+       Räume im Rumpf (Gondelart I): Steuergondel fest bei 0,15 L, die Räume (Personen, Nutzlast) werden verschoben
+     Die Gondel wird so gelegt, dass x_G = x_B (Vorschlag); geht das nicht innerhalb 0,10 L … 0,75 L, Meldung.
+     Trimmwinkel ohne Ruder: tan θ = Δx / BG, BG = Abstand Schwerpunkt unter der Achse (Auftrieb wirkt in der Achse). */
+  function trim(d, geo, tl, leer, zul, gon, N) {
+    const L = geo.L, R = geo.R, xB = geo.xB;
+    let su = 0, sr = 0; for (let i = 1; i < 100; i++) { const x = i / 100, r = Math.sqrt(Math.max(0, y2(geo.a, x))); su += r * x; sr += r; }
+    const xS = su / sr;                                                       // Flächenschwerpunkt der Hülle
+    const xF = Math.min(0.99, (tl.xLEr + 0.45 * tl.cr) / L);                  // Leitwerk
+    const keel = d.bauweise === 'S' || d.bauweise === 'H';
+    const zG = -(R + Math.max(gon.ga || 0, 0) + (gon.h || 0) / 2);           // Gondelmitte unter der Achse
+    const a = d.antrieb;
+    // Motoren: Masse je Motor gleich verteilt auf ihre Lagen
+    const mM = leer.antrieb / Math.max(1, a.n), mot = [];
+    if (a.lage === 'R') { N.xp.forEach(x => mot.push([2 * mM, x, -0.55 * R])); if (N.mitte) mot.push([N.mitte * mM, N.xm, N.heck ? 0 : -R * 1.08]); }
+    else if (a.lage === 'H') mot.push([leer.antrieb, 0.99, 0]);
+    // fest liegende Massen [m, x, z] und an der Gondel hängende Masse mG
+    const fix = [];
+    const add = (m, x, z) => { if (m > 0) fix.push([m, x, z]); };
+    ['huelle', 'zellen', 'laengstraeger', 'ringe', 'kiel', 'ballonet'].forEach(k => add(leer[k] || 0, xS, k === 'kiel' ? -0.85 * R : 0));
+    add(leer.nasenlatten || 0, 0.05, 0); add(leer.leitwerk || 0, xF, 0); add(leer.armaturen || 0, xB, -0.3 * R); add(leer.elektrik || 0, xB, -0.5 * R);
+    mot.forEach(([m, x, z]) => add(m, x, z));
+    add(zul.ballast, xB, -0.85 * R);
+    if (keel) add(zul.energie, xB, -0.85 * R);
+    // Räume im Rumpf (Gondelart I): die kleine Steuergondel sitzt fest vorn (0,15 L); verschoben werden die Räume
+    // mit Fahrgästen, Besatzung und Nutzlast (gx = Lage der Räume)
+    const raeume = d.gondel === 'I';
+    if (raeume) add(leer.gondel || 0, 0.15, zG);
+    let mG = (raeume ? 0 : (leer.gondel || 0)) + (leer.seile || 0) + (leer.aufhaengung || 0) + (leer.geblaese || 0) + (leer.avionik || 0) + zul.nutzlast + zul.schlepptau
+           + (keel ? 0 : zul.energie) + zul.personen + (a.lage === 'G' ? leer.antrieb : 0);
+    const mF = fix.reduce((t, q) => t + q[0], 0), Mx = fix.reduce((t, q) => t + q[0] * q[1], 0), M = mF + mG;
+    // Gondellage für Gleichgewicht und erlaubter Bereich (Gondel ganz unter der Hülle)
+    const lr = (gon.l || 0) / L, lo = Math.max(0.10, lr / 2 + 0.05), hi = Math.min(0.75, 0.85 - lr / 2);
+    const xReq = mG > 0.01 * M ? (xB * M - Mx) / mG : null;
+    const gx = d.gx != null ? d.gx : (xReq == null ? 0.42 : Math.min(hi, Math.max(lo, xReq)));
+    const xG = (Mx + mG * gx) / M;
+    const zGes = (fix.reduce((t, q) => t + q[0] * q[2], 0) + mG * (raeume ? -0.75 * R : zG)) / M, BG = Math.max(0.02 * R, -zGes);
+    const dx = (xG - xB) * L;                                                 // > 0: Schwerpunkt hinter der Auftriebsmitte (Bug hoch)
+    const theta = Math.atan2(dx, BG) * 180 / Math.PI;
+    return { xB, xS, xF, gx, xReq, lo, hi, xG, dx, BG, theta, mG, M, frei: xReq != null && xReq >= lo && xReq <= hi };
+  }
 
   function compute(dIn) {
     const d = merge(DEFAULTS, dIn);
@@ -527,6 +585,17 @@
     // Ballonet muss den Gasschwund beim Abstieg aus der Prallhöhe ausgleichen (Burgess Kap. II)
     if ((d.bauweise === 'P' || d.bauweise === 'H') && d.ballonet / 100 < 1 - fill - 0.005)
       warn.push(`Ballonet zu klein: Für die Prallhöhe ${Math.round(prallhoehe)} m braucht es mindestens ${Math.ceil((1 - fill) * 100)} % Ballonet, sonst verliert die Hülle beim Abstieg den Druck.`);
+    // --- Trimm ---
+    const N = nacelles(d.antrieb), tr = trim(d, geo, tl, leer, zuladung, gon, N);
+    const fm1 = x => (x * geo.L).toFixed(1).replace('.', ',') + ' m';
+    if (Math.abs(tr.theta) > 1) {
+      if (tr.xReq != null && (tr.xReq > tr.hi || tr.xReq < tr.lo))
+        warn.push(`Trimm: Die Gondel müsste bei ${fm1(tr.xReq)} ab Bug liegen – so weit nach ${tr.xReq > tr.hi ? 'hinten' : 'vorn'} geht nicht, sonst gibt es keinen Trimm. Schwerpunkt ${fm1(Math.abs(tr.dx) / geo.L)} ${tr.dx > 0 ? 'hinter' : 'vor'} der Auftriebsmitte ⇒ ${Math.abs(tr.theta).toFixed(0)}° Bug ${tr.dx > 0 ? 'hoch' : 'tief'}. Motoren ${tr.dx > 0 ? 'weiter nach vorn' : 'weiter nach hinten'} setzen oder Trimmballast vorsehen.`);
+      else if (d.gx != null && tr.xReq != null) {
+        warn.push(`Trimm: Gondel bei ${fm1(d.gx)}, für Gleichgewicht wären ${fm1(tr.xReq)} nötig ⇒ ${Math.abs(tr.theta).toFixed(0)}° Bug ${tr.dx > 0 ? 'hoch' : 'tief'}.`);
+        vorschlaege.push({ text: `Gondel für Trimm auf ${fm1(tr.xReq)} ab Bug setzen`, set: { gx: Math.round(tr.xReq * 1000) / 1000 } });
+      } else if (tr.xReq == null) warn.push(`Trimm: Schwerpunkt ${fm1(Math.abs(tr.dx) / geo.L)} ${tr.dx > 0 ? 'hinter' : 'vor'} der Auftriebsmitte ⇒ ${Math.abs(tr.theta).toFixed(0)}° Bug ${tr.dx > 0 ? 'hoch' : 'tief'}.`);
+    }
     if (!tl.elevator) warn.push('Nur ' + d.ltw.n + ' Finne(n): kein Höhenruder. Höhe nur über Schub, Ballast und Gas.');
     if (frei < 0) warn.push(`Zu schwer: Es fehlen ${fmtMass(-frei)} Auftrieb.`);
     if (d.bauweise === 'S' && d.V < 28300) warn.push('Burgess: Starrluftschiffe unter rund 28.000 m³ sind nicht effizient. Prall oder halbstarr prüfen.');
@@ -536,7 +605,7 @@
       leer, mLeer, zuladung, mGesamt, frei,
       vmax, vmax_kmh: vmax * 3.6, v_reise_kmh: vr * 3.6, Preise, dauer_h, reichweite_km, gipfel,
       drag: dragCoeff(d, geo, tl, vmax, 1.225), gondel: gondola(d, geo, d._hang, vmax), K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
-      P_burgess, v_beulen, latten, huelleAuslastung, propulsion: pr, warn, vorschlaege, ltw_gm2_calc,
+      P_burgess, v_beulen, latten, huelleAuslastung, propulsion: pr, warn, vorschlaege, ltw_gm2_calc, trim: tr, nac: N,
     };
   }
 
@@ -657,6 +726,15 @@
     }
     if (r.huelleAuslastung != null) Z2.push(['Hülle (Prall)', 'Überdruck max(1,2 · ½ρv²; 150 Pa); Umfangsspannung T = Δp · R; Festigkeit 60 N/m je g/m², Sicherheit 4', n(r.huelleAuslastung * 100) + ' % ausgelastet']);
     S.push({ titel: '7 Höhe und Druck', zeilen: Z2 });
+    // Trimm: Lage von Schwerpunkt und Auftriebsmitte
+    const tr = r.trim, Lg = g.L, xm = x => nn(x * Lg) + ' m';
+    S.push({ titel: '8 Trimm (Längsgleichgewicht)', zeilen: [
+      ['Auftriebsmitte', 'Schwerpunkt des Gasvolumens x_B = ∫x·y² dx / ∫y² dx (Gertler-Kontur)', xm(tr.xB) + ' ab Bug', 'Burgess 1927, Kap. III'],
+      ['Lage der Massen', 'Hülle/Gerüst im Flächenschwerpunkt ' + xm(tr.xS) + ', Leitwerk ' + xm(tr.xF) + ', Motoren an ihren Gondeln, Kraftstoff ' + (d.bauweise === 'S' || d.bauweise === 'H' ? 'neben dem Laufgang verteilt (x_B)' : 'in der Gondel') + ', Ballast verteilt (x_B)', '', 'Annahme'],
+      [d.gondel === 'I' ? 'Lage der Räume' : 'Lage der Gondel', 'aus Σ m·x = x_B · Σ m: an der Gondel hängen ' + m(tr.mG) + ' von ' + m(tr.M) + (tr.xReq != null ? ' ⇒ nötig ' + xm(tr.xReq) + ' (möglich ' + xm(tr.lo) + ' … ' + xm(tr.hi) + ')' : ''), xm(tr.gx), 'Statik'],
+      ['Schwerpunkt', 'x_G = Σ m·x / Σ m', xm(tr.xG) + ' ab Bug', 'Statik'],
+      ['Trimmwinkel ohne Ruder', 'tan θ = (x_G − x_B) / BG = ' + nn(tr.dx) + ' m / ' + nn(tr.BG) + ' m (BG: Schwerpunkt unter der Achse)', n(Math.abs(tr.theta), 1) + '° Bug ' + (tr.dx > 0 ? 'hoch' : 'tief'), 'Statik'],
+    ] });
     // Quellen je Zeile (vierte Spalte) und Literaturliste
     const Q = {
       'Kontur': 'Gertler 1950', 'Durchmesser': 'Gertler 1950', 'Oberfläche': 'Burgess 1927, S. 54', 'Auftriebsschwerpunkt': 'Burgess 1927, Kap. III',
@@ -701,10 +779,10 @@
     if (d.bauweise !== 'O') p.push('HP:' + num(d.prallhoehe));          // Prallhöhe für Starr, Prall und Halbstarr
     if (d.bauweise === 'P' || d.bauweise === 'H') p.push('BO:' + num(d.ballonet));
     p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : '', d.ltw.gm2 ? num(d.ltw.gm2) : ''].join(',').replace(/,+$/, ''));
-    p.push('K:' + d.gondel + (d.gform ? ',' + d.gform : '') + (d.gabstand != null ? ',' + num(d.gabstand) : '') + (d.gseile ? ',' + d.gseile : ''), 'C:' + d.crew, 'P:' + d.pax);
+    p.push(('K:' + [d.gondel, d.gform || '', d.gabstand != null ? num(d.gabstand) : '', d.gseile || '', d.gx != null ? num(d.gx) : ''].join(',')).replace(/,+$/, ''), 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
     // Antrieb: Art, Zahl, kW je Motor, Lage, η, Energie (kWh, Wh/kg bzw. kg Kraftstoff, sfc), Motorgondeln, kg/kW
-    p.push(('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (nacelles(a).g !== a.n ? nacelles(a).g : '') + ',' + (a.kgkW ? num(a.kgkW) : '') + ',' + (a.mg === 'O' ? 'O' : '') + ',' + (a.ungerade === 'H' ? 'H' : '')).replace(/,+$/, ''));
+    p.push(('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (nacelles(a).g !== a.n ? nacelles(a).g : '') + ',' + (a.kgkW ? num(a.kgkW) : '') + ',' + (a.mg === 'O' ? 'O' : '') + ',' + (a.ungerade === 'H' ? 'H' : '') + ',' + (a.xs ? a.xs.map(num).join(';') : '') + ',' + (a.xm != null ? num(a.xm) : '')).replace(/,+$/, ''));
     if (d.latten && d.latten.len) p.push('LA:' + d.latten.n + ',' + num(d.latten.len));
     p.push('S:' + num(d.v_reise), 'BL:' + num(d.ballast));
     if (d.nutzlast) p.push('NL:' + num(d.nutzlast));
@@ -736,14 +814,14 @@
         case 'HP': d.prallhoehe = +v; break;
         case 'BO': d.ballonet = +v; break;
         case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; if (n[7]) d.ltw.gm2 = +n[7]; break;
-        case 'K': d.gondel = n[0]; if (n[1]) d.gform = n[1]; if (n[2] !== undefined && n[2] !== '') d.gabstand = +n[2]; if (n[3]) d.gseile = +n[3]; break;
+        case 'K': d.gondel = n[0]; if (n[1]) d.gform = n[1]; if (n[2] !== undefined && n[2] !== '') d.gabstand = +n[2]; if (n[3]) d.gseile = +n[3]; if (n[4]) d.gx = +n[4]; break;
         case 'C': d.crew = +v; break;
         case 'P': d.pax = +v; break;
         case 'A': {
           const art = n[0];
           d.antrieb = Object.assign({}, DEFAULTS.antrieb, { art, n: +n[1], kW: +n[2], lage: n[3], eta: +n[4] });
           if (n[7]) d.antrieb.gondeln = +n[7];
-          d.antrieb.kgkW = n[8] ? +n[8] : null; d.antrieb.mg = n[9] === 'O' ? 'O' : 'V'; if (n[10] === 'H') d.antrieb.ungerade = 'H';
+          d.antrieb.kgkW = n[8] ? +n[8] : null; d.antrieb.mg = n[9] === 'O' ? 'O' : 'V'; if (n[10] === 'H') d.antrieb.ungerade = 'H'; if (n[11]) d.antrieb.xs = n[11].split(';').map(Number); if (n[12]) d.antrieb.xm = +n[12];
           if (art === 'E' || art === 'S') { d.antrieb.kWh = +n[5]; d.antrieb.whkg = +n[6]; }
           else { d.antrieb.kraftstoff = +n[5]; d.antrieb.sfc = +n[6]; d.antrieb.kWh = 0; }
           break;
@@ -784,7 +862,7 @@
   }
 
   const LSCore = {
-    VERSION: '0.10', G0, LB, FT, HP,
+    VERSION: '0.11', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nacelles, nose, noseNeed,
     dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };

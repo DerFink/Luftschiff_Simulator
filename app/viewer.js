@@ -1,4 +1,5 @@
-// 2026-10-14 00:30 · viewer.js 0.7 (ENTWURF): Gondel als Körper nach Seitenriss (Stromlinie/Tropfen/Kasten, Fenster, Abstand mit Seilen), Schnittansicht (Gerüst, Gaszellen, Ballonets, Kiel)
+// 2026-10-14 01:30 · viewer.js 0.8: Motorgondeln in Größe nach Leistung und an gewählter Längslage, Gondel an der Trimmlage, Gondelbug steil
+// 2026-10-14 00:30 · viewer.js 0.7: Gondel als Körper nach Seitenriss (Stromlinie/Tropfen/Kasten, Fenster, Abstand mit Seilen), Schnittansicht (Gerüst, Gaszellen, Ballonets, Kiel)
 // 2026-10-13 23:20 · viewer.js 0.6: Motorpaar der Mittelgondel hintereinander mit einem Propeller (LZ 120), einzelner Motor am Heck (Zeppelin NT), 1 Flosse unten, Selbstdrehung schaltbar
 // 2026-10-13 22:15 · viewer.js 0.5: Motorgondeln am Rumpf als Körper mit Strebe; Paare seitlich auf gleicher x-Lage, Mittelgondel mittig unter der Hülle (1 Motor oder Motorpaar)
 // 2026-10-13 21:05 · viewer.js 0.4: Motorenpaare auf gleicher Lage in Längsrichtung, ungerade Motorgondel hinten mittig
@@ -67,7 +68,7 @@ export function createViewer(host) {
                  : form === 'S' ? Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 0.9) / 1.1, 2.6)), 0.5)   // Stromlinie
                  : Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 1), 8)), 0.25);             // Kasten
     const H = t => form === 'E' ? Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 1), 10)), 0.2)
-                 : ss(0, 0.16, t) * (1 - 0.8 * ss(0.62, 1, t)) * 0.97 + 0.03;
+                 : ss(0, 0.035, t) * (1 - 0.8 * ss(0.62, 1, t)) * 0.97 + 0.03;   // Bug fällt steil von der Hülle ab
     const ex = form === 'E' ? 6 : 3.2;  // Superellipse: je größer, desto eckiger
     for (let i = 0; i <= NS; i++) {
       const t = i / NS, hw = Math.max(1e-3, w / 2 * W(t)), hh = Math.max(1e-3, h * H(t));
@@ -226,7 +227,7 @@ export function createViewer(host) {
     // Gondel
     const pers = (d.crew || 0) + (d.pax || 0);
     const yb = -R;                     // Unterkante Rumpf (Mitte)
-    const xg = X(0.42);
+    const xg = X(r.trim ? r.trim.gx : 0.42);   // Korb/Kapsel an der Lage aus dem Trimm
     if (d.gondel === 'K') {            // länglicher Korb an Seilen
       const len = Math.max(1.4, 1.3 * Math.max(2, pers)) * s, w = 1.3 * s, h = 1.1 * s, drop = Math.max(0.25, 2.5 * s);
       const korb = new THREE.Mesh(new THREE.BoxGeometry(len, h, w), new THREE.MeshStandardMaterial({ color: COL.korb, roughness: 0.9 }));
@@ -240,8 +241,8 @@ export function createViewer(host) {
     } else if (d.gondel === 'F' || d.gondel === 'I') {   // Gondel fest am Rumpf bzw. kleine Führergondel
       // Maße aus dem Rechenkern (r.gondel: Länge, Breite, Höhe, Abstand zur Hülle in m)
       const G = r.gondel, len = G.l * s, w = G.b * s, h = G.h * s, ga = (G.ga || 0) * s;
-      const xc = X(d.gondel === 'I' ? 0.18 : 0.33);
-      const top = rad(0.33 + 0) > 0 ? -rad((xc / Ls) + 0.5) + 0.02 * R : yb;     // Oberkante an der Hülle
+      const xf = d.gondel === 'I' ? 0.15 : r.trim.gx, xc = X(xf);                 // Lage aus dem Trimm (Gondelmitte)
+      const top = -rad(xf) + 0.02 * R;                                            // Oberkante an der Hülle
       const gm = gondelKoerper(len, w, h, d.gondel === 'I' ? 'S' : (d.gform || 'E'));
       gm.position.set(xc - len / 2, top - ga, 0); g.add(gm);
       if (ga > 0) {                     // Gondel hängt an Seilen unter der Hülle (Blimp)
@@ -275,22 +276,24 @@ export function createViewer(host) {
     const spots = [];                 // [x, y, z, Richtung] je Motor mit Propeller
     const pods = [];                  // [x, y, z, Länge, Radius, Strebe bis y] je Motorgondel am Rumpf
     if (a.lage === 'R') {
-      const N = (globalThis.LSCore && LSCore.nacelles) ? LSCore.nacelles(a) : { paare: Math.floor(nM / 2), mitte: nM % 2 };
-      const podL = propD * 1.5, podR = propD * 0.22;
+      // Lagen (Anteil der Länge ab Bug) und Größe der Motorgondeln aus dem Rechenkern (LSCore.nacelles):
+      // Länge 0,88 · P^(1/3) m nach der Leistung in der Gondel, Durchmesser 0,3 · Länge
+      const N = LSCore.nacelles(a);
+      const pod = lm => ({ L: lm * s, r: 0.15 * lm * s });
       for (let i = 0; i < N.paare; i++) {
-        const x = N.paare > 1 ? 0.35 + 0.3 * i / (N.paare - 1) : 0.5, rr = rad(x);
+        const x = N.xp[i], rr = rad(x), P = pod(N.lSeite);
         for (const side of [-1, 1]) {
-          const y = -rr * 0.55, z = side * (rr * 0.95 + propD * 0.6);
-          pods.push([X(x), y, z, podL, podR, -rr * 0.35]);
-          spots.push([X(x) + podL * 0.6, y, z, 1]);           // Druckpropeller am Gondelende (Heckseite)
+          const y = -rr * 0.6, z = side * (rr * 0.92 + Math.max(P.r * 1.6, propD * 0.55));
+          pods.push([X(x), y, z, P.L * 0.7, P.r, -rr * 0.4]);
+          spots.push([X(x) + P.L / 2 + propD * 0.05, y, z, 1, true]);     // Druckpropeller am Gondelende
         }
       }
       if (N.heck) spots.push([X(0.995) + propD * 0.3, 0, 0]);   // einzelner Motor am Heck (Zugrichtung wie bei „Am Heck“)
       else if (N.mitte) {
-        const x = 0.72, rr = rad(x), y = -rr - propD * 0.75;
-        pods.push([X(x), y, 0, podL * (N.mitte === 2 ? 1.5 : 1), podR * (N.mitte === 2 ? 1.4 : 1), -rr * 0.97]);
-        // ein Motor oder ein Motorpaar hintereinander: in beiden Fällen ein Druckpropeller am Gondelende
-        spots.push([X(x) + podL * (N.mitte === 2 ? 0.85 : 0.6), y, 0, 1]);
+        // Mittelgondel mittig in der Querachse; ein Motor oder ein Motorpaar hintereinander auf einen Druckpropeller
+        const x = N.xm, rr = rad(x), P = pod(N.lMitte), y = -rr - Math.max(P.r * 2.2, propD * 0.55);
+        pods.push([X(x), y, 0, P.L * 0.7, P.r, -rr * 0.97]);
+        spots.push([X(x) + P.L / 2 + propD * 0.05, y, 0, 1, true]);
       }
     } else if (a.lage === 'H') {
       for (let k = 0; k < nM; k++) spots.push([X(0.995) + propD * 0.3, 0, nM > 1 ? (k - (nM - 1) / 2) * propD * 1.2 : 0]);
@@ -306,9 +309,9 @@ export function createViewer(host) {
       strut.position.set(px, (py + yTop) / 2, pz * 0.85); g.add(strut);
     }
     // Motoren mit Propellerkreis; dir −1 = Zugpropeller (Richtung Bug), +1 = Druckpropeller (Richtung Heck)
-    for (const [px, py, pz, dir = -1] of spots) {
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(propD * 0.12, propD * 0.12, propD * 0.6, 12), motMat);
-      body.rotation.z = Math.PI / 2; body.position.set(px, py, pz); g.add(body);
+    for (const [px, py, pz, dir = -1, imPod = false] of spots) {
+      if (!imPod) { const body = new THREE.Mesh(new THREE.CylinderGeometry(propD * 0.12, propD * 0.12, propD * 0.6, 12), motMat);
+      body.rotation.z = Math.PI / 2; body.position.set(px, py, pz); g.add(body); }   // Motor nur ohne Motorgondel sichtbar
       const prop = new THREE.Mesh(new THREE.CircleGeometry(propD / 2, 24), propMat);
       prop.rotation.y = Math.PI / 2; prop.position.set(px + dir * propD * 0.32, py, pz); g.add(prop);
     }

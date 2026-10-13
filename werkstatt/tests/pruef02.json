@@ -268,5 +268,25 @@
   "abw": 0,
   "quelle": "soll gleich",
   "rolle": "Prüfung"
+ },
+ {
+  "schiff": "LZ 120",
+  "groesse": "Gondelmitte aus Trimm (Anteil der Länge ab Bug)",
+  "soll": 0.27,
+  "ist": 0.2690305387173584,
+  "einheit": "L",
+  "abw": -0.003590597343117174,
+  "quelle": "Foto 1919 (Nutzer): Gondel 0,18–0,36 L",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "LZ 120",
+  "groesse": "Speicher-Code: Gondellage und Motorlagen erhalten (1 = ja)",
+  "soll": null,
+  "ist": 1,
+  "einheit": "",
+  "abw": null,
+  "quelle": "soll 1",
+  "rolle": "Prüfung"
  }
 ]

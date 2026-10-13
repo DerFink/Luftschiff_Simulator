@@ -1,3 +1,4 @@
+// 2026-10-14 01:30 · models.js 0.8: Längslage der Motorgondeln LZ 120 (Foto), LZ 129 (Bauplan), Zeppelin NT
 // 2026-10-13 23:20 · models.js 0.7: Zeppelin NT dritter Motor am Heck
 // 2026-10-13 21:20 · models.js 0.6: LZ 120 nach Windkanalmodell 1:47,62 (Rumpf, Leitwerk, Gondel); Beladung LZ 120 für Fahrt FN–Berlin (Prallhöhe 500 m, Ballast 1 t, Kraftstoff 2 t)
 /* =================================================================================================
@@ -50,7 +51,7 @@
         ltw: { n: 4, anord: '+', faktor: 1, A_ebene: 122.0, ar: 1.4, lam: 0.15, sweep: 66 },
         // Fahrgastgondel aus dem Windkanalmodell: 20,7 m lang, 2,86 m breit, ≈ 2,6 m unter der Hülle, im Grundriss Tropfenform (Jaray)
         gondel: 'F', gform: 'T', gl: 20.7, gb: 2.86, gh: 2.6, crew: 12, pax: 20, m_person: 80,
-        antrieb: { art: 'V', n: 4, kW: 176, gondeln: 3, lage: 'R', mg: 'V', eta: 0.72, kraftstoff: 2000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; Kraftstoff 2 t reicht für FN–Berlin (≈ 600 km) mit Reserve [A]; [N] 3 Motorgondeln (2 seitlich als Paar, hinten 2 Motoren); Rest [A]
+        antrieb: { art: 'V', n: 4, kW: 176, gondeln: 3, lage: 'R', mg: 'V', xs: [0.53], xm: 0.70, eta: 0.72, kraftstoff: 2000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; Lage der Motorgondeln nach Foto 1919: Paar bei 0,53 L, Mittelgondel 0,70 L; Kraftstoff 2 t reicht für FN–Berlin (≈ 600 km) mit Reserve [A]; [N] 3 Motorgondeln (2 seitlich als Paar, hinten 2 Motoren); Rest [A]
         v_reise: 110, ballast: 1000,                                                         // [A]
       },
     },
@@ -64,7 +65,7 @@
         huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 1000,                   // [A] Bauweise wie L-49 (Stand 1917)
         ltw: { n: 4, anord: '+', faktor: 1 },
         gondel: 'I', crew: 55, pax: 50, m_person: 80,                                        // [W] Fahrgasträume im Rumpf
-        antrieb: { art: 'V', n: 4, kW: 883, lage: 'R', mg: 'O', eta: 0.75, kraftstoff: 60000, sfc: 0.23, kgkW: 4.0 }, // [W] Leistung; Diesel [A]
+        antrieb: { art: 'V', n: 4, kW: 883, lage: 'R', mg: 'O', xs: [0.48, 0.60], eta: 0.75, kraftstoff: 60000, sfc: 0.23, kgkW: 4.0 }, // [W] Leistung; Diesel [A]; Lage der Motorgondeln nach Bauplan (Nutzer)
         v_reise: 125, ballast: 10000,                                                        // [W] Reise; Ballast [A]
       },
     },
@@ -94,7 +95,7 @@
         huelle_gm2: 350, ballonet: 25, prallhoehe: 2600,                                      // [A] Laminat
         ltw: { n: 3, anord: 'L', faktor: 1 },                                                 // NT: umgekehrtes Y (eine Flosse oben, zwei unten)
         gondel: 'F', gform: 'S', crew: 2, pax: 12, m_person: 80,                             // [W] 15 Sitze; [A] Auslastung
-        antrieb: { art: 'V', n: 3, kW: 147, lage: 'R', ungerade: 'H', eta: 0.70, kraftstoff: 400, sfc: 0.30, kgkW: 2.5 }, // [W] Leistung; [N] zwei Motoren seitlich, der dritte ganz am Heck; Rest [A]
+        antrieb: { art: 'V', n: 3, kW: 147, lage: 'R', ungerade: 'H', xs: [0.38], eta: 0.70, kraftstoff: 400, sfc: 0.30, kgkW: 2.5 }, // [W] Leistung; [N] zwei Motoren seitlich, der dritte ganz am Heck; Rest [A]
         v_reise: 70, ballast: 100,                                                           // [W] Reise
       },
     },

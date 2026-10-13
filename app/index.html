@@ -1,4 +1,5 @@
-<!-- 2026-10-14 00:30 · ENTWURF: eckigere Knöpfe, Schalter Schnittansicht
+<!-- 2026-10-14 01:30 · Build 2026-10-14.1: eckigere Knöpfe, Gondel nach Seitenriss, Schnittansicht, Lage der Gondel und der Motorgondeln in m ab Bug, Trimm
+     2026-10-14 00:30 · ENTWURF: eckigere Knöpfe, Schalter Schnittansicht
      2026-10-13 23:20 · Build 2026-10-13.9: Überschrift der Schieberegler in derselben Zeile wie der Wert, Selbstdrehung ein/aus, Flächengewicht Leitwerk, 1 Flosse unten, ungerader Motor am Heck
      2026-10-13 22:15 · Build 2026-10-13.8: Schrittleiste mit Pfeilen, Mausrad und Ziehen seitlich scrollbar; Einheiten (kg/Anzahl) an allen Zahlen; Mittelgondel für Motorpaar
      2026-10-13 21:05 · Build 2026-10-13.7: LZ 120 nach Windkanalmodell, Motorenpaare auf gleicher Lage, Pfeilung bis 75°
@@ -141,7 +142,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-13.9';
+const BUILD = '2026-10-14.1';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -164,7 +165,9 @@ const fv = V => V < 10 ? de(V, 2) + ' m³' : de(V) + ' m³';
 const fh = h => h >= 100 ? de(h) + ' h' : de(h, 1) + ' h';
 const fkm = k => k < 10 ? de(k, 1) + ' km' : de(k) + ' km';
 function toast(t) { const e = $('#toast'); e.textContent = t; e.classList.add('on'); setTimeout(() => e.classList.remove('on'), 1800); }
-function setByPath(o, p, v) { const k = p.split('.'); let x = o; for (let i = 0; i < k.length - 1; i++) x = x[k[i]]; x[k[k.length - 1]] = v; }
+// Längslagen der Motorpaare: Liste aus den aktuellen Lagen anlegen, bevor ein einzelner Wert gesetzt wird
+function ensurePath(d, p) { if (p.startsWith('antrieb.xs.') && !Array.isArray(d.antrieb.xs)) d.antrieb.xs = S.r.nac.xp.slice(); }
+function setByPath(o, p, v) { if (o === S.d) ensurePath(o, p); const k = p.split('.'); let x = o; for (let i = 0; i < k.length - 1; i++) x = x[k[i]]; x[k[k.length - 1]] = v; }
 function getByPath(o, p) { return p.split('.').reduce((x, k) => x == null ? x : x[k], o); }
 function recompute(keepPrev) { if (!keepPrev) S.prev = S.r; S.r = C.compute(S.d); }
 
@@ -265,7 +268,9 @@ const STEPS = [
     ], text: (d, r) => `Hülle ${fm(r.leer.huelle)}` + (r.leer.zellen ? `, Gaszellen ${fm(r.leer.zellen)}` : '') + (r.leer.laengstraeger ? `, Gerüst ${fm(r.leer.laengstraeger + r.leer.ringe)}` : '') + '.' },
   { id: 'gondel', titel: 'Gondel', frage: 'Welche Gondel?', fields: [
       { typ: 'seg', key: 'gondel', label: '', opts: [['K', 'Korb'], ['F', 'Fest am Rumpf'], ['I', 'Im Rumpf'], ['R', 'RC-Kapsel'], ['N', 'Keine']] },
-    ], text: (d, r) => `Masse der Gondel: ${fm(r.leer.gondel)}. ` + ({ K: 'Offener Korb an Seilen, wie beim Gasballon; großer Luftwiderstand.', F: 'Geschlossene Gondel direkt unter dem Rumpf.', T: 'Tropfenform wie im Windkanal entwickelt (Jaray): kleinster Widerstand.', I: `Fahrgast- und Mannschaftsräume im Rumpf (sie nehmen ${de(r.Vraum)} m³ Gasraum weg), außen nur eine 4-Mann-Steuergondel in Stromlinienform.`, R: 'Kleine Kapsel für Empfänger und Regler (RC-Blimp).', N: 'Keine Gondel, z. B. für autonome Schiffe.' })[d.gondel] },
+      // Lage der Gondelmitte (bei „Im Rumpf“: Lage der Räume); Vorschlag = Lage für Trimm (Schwerpunkt unter der Auftriebsmitte)
+      { typ: 'num', key: 'gx', label: d => d.gondel === 'I' ? 'Lage der Räume im Rumpf (Mitte)' : 'Lage der Gondel (Mitte)', lfrac: true, min: 0.05, max: 0.9, step: 0.001, k: 3, when: d => d.gondel !== 'N', def: () => S.r.trim.gx, vorschlag: (d, r) => r.trim.xReq },
+    ], text: (d, r) => trimText(r) + `Masse der Gondel: ${fm(r.leer.gondel)}. ` + ({ K: 'Offener Korb an Seilen, wie beim Gasballon; großer Luftwiderstand.', F: 'Geschlossene Gondel direkt unter dem Rumpf.', T: 'Tropfenform wie im Windkanal entwickelt (Jaray): kleinster Widerstand.', I: `Fahrgast- und Mannschaftsräume im Rumpf (sie nehmen ${de(r.Vraum)} m³ Gasraum weg), außen nur eine 4-Mann-Steuergondel in Stromlinienform.`, R: 'Kleine Kapsel für Empfänger und Regler (RC-Blimp).', N: 'Keine Gondel, z. B. für autonome Schiffe.' })[d.gondel] },
   { id: 'pax', titel: 'Personen', frage: 'Wer und was fährt mit?', fields: [
       { typ: 'num', key: 'crew', label: 'Besatzung (0 = autonom)', unit: 'Anzahl', min: 0, max: 80, step: 1, k: 0 },
       { typ: 'num', key: 'pax', label: 'Fahrgäste', unit: 'Anzahl', min: 0, max: 80, step: 1, k: 0 },
@@ -281,6 +286,9 @@ const STEPS = [
       { typ: 'seg', key: 'antrieb.mg', label: 'Bauart der Motorgondeln', opts: [['O', 'Offen, mit Kühler (bis 1930er)'], ['V', 'Verkleidet (modern)']] },
       // Motorgondeln am Rumpf: immer paarweise; ungerade Zahl ⇒ ein Motor mittig unter der Hülle; bei gerader Zahl wahlweise ein Paar gemeinsam in der Mittelgondel
       { typ: 'seg', key: 'antrieb.ungerade', label: 'Einzelner Motor (ungerade Zahl)', when: d => d.antrieb.lage === 'R' && d.antrieb.n % 2 === 1, opts: [['U', 'Mittig unter der Hülle'], ['H', 'Ganz am Heck']] },
+      // Längslage der Motorgondeln (Paare links/rechts auf gleicher Lage, Mittelgondel mittig in der Querachse)
+      ...[0, 1, 2, 3].map(i => ({ typ: 'num', key: 'antrieb.xs.' + i, label: 'Lage Motorpaar ' + (i + 1), lfrac: true, min: 0.1, max: 0.9, step: 0.001, k: 3, when: d => d.antrieb.lage === 'R' && C.nacelles(d.antrieb).paare > i, def: () => S.r.nac.xp[i] })),
+      { typ: 'num', key: 'antrieb.xm', label: 'Lage Mittelgondel', lfrac: true, min: 0.1, max: 0.95, step: 0.001, k: 3, when: d => d.antrieb.lage === 'R' && C.nacelles(d.antrieb).mitte > 0 && !C.nacelles(d.antrieb).heck, def: () => S.r.nac.xm },
       { typ: 'seg', key: '_mpaar', label: 'Motorgondeln am Rumpf', when: d => d.antrieb.lage === 'R' && d.antrieb.n >= 2 && d.antrieb.n % 2 === 0, opts: [['0', 'Je Motor eine Gondel'], ['1', 'Ein Paar in Mittelgondel (hintereinander, 1 Propeller)']] },
       { typ: 'num', key: 'antrieb.kWh', label: 'Akku', unit: 'kWh', min: 0.001, max: 5000, log: true, k: 3, when: d => d.antrieb.art !== 'V', vorschlag: (d, r) => r.Preise * 8 / 3.6e6 / 0.85 * 3.6 },
       { typ: 'num', key: 'antrieb.whkg', label: 'Energiedichte Akku', unit: 'Wh/kg', min: 80, max: 400, step: 5, k: 0, when: d => d.antrieb.art !== 'V', vorschlag: () => 180 },
@@ -355,10 +363,12 @@ function renderBody() {
       h += `<div class="${f.typ === 'seg' ? 'seg' : 'chips'}">` + opts.map(([v, t, dis]) => `<button data-f="${i}" data-v="${v}"${(f.typ === 'seg' && String(cur) === String(v)) ? ' class="on"' : ''}${dis ? ' disabled title="folgt"' : ''}>${t}</button>`).join('') + '</div>';
     } else if (f.typ === 'num') {
       const v = getByPath(d, f.key) ?? (f.def ? f.def() : 0), sv = f.vorschlag ? f.vorschlag(d, r) : null;
-      const show = f.pct ? de(v * 100, f.k) : fmtNum(v, f);
-      h += `<div class="num"><div class="hd"><span class="lab">${f.label || ''}</span><span><input type="text" inputmode="decimal" data-f="${i}" value="${show}"><span class="u">${f.pct ? '%' : (f.unit || '')}</span></span></div>
+      // Anzeige: Prozent (pct), Meter ab Bug für Längslagen (lfrac, gespeichert als Anteil der Länge) oder Wert mit Einheit
+      const Lm = r.geo.L, sh = x => f.pct ? de(x * 100, f.k) + ' %' : f.lfrac ? de(x * Lm, 1) + ' m' : fmtNum(x, f);
+      const show = f.pct ? de(v * 100, f.k) : f.lfrac ? de(v * Lm, 1) : fmtNum(v, f);
+      h += `<div class="num"><div class="hd"><span class="lab">${(typeof f.label === 'function' ? f.label(d) : f.label) || ''}</span><span><input type="text" inputmode="decimal" data-f="${i}" value="${show}"><span class="u">${f.pct ? '%' : f.lfrac ? 'm ab Bug' : (f.unit || '')}</span></span></div>
         <div class="rg"><input type="range" min="0" max="1000" step="1" data-f="${i}" value="${toSlider(v, f)}">${sv != null && isFinite(sv) ? `<div class="mark" style="left:${toSlider(sv, f) / 10}%" title="Vorschlag"></div>` : ''}</div>
-        <div class="sl"><span>${f.pct ? de(f.min * 100) + ' %' : fmtNum(f.min, f)}</span><span>${sv != null && isFinite(sv) ? '▲ Vorschlag ' + (f.pct ? de(sv * 100, f.k) + ' %' : fmtNum(sv, f) + ' ' + (f.unit || '')) : ''}</span><span>${f.pct ? de(f.max * 100) + ' %' : fmtNum(f.max, f)}</span></div></div>`;
+        <div class="sl"><span>${sh(f.min)}</span><span>${sv != null && isFinite(sv) ? '▲ Vorschlag ' + sh(sv) + (f.pct || f.lfrac ? '' : ' ' + (f.unit || '')) : ''}</span><span>${sh(f.max)}</span></div></div>`;
     }
   });
   if (st.text) h += `<div class="${st.id === 'antrieb' || st.id === 'ltw' ? 'sug' : 'info'}">${st.text(d, r)}</div>`;
@@ -386,6 +396,7 @@ function renderBody() {
     const f = st.fields[+inp.dataset.f]; let v = parseFloat(inp.value.replace(/\./g, '').replace(',', '.'));
     if (!isFinite(v)) return renderBody();
     if (f.pct) v /= 100;
+    if (f.lfrac) v /= S.r.geo.L;          // Eingabe in m ab Bug ⇒ Anteil der Länge
     if (f.key === 'ltw.faktor') delete d.ltw.A_ebene;
     setByPath(d, f.key, Math.max(f.min, Math.min(f.max, v))); change();
   });
@@ -419,6 +430,13 @@ function applySuggestions() {
   for (const f of st.fields) if (f.typ === 'num' && f.vorschlag && (!f.when || f.when(S.d))) { const v = f.vorschlag(S.d, S.r); if (isFinite(v)) { setByPath(S.d, f.key, roundTo(v, f)); n++; } }
   if (st.id === 'form' && formKey(S.d.form) === 'eigen') { Object.assign(S.d.form, clone(C.FORMS[S.d.bauweise === 'S' ? 'zeppelin' : 'blimp'])); n++; }
   change(); toast(n ? 'Vorschlag übernommen' : 'Kein Vorschlag in diesem Schritt');
+}
+
+// Trimm in einem Satz: Lage von Schwerpunkt und Auftriebsmitte, Winkel ohne Ruder
+function trimText(r) {
+  const t = r.trim, L = r.geo.L, m = x => de(x * L, 1) + ' m';
+  const lage = Math.abs(t.theta) < 0.5 ? 'ausgetrimmt' : `${de(Math.abs(t.theta), 1)}° Bug ${t.dx > 0 ? 'hoch' : 'tief'}`;
+  return `<b>Trimm:</b> Auftriebsmitte bei ${m(t.xB)}, Schwerpunkt bei ${m(t.xG)} ab Bug ⇒ ${lage}.` + (t.xReq != null ? ` Für Gleichgewicht gehört die ${r.d.gondel === 'I' ? 'Raummitte' : 'Gondelmitte'} auf ${m(t.xReq)} (möglich ${m(t.lo)} bis ${m(t.hi)}).` : '') + '<br>';
 }
 
 /* ---------------- 4. Eckdaten-Leiste ---------------- */
@@ -481,6 +499,8 @@ function showErgebnis() {
         <div class="tr"><span>Antrieb</span><b>${d.antrieb.n} Motoren × ${fp(d.antrieb.kW * 1000)} ${{ E: 'elektrisch', V: 'Verbrenner', S: 'Solar + Akku', H: 'Hybrid' }[d.antrieb.art]}</b></div>
         <div class="tr"><span>v max · Reise · Leistung Reise</span><b>${de(r.vmax_kmh)} · ${de(r.v_reise_kmh)} km/h · ${fp(r.Preise)}</b></div>
         <div class="tr"><span>Fahrdauer · Reichweite (Windstille)</span><b>${fh(r.dauer_h)} · ${fkm(r.reichweite_km)}</b></div>
+        <div class="tr"><span>Trimm: Schwerpunkt · Auftriebsmitte</span><b>${de(r.trim.xG * r.geo.L, 1)} · ${de(r.trim.xB * r.geo.L, 1)} m ab Bug · ${Math.abs(r.trim.theta) < 0.5 ? 'ausgetrimmt' : de(Math.abs(r.trim.theta), 1) + '° Bug ' + (r.trim.dx > 0 ? 'hoch' : 'tief')}</b></div>
+        <div class="tr"><span>Lage ${d.gondel === 'I' ? 'Räume' : 'Gondel'} (Mitte)</span><b>${de(r.trim.gx * r.geo.L, 1)} m ab Bug</b></div>
         <div class="tr"><span>Statische Gipfelhöhe</span><b>${de(Math.min(r.gipfel, 9999))} m</b></div>
         <div class="tr"><span>Leitwerk (Burgess)</span><b>${d.ltw.n} Flossen · ${de(r.tail.Atot, r.tail.Atot < 10 ? 2 : 1)} m²${r.tail.elevator ? '' : ' · ohne Höhenruder'}</b></div>
         <div class="tr"><span>Widerstandsbeiwert C<sub>D</sub> (V<sup>2/3</sup>)</span><b>${de(r.drag.total, 4)} (Rumpf ${de(r.drag.hull, 4)})</b></div>

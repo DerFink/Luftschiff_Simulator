@@ -1,4 +1,4 @@
-// 2026-10-13 20:30 · core.js 0.7: Gondel-Reibung aus Reynolds-Zahl, Tropfenform (Hoerner), Hoerner-Exponenten 1,2/2,7, Quellen im Rechenweg
+// 2026-10-13 21:00 · core.js 0.8: Gasraum-Anteil überschreibbar (LZ 120 aus Windkanalmodell)
 //                    Widerstand, Leistung nach Burgess, Gipfelhöhe, Leitwerk im Überschlag, Speicher-Code)
 /* =================================================================================================
    LUFTSCHIFF-SIMULATOR · RECHENKERN
@@ -423,7 +423,8 @@
     warn.push(...geo.warn);
 
     // --- Traggas und Füllung: Bruttoauftrieb am Boden (ISA) ---
-    const gasShare = d.bauweise === 'S' ? 0.95 : 0.99;            // Starr: 90–96 % der Luftverdrängung (Burgess)
+    // Gasraum als Anteil der Luftverdrängung: Starr 90–96 % (Burgess), Prallhülle 99 %; bekannte Werte überschreiben
+    const gasShare = d.gasanteil || (d.bauweise === 'S' ? 0.95 : 0.99);
     let fill;                                                       // Füllgrad am Boden
     if (d.bauweise === 'S') fill = atmos(d.prallhoehe).sigma;      // Starr: Prallhöhe frei gewählt
     else if (d.bauweise === 'O') fill = 1;                          // offen: beim Start prall (wie Gasballon)
@@ -546,7 +547,7 @@
       ['Gas ' + (d.gas === 'H2' ? 'H₂' : 'He') + ' rein', 'ρ_Gas = p·M_Gas/(R·T) mit M = ' + n(M_GAS[d.gas] * 1000, 3) + ' g/mol', n(rhoG, 4) + ' kg/m³'],
       ['Auftrieb je m³', 'ρ_Luft − (Reinheit·ρ_Gas + (1 − Reinheit)·ρ_Luft), Reinheit ' + n(d.reinheit * 100, 1) + ' %', n(r.lpm, 4) + ' kg/m³'],
       ['Füllung am Boden', d.bauweise === 'O' ? 'offener Appendix: beim Start prall' : 'σ(Prallhöhe ' + n(d.prallhoehe) + ' m) = ρ(h)/ρ₀', n(r.fill * 100, 1) + ' %'],
-      ['Gasraum', (d.bauweise === 'S' ? 'Starr: 95 % der Luftverdrängung (Burgess 90–96 %)' : 'Prallhülle: 99 % (Gondel, Leitwerk außen)') + (r.Vraum ? ' − Räume im Rumpf (20 m³ je Fahrgast, 8 m³ je Besatzung) ' + nn(r.Vraum) + ' m³' : ''), nn(r.Vgas) + ' m³'],
+      ['Gasraum', (d.gasanteil ? 'bekannter Anteil ' + n(d.gasanteil * 100, 1) + ' % der Luftverdrängung' : d.bauweise === 'S' ? 'Starr: 95 % der Luftverdrängung (Burgess 90–96 %)' : 'Prallhülle: 99 % (Gondel, Leitwerk außen)') + (r.Vraum ? ' − Räume im Rumpf (20 m³ je Fahrgast, 8 m³ je Besatzung) ' + nn(r.Vraum) + ' m³' : ''), nn(r.Vgas) + ' m³'],
       ['Bruttoauftrieb', 'Gasraum · Füllung · Auftrieb je m³ = ' + nn(r.Vgas) + ' · ' + n(r.fill, 3) + ' · ' + n(r.lpm, 4), m(r.lift0)],
     ] });
     // Massen: je Bauteil die Formel
@@ -685,6 +686,7 @@
     if (d.avionik) p.push('AV:' + num(d.avionik));
     if (d.anbauten) p.push('X:' + num(d.anbauten));
     if (d.schlepptau) p.push('ST:' + num(d.schlepptau));
+    if (d.gasanteil) p.push('GA:' + num(d.gasanteil));
     if (d.m_person && d.m_person !== 80) p.push('MP:' + num(d.m_person));
     if (d.gl || d.gb || d.gh) p.push('GD:' + [d.gl ? num(d.gl) : '', d.gb ? num(d.gb) : '', d.gh ? num(d.gh) : ''].join(','));
     return p.join('|').replace(/,+(?=\||$)/g, '');
@@ -727,6 +729,7 @@
         case 'AV': d.avionik = +v; break;
         case 'X': d.anbauten = +v; break;
         case 'ST': d.schlepptau = +v; break;
+        case 'GA': d.gasanteil = +v; break;
         case 'LA': d.latten = { n: +n[0], len: +n[1] }; break;
         case 'MP': d.m_person = +v; break;
         case 'GD': if (n[0]) d.gl = +n[0]; if (n[1]) d.gb = +n[1]; if (n[2]) d.gh = +n[2]; break;
@@ -756,7 +759,7 @@
   }
 
   const LSCore = {
-    VERSION: '0.7', G0, LB, FT, HP,
+    VERSION: '0.8', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nose, noseNeed,
     dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };

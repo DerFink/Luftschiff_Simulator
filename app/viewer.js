@@ -1,4 +1,4 @@
-// 2026-10-13 20:10 · viewer.js 0.3: Flossen mit Zuspitzung und Pfeilung
+// 2026-10-13 21:05 · viewer.js 0.4: Motorenpaare auf gleicher Lage in Längsrichtung, ungerade Motorgondel hinten mittig
 //                    Leitwerk 1–6 Flossen inkl. V/umgekehrtes V/Y, Gondelarten, Motoren, Appendix; Selbstdrehung, Touch)
 /* =================================================================================================
    3D-VORSCHAU
@@ -136,17 +136,25 @@ export function createViewer(host) {
     const propD = Math.max(0.25, 0.55 * Math.pow(Math.max(a.kW, 0.005), 0.33)) * s;   // [m] → Einheiten
     const motMat = new THREE.MeshStandardMaterial({ color: COL.motor, roughness: 0.5 });
     const propMat = new THREE.MeshStandardMaterial({ color: COL.prop, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
-    for (let k = 0; k < nM; k++) {
-      let px, py, pz;
-      if (a.lage === 'R') {            // Motorgondeln am Rumpf verteilt
-        const x = 0.3 + 0.4 * (nM > 1 ? k / (nM - 1) : 0.5), side = k % 2 ? 1 : -1, rr = rad(x);
-        px = X(x); py = -rr * 0.55; pz = side * (rr * 0.95 + propD * 0.6);
-      } else if (a.lage === 'H') {     // am Heck
-        px = X(0.995) + propD * 0.3; py = 0; pz = (nM > 1 ? (k - (nM - 1) / 2) * propD * 1.2 : 0);
-      } else {                         // an der Gondel, links/rechts
-        const side = k % 2 ? 1 : -1, row = Math.floor(k / 2);
-        px = g.userData.motorX - row * propD * 1.3; py = g.userData.motorY; pz = side * (g.userData.motorZ + propD * 0.55);
+    // Lage jeder Motorgondel bzw. jedes Motors. Motorenpaare liegen immer auf derselben Höhe in Längsrichtung (x):
+    //   am Rumpf: Paare links/rechts gleichmäßig zwischen 0,35 L und 0,65 L, eine ungerade Gondel hinten
+    //             mittig unten (z. B. LZ 120: Paar seitlich + hintere Gondel mit 2 Motoren);
+    //   an der Gondel: Paare links/rechts, weitere Paare dahinter;  am Heck: nebeneinander.
+    const spots = [];
+    if (a.lage === 'R') {
+      const ng = Math.max(1, a.gondeln || nM), pairs = Math.floor(ng / 2);
+      for (let i = 0; i < pairs; i++) {
+        const x = pairs > 1 ? 0.35 + 0.3 * i / (pairs - 1) : 0.5, rr = rad(x);
+        for (const side of [-1, 1]) spots.push([X(x), -rr * 0.55, side * (rr * 0.95 + propD * 0.6)]);
       }
+      if (ng % 2) { const x = 0.78, rr = rad(x); spots.push([X(x), -rr - propD * 0.55, 0]); }
+    } else if (a.lage === 'H') {
+      for (let k = 0; k < nM; k++) spots.push([X(0.995) + propD * 0.3, 0, nM > 1 ? (k - (nM - 1) / 2) * propD * 1.2 : 0]);
+    } else {
+      for (let k = 0; k < nM; k++) { const side = k % 2 ? 1 : -1, row = Math.floor(k / 2);
+        spots.push([g.userData.motorX - row * propD * 1.3, g.userData.motorY, side * (g.userData.motorZ + propD * 0.55)]); }
+    }
+    for (const [px, py, pz] of spots) {
       const body = new THREE.Mesh(new THREE.CylinderGeometry(propD * 0.12, propD * 0.12, propD * 0.6, 12), motMat);
       body.rotation.z = Math.PI / 2; body.position.set(px, py, pz); g.add(body);
       const prop = new THREE.Mesh(new THREE.CircleGeometry(propD / 2, 24), propMat);

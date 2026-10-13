@@ -1,4 +1,4 @@
-# 2026-10-13 20:15 · ablauf01.py: Nasenlatten-Vorschlag und Leitwerk mit Zuspitzung/Pfeilung
+# 2026-10-13 21:05 · ablauf01.py: LZ 120 mit Motorenpaaren
 # Aufruf: python3 -m http.server 8765 im Repository starten, dann  python3 werkstatt/tests/ablauf01.py <Ausgabeordner>
 import sys, os
 from playwright.sync_api import sync_playwright
@@ -32,5 +32,7 @@ with sync_playwright() as p:
     pg.click('#bBack'); pg.click('button.card[data-id="luffihopper"]'); pg.click('#bOpen'); shot('13_luffi_vorschlag.png')
     pg.click('button[data-vs="0"]'); shot('14_luffi_latten.png')
     pg.click('#bEdit'); pg.click('#steps .chip[data-i="2"]'); pg.eval_on_selector('#body', "e => e.parentElement.scrollTop = 400"); shot('15_leitwerk_pfeilung.png')
+    # LZ 120: Motorenpaare und Leitwerk aus dem Windkanalmodell ansehen
+    pg.click('#bBack'); pg.click('button.card[data-id="lz120"]'); pg.click('#bOpen'); shot('16_lz120.png')
     print('Fehler:', errs); print('Code:', code)
     b.close()

@@ -1,4 +1,5 @@
-<!-- 2026-10-13 20:30 · Build 2026-10-13.5: Quellen im Rechenweg, Gondel-Reibung nach Reynolds-Zahl, Tropfenform
+<!-- 2026-10-13 21:05 · Build 2026-10-13.7: LZ 120 nach Windkanalmodell, Motorenpaare auf gleicher Lage, Pfeilung bis 75°
+     2026-10-13 20:30 · Build 2026-10-13.5: Quellen im Rechenweg, Gondel-Reibung nach Reynolds-Zahl, Tropfenform
      2026-10-13 20:10 · Build 2026-10-13.4: Motorgondel-Bauart, Flossen-Zuspitzung/-Pfeilung, Vorschlag Nasenlatten, Räume im Rumpf
      2026-10-13 19:50 · Build 2026-10-13.3: Leitwerk bis 8 Flossen (ZMC-2), Gondel nach Stirnfläche (Rechnung), Speicher-Code vollständig
      2026-10-13 19:00 · Build 2026-10-13.2: Leitwerk nach Jones (Λ einstellbar), Rechenweg im Ergebnis
@@ -121,7 +122,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-13.5';
+const BUILD = '2026-10-13.7';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -223,7 +224,7 @@ const STEPS = [
       { typ: 'num', key: 'ltw.faktor', label: 'Größe gegenüber Vorschlag nach Jones', min: 0.3, max: 2, step: 0.05, k: 0, pct: true, vorschlag: () => 1 },
       { typ: 'num', key: 'ltw.ar', label: 'Seitenverhältnis Flossenpaar Λ (schlanke Flossen wirken stärker)', min: 0.6, max: 3, step: 0.1, k: 1, vorschlag: () => C.LTW_ANNAHMEN.ar, def: () => C.LTW_ANNAHMEN.ar },
       { typ: 'num', key: 'ltw.lam', label: 'Zuspitzung λ = Endtiefe / Wurzeltiefe', min: 0.2, max: 1, step: 0.05, k: 2, vorschlag: () => C.LTW_ANNAHMEN.lam, def: () => C.LTW_ANNAHMEN.lam },
-      { typ: 'num', key: 'ltw.sweep', label: 'Pfeilung der Vorderkante', unit: '°', min: 0, max: 60, step: 1, k: 0, vorschlag: () => C.LTW_ANNAHMEN.sweep, def: () => C.LTW_ANNAHMEN.sweep },
+      { typ: 'num', key: 'ltw.sweep', label: 'Pfeilung der Vorderkante', unit: '°', min: 0, max: 75, step: 1, k: 0, vorschlag: () => C.LTW_ANNAHMEN.sweep, def: () => C.LTW_ANNAHMEN.sweep },
     ], text: (d, r) => { const t = r.tail; return `<b>Vorschlag nach Jones</b> (Burgess S. 103): ${de(t.A_jones, 1)} m² je Ebene bei Hebelarm ${de(t.lt, 1)} m (Auftriebsschwerpunkt → Neutralpunkt der Flossen), k₂−k₁ = ${de(t.dk, 3)} aus L/D ${de(r.geo.L / r.geo.D, 2)} und Auftriebsanstieg ${de(t.a, 2)}/rad (Λ, Pfeilung). Statisch neutral wären ${de(t.A_static, 1)} m², Burgess-Faustwert ${de(t.A_burgess, 1)} m².<br>` +
       (d.ltw.A_ebene ? `Dieses Modell hat die bekannte Fläche ${de(t.Aplane, 1)} m² je Ebene (Quelle im Modell). Der Regler „Größe“ ersetzt sie.` : `Gewählt: ${de(t.Aplane, 1)} m² je Ebene, ${t.n} Flossen à ${de(t.Afin, 1)} m², Masse ${fm(r.leer.leitwerk)}.`) +
       (t.elevator ? '' : '<br>Ohne Höhenruder: Die Höhe wird nur über Schub, Ballast und Gas geregelt.') + '<br><i>Rechenweg siehe Ergebnis.</i>'; } },

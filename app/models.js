@@ -1,4 +1,4 @@
-// 2026-10-13 20:30 · models.js 0.5: LZ 120 mit Gondel in Tropfenform (Jaray, Hinweis Nutzer)
+// 2026-10-13 21:20 · models.js 0.6: LZ 120 nach Windkanalmodell 1:47,62 (Rumpf, Leitwerk, Gondel); Beladung LZ 120 für Fahrt FN–Berlin (Prallhöhe 500 m, Ballast 1 t, Kraftstoff 2 t)
 /* =================================================================================================
    FESTE AUSWAHL
    -------------------------------------------------------------------------------------------------
@@ -35,16 +35,22 @@
     },
     {
       id: 'lz120', gruppe: 'Starr', jahr: 1919,
-      quelle: 'de.wikipedia „LZ 120“: kurze Fassung 1919 120,8 m, Ø 18,71 m, 20.000 m³ in 12 Zellen, Leermasse 13.646 kg, Nutzlast 9.593 kg, 4 × Maybach Mb IVa je 176 kW, 132,5 km/h, 20 (bis 30) Passagiere, 12 Besatzung',
+      quelle: 'Windkanalmodell 1:47,62 (Diagramme des Nutzers): Kontur, Leitwerk, Gondel; de.wikipedia „LZ 120“: kurze Fassung 1919 120,8 m, Ø 18,71 m, 20.000 m³ in 12 Zellen, Leermasse 13.646 kg, Nutzlast 9.593 kg, 4 × Maybach Mb IVa je 176 kW, 132,5 km/h, 20 (bis 30) Passagiere, 12 Besatzung',
       d: {
         name: 'LZ 120 „Bodensee“ (1919)', bauweise: 'S', gas: 'H2', reinheit: 0.97,
-        V: 20000 / 0.95,                                                                     // [W] Gas 20.000 m³ bei 95 % des Luftvolumens [B]
-        form: { LD: 120.8 / 18.71, m: 0.45, Cp: cp(20000 / 0.95, 120.8, 18.71), r0: 0.6, r1: 0.06 }, // [W]/[A]
-        huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 1000,                   // [A] Stand wie L-49
-        ltw: { n: 4, anord: '+', faktor: 1 },
-        gondel: 'F', gform: 'T', crew: 12, pax: 20, m_person: 80,                            // [W]; [N] Tropfenform, von Jaray im Windkanal entwickelt
-        antrieb: { art: 'V', n: 4, kW: 176, gondeln: 3, lage: 'R', mg: 'V', eta: 0.72, kraftstoff: 3000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; [N] 3 Motorgondeln (hinten 2 Motoren); Rest [A]
-        v_reise: 110, ballast: 1500,                                                         // [A]
+        // Rumpf aus dem Windkanalmodell 1:47,62 (Diagramm des Nutzers): Kontur als Gertler-Form angepasst,
+        // mittlere Abweichung 0,7 % des Radius; Luftvolumen 21.534 m³, Gas 20.000 m³ [W] ⇒ Gasraum 92,9 %
+        V: 21534, gasanteil: 20000 / 21534,
+        form: { LD: 6.447, m: 0.433, Cp: 0.644, r0: 0.793, r1: 0.024 },
+        huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 500,                    // [A] Bauweise wie L-49; Prallhöhe 500 m, sonst reicht der Auftrieb nicht für Fahrgäste und Kraftstoff
+        // Leitwerk aus dem Windkanalmodell: oben 81,4 m², unten 27,5 m², seitlich je 67,5 m²
+        // ⇒ senkrecht 108,9 m², waagerecht 135,0 m², Mittel 122 m² je Ebene; Seitenverhältnis Paar ≈ 1,4,
+        //   Wurzeltiefe 17–22 m, Endtiefe ≈ 2–3 m, Vorderkante stark gepfeilt (≈ 66°)
+        ltw: { n: 4, anord: '+', faktor: 1, A_ebene: 122.0, ar: 1.4, lam: 0.15, sweep: 66 },
+        // Fahrgastgondel aus dem Windkanalmodell: 20,7 m lang, 2,86 m breit, ≈ 2,6 m unter der Hülle, im Grundriss Tropfenform (Jaray)
+        gondel: 'F', gform: 'T', gl: 20.7, gb: 2.86, gh: 2.6, crew: 12, pax: 20, m_person: 80,
+        antrieb: { art: 'V', n: 4, kW: 176, gondeln: 3, lage: 'R', mg: 'V', eta: 0.72, kraftstoff: 2000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; Kraftstoff 2 t reicht für FN–Berlin (≈ 600 km) mit Reserve [A]; [N] 3 Motorgondeln (2 seitlich als Paar, hinten 2 Motoren); Rest [A]
+        v_reise: 110, ballast: 1000,                                                         // [A]
       },
     },
     {

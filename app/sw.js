@@ -1,6 +1,6 @@
-// 2026-10-13 21:05 · sw.js v6: Build 2026-10-13.6
+// 2026-10-13 22:15 · sw.js v8: Build 2026-10-13.8 (Schrittleiste scrollbar, Einheiten, Mittelgondel)
 /* Bei jedem neuen Build VER erhöhen, damit Handys die neuen Dateien laden. */
-const VER = 'ls-v7';
+const VER = 'ls-v8';
 const FILES = ['./', 'index.html', 'core.js', 'models.js', 'viewer.js', 'lib/three.module.min.js', 'lib/OrbitControls.js', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VER).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

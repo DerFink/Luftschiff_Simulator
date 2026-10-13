@@ -1,3 +1,4 @@
+// 2026-10-13 22:15 · viewer.js 0.5: Motorgondeln am Rumpf als Körper mit Strebe; Paare seitlich auf gleicher x-Lage, Mittelgondel mittig unter der Hülle (1 Motor oder Motorpaar)
 // 2026-10-13 21:05 · viewer.js 0.4: Motorenpaare auf gleicher Lage in Längsrichtung, ungerade Motorgondel hinten mittig
 //                    Leitwerk 1–6 Flossen inkl. V/umgekehrtes V/Y, Gondelarten, Motoren, Appendix; Selbstdrehung, Touch)
 /* =================================================================================================
@@ -136,29 +137,55 @@ export function createViewer(host) {
     const propD = Math.max(0.25, 0.55 * Math.pow(Math.max(a.kW, 0.005), 0.33)) * s;   // [m] → Einheiten
     const motMat = new THREE.MeshStandardMaterial({ color: COL.motor, roughness: 0.5 });
     const propMat = new THREE.MeshStandardMaterial({ color: COL.prop, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
-    // Lage jeder Motorgondel bzw. jedes Motors. Motorenpaare liegen immer auf derselben Höhe in Längsrichtung (x):
-    //   am Rumpf: Paare links/rechts gleichmäßig zwischen 0,35 L und 0,65 L, eine ungerade Gondel hinten
-    //             mittig unten (z. B. LZ 120: Paar seitlich + hintere Gondel mit 2 Motoren);
+    // Lage jeder Motorgondel bzw. jedes Motors (Regel in LSCore.nacelles):
+    //   am Rumpf: Motoren paarweise links/rechts auf derselben x-Lage, Paare gleichmäßig zwischen 0,35 L und 0,65 L;
+    //             bei ungerader Zahl ein Motor in einer Gondel mittig unter der Hülle (0,72 L);
+    //             Sonderfall: ein Motorpaar gemeinsam in der Mittelgondel (z. B. LZ 120 hinten), Propeller links/rechts daran.
     //   an der Gondel: Paare links/rechts, weitere Paare dahinter;  am Heck: nebeneinander.
-    const spots = [];
+    const podMat = new THREE.MeshStandardMaterial({ color: COL.gondel, roughness: 0.5 });   // Motorgondeln
+    const spots = [];                 // [x, y, z, Richtung] je Motor mit Propeller
+    const pods = [];                  // [x, y, z, Länge, Radius, Strebe bis y] je Motorgondel am Rumpf
     if (a.lage === 'R') {
-      const ng = Math.max(1, a.gondeln || nM), pairs = Math.floor(ng / 2);
-      for (let i = 0; i < pairs; i++) {
-        const x = pairs > 1 ? 0.35 + 0.3 * i / (pairs - 1) : 0.5, rr = rad(x);
-        for (const side of [-1, 1]) spots.push([X(x), -rr * 0.55, side * (rr * 0.95 + propD * 0.6)]);
+      const N = (globalThis.LSCore && LSCore.nacelles) ? LSCore.nacelles(a) : { paare: Math.floor(nM / 2), mitte: nM % 2 };
+      const podL = propD * 1.5, podR = propD * 0.22;
+      for (let i = 0; i < N.paare; i++) {
+        const x = N.paare > 1 ? 0.35 + 0.3 * i / (N.paare - 1) : 0.5, rr = rad(x);
+        for (const side of [-1, 1]) {
+          const y = -rr * 0.55, z = side * (rr * 0.95 + propD * 0.6);
+          pods.push([X(x), y, z, podL, podR, -rr * 0.35]);
+          spots.push([X(x) + podL * 0.6, y, z, 1]);           // Druckpropeller am Gondelende (Heckseite)
+        }
       }
-      if (ng % 2) { const x = 0.78, rr = rad(x); spots.push([X(x), -rr - propD * 0.55, 0]); }
+      if (N.mitte) {
+        const x = 0.72, rr = rad(x), y = -rr - propD * 0.75;
+        pods.push([X(x), y, 0, podL * (N.mitte === 2 ? 1.5 : 1), podR * (N.mitte === 2 ? 1.4 : 1), -rr * 0.97]);
+        if (N.mitte === 1) spots.push([X(x) + podL * 0.6, y, 0, 1]);
+        else for (const side of [-1, 1]) {   // Motorpaar: Propeller links/rechts auf Auslegern, gleiche x-Lage
+          const zm = side * (podR * 1.4 + propD * 0.55);
+          spots.push([X(x) + podL * 0.3, y, zm, 1]);
+          const arm = new THREE.Mesh(new THREE.CylinderGeometry(podR * 0.15, podR * 0.15, Math.abs(zm), 6), podMat);
+          arm.rotation.x = Math.PI / 2; arm.position.set(X(x) + podL * 0.3, y, zm / 2); g.add(arm);
+        }
+      }
     } else if (a.lage === 'H') {
       for (let k = 0; k < nM; k++) spots.push([X(0.995) + propD * 0.3, 0, nM > 1 ? (k - (nM - 1) / 2) * propD * 1.2 : 0]);
     } else {
       for (let k = 0; k < nM; k++) { const side = k % 2 ? 1 : -1, row = Math.floor(k / 2);
         spots.push([g.userData.motorX - row * propD * 1.3, g.userData.motorY, side * (g.userData.motorZ + propD * 0.55)]); }
     }
-    for (const [px, py, pz] of spots) {
+    // Motorgondeln am Rumpf: stromlinienförmiger Körper mit Strebe zur Hülle
+    for (const [px, py, pz, pl, pr, yTop] of pods) {
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(pr, pl, 6, 12), podMat);
+      body.rotation.z = Math.PI / 2; body.position.set(px, py, pz); g.add(body);
+      const strut = new THREE.Mesh(new THREE.CylinderGeometry(pr * 0.18, pr * 0.18, Math.abs(yTop - py), 6), podMat);
+      strut.position.set(px, (py + yTop) / 2, pz * 0.85); g.add(strut);
+    }
+    // Motoren mit Propellerkreis; dir −1 = Zugpropeller (Richtung Bug), +1 = Druckpropeller (Richtung Heck)
+    for (const [px, py, pz, dir = -1] of spots) {
       const body = new THREE.Mesh(new THREE.CylinderGeometry(propD * 0.12, propD * 0.12, propD * 0.6, 12), motMat);
       body.rotation.z = Math.PI / 2; body.position.set(px, py, pz); g.add(body);
       const prop = new THREE.Mesh(new THREE.CircleGeometry(propD / 2, 24), propMat);
-      prop.rotation.y = Math.PI / 2; prop.position.set(px - propD * 0.32, py, pz); g.add(prop);
+      prop.rotation.y = Math.PI / 2; prop.position.set(px + dir * propD * 0.32, py, pz); g.add(prop);
     }
 
     // Offener Appendix (kurzer Schlauch unten)

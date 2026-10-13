@@ -1,4 +1,5 @@
-<!-- 2026-10-13 21:05 · Build 2026-10-13.7: LZ 120 nach Windkanalmodell, Motorenpaare auf gleicher Lage, Pfeilung bis 75°
+<!-- 2026-10-13 22:15 · Build 2026-10-13.8: Schrittleiste mit Pfeilen, Mausrad und Ziehen seitlich scrollbar; Einheiten (kg/Anzahl) an allen Zahlen; Mittelgondel für Motorpaar
+     2026-10-13 21:05 · Build 2026-10-13.7: LZ 120 nach Windkanalmodell, Motorenpaare auf gleicher Lage, Pfeilung bis 75°
      2026-10-13 20:30 · Build 2026-10-13.5: Quellen im Rechenweg, Gondel-Reibung nach Reynolds-Zahl, Tropfenform
      2026-10-13 20:10 · Build 2026-10-13.4: Motorgondel-Bauart, Flossen-Zuspitzung/-Pfeilung, Vorschlag Nasenlatten, Räume im Rumpf
      2026-10-13 19:50 · Build 2026-10-13.3: Leitwerk bis 8 Flossen (ZMC-2), Gondel nach Stirnfläche (Rechnung), Speicher-Code vollständig
@@ -57,6 +58,14 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 /* Schritte */
 .steps{flex:none;display:flex;gap:6px;padding:8px 12px;overflow-x:auto;white-space:nowrap;border-bottom:1px solid var(--line);scrollbar-width:none}
 .steps::-webkit-scrollbar{display:none}
+/* Rahmen der Schrittleiste mit Pfeilen links/rechts (seitliches Scrollen auch mit Maus) */
+.stepw{flex:none;position:relative}
+.stepw .steps{padding:8px 34px;cursor:grab}
+.stepw .steps.drag{cursor:grabbing}
+.sarr{position:absolute;top:0;bottom:1px;width:34px;font-size:20px;font-weight:700;color:var(--acc);z-index:2;display:flex;align-items:center;justify-content:center}
+.sarr.l{left:0;background:linear-gradient(90deg,var(--card) 60%,rgba(255,255,255,0))}
+.sarr.r{right:0;background:linear-gradient(270deg,var(--card) 60%,rgba(255,255,255,0))}
+.sarr.off{opacity:.25;pointer-events:none}
 .chip{font-size:12px;padding:5px 10px;border-radius:12px;background:#eef2f6;color:#4a5866;flex:none}
 .chip.done{background:#e3f4ea;color:#1b7a47}.chip.cur{background:var(--acc);color:#fff;font-weight:700}
 .body{padding:10px 16px 16px;display:flex;flex-direction:column;gap:9px}
@@ -122,7 +131,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-13.7';
+const BUILD = '2026-10-13.8';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -219,7 +228,7 @@ const STEPS = [
       { typ: 'seg', key: 'bauweise', label: '', opts: [['S', 'Starr'], ['H', 'Halbstarr'], ['P', 'Prall (Blimp)'], ['O', 'Offen']] },
     ], text: d => ({ S: 'Gerüst aus Ringen und Längsträgern, Gas in Zellen; Form unabhängig vom Gasdruck. Burgess: erst ab rund 28.000 m³ sinnvoll.', H: 'Prallhülle mit tragendem Kiel bzw. Innengerüst (Norge, Zeppelin NT). Ballonets halten den Überdruck.', P: 'Die Form hält allein der Überdruck; Ballonets mit Gebläse gleichen Höhenänderungen aus.', O: 'Unten offen mit kurzem Appendix wie ein Gasballon: kein Ballonet, Innendruck nur aus der Gassäule. Steigt das Schiff, entweicht Gas.' })[d.bauweise] },
   { id: 'ltw', titel: 'Leitwerk', frage: 'Wie viele Flossen bekommt das Leitwerk?', fields: [
-      { typ: 'seg', key: 'ltw.n', label: '', opts: [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6'], [7, '7'], [8, '8']], num: true },
+      { typ: 'seg', key: 'ltw.n', label: 'Zahl der Flossen (Anzahl)', opts: [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6'], [7, '7'], [8, '8']], num: true },
       { typ: 'seg', key: 'ltw.anord', label: 'Anordnung', opts: d => ({ 1: [['|', 'oben']], 2: [['|', 'oben/unten'], ['V', 'V'], ['A', 'umgek. V']], 3: [['Y', 'Y'], ['L', 'umgek. Y']] }[d.ltw.n] || [['+', '+ Kreuz'], ['X', 'X']]) },
       { typ: 'num', key: 'ltw.faktor', label: 'Größe gegenüber Vorschlag nach Jones', min: 0.3, max: 2, step: 0.05, k: 0, pct: true, vorschlag: () => 1 },
       { typ: 'num', key: 'ltw.ar', label: 'Seitenverhältnis Flossenpaar Λ (schlanke Flossen wirken stärker)', min: 0.6, max: 3, step: 0.1, k: 1, vorschlag: () => C.LTW_ANNAHMEN.ar, def: () => C.LTW_ANNAHMEN.ar },
@@ -247,24 +256,25 @@ const STEPS = [
       { typ: 'seg', key: 'gondel', label: '', opts: [['K', 'Korb'], ['F', 'Fest am Rumpf'], ['I', 'Im Rumpf'], ['R', 'RC-Kapsel'], ['N', 'Keine']] },
     ], text: (d, r) => `Masse der Gondel: ${fm(r.leer.gondel)}. ` + ({ K: 'Offener Korb an Seilen, wie beim Gasballon; großer Luftwiderstand.', F: 'Geschlossene Gondel direkt unter dem Rumpf.', T: 'Tropfenform wie im Windkanal entwickelt (Jaray): kleinster Widerstand.', I: `Fahrgast- und Mannschaftsräume im Rumpf (sie nehmen ${de(r.Vraum)} m³ Gasraum weg), außen nur eine 4-Mann-Steuergondel in Stromlinienform.`, R: 'Kleine Kapsel für Empfänger und Regler (RC-Blimp).', N: 'Keine Gondel, z. B. für autonome Schiffe.' })[d.gondel] },
   { id: 'pax', titel: 'Personen', frage: 'Wer und was fährt mit?', fields: [
-      { typ: 'num', key: 'crew', label: 'Besatzung (0 = autonom)', min: 0, max: 80, step: 1, k: 0 },
-      { typ: 'num', key: 'pax', label: 'Fahrgäste', min: 0, max: 80, step: 1, k: 0 },
+      { typ: 'num', key: 'crew', label: 'Besatzung (0 = autonom)', unit: 'Anzahl', min: 0, max: 80, step: 1, k: 0 },
+      { typ: 'num', key: 'pax', label: 'Fahrgäste', unit: 'Anzahl', min: 0, max: 80, step: 1, k: 0 },
       { typ: 'num', key: 'm_person', label: 'Masse je Person', unit: 'kg', min: 50, max: 120, step: 1, k: 0, vorschlag: () => 80 },
       { typ: 'num', key: 'nutzlast', label: 'Nutzlast (z. B. Kamera)', unit: 'kg', min: 0, max: 20000, log0: true, k: 1 },
       { typ: 'num', key: 'avionik', label: 'Avionik / Steuerung', unit: 'kg', min: 0, max: 500, log0: true, k: 2 },
     ] },
   { id: 'antrieb', titel: 'Antrieb', frage: 'Wie wird das Luftschiff angetrieben?', fields: [
       { typ: 'seg', key: 'antrieb.art', label: '', opts: [['E', 'Elektro'], ['V', 'Verbrenner'], ['S', 'Solar + Akku'], ['H', 'Hybrid', true]] },
-      { typ: 'num', key: 'antrieb.n', label: 'Zahl der Motoren', min: 1, max: 8, step: 1, k: 0, vorschlag: d => d.antrieb.n },
+      { typ: 'num', key: 'antrieb.n', label: 'Zahl der Motoren', unit: 'Anzahl', min: 1, max: 8, step: 1, k: 0, vorschlag: d => d.antrieb.n },
       { typ: 'num', key: 'antrieb.kW', label: 'Leistung je Motor', unit: 'kW', min: 0.002, max: 1500, log: true, k: 3, vorschlag: (d, r) => r.P_burgess / 1000 / d.antrieb.n },
       { typ: 'seg', key: 'antrieb.lage', label: 'Lage', opts: [['G', 'An der Gondel'], ['R', 'Am Rumpf'], ['H', 'Am Heck']] },
       { typ: 'seg', key: 'antrieb.mg', label: 'Bauart der Motorgondeln', opts: [['O', 'Offen, mit Kühler (bis 1930er)'], ['V', 'Verkleidet (modern)']] },
-      { typ: 'num', key: 'antrieb.gondeln', label: 'Zahl der Motorgondeln', min: 1, max: 8, step: 1, k: 0, when: d => d.antrieb.lage === 'R', vorschlag: d => d.antrieb.n, def: () => S.d.antrieb.n },
+      // Motorgondeln am Rumpf: immer paarweise; ungerade Zahl ⇒ ein Motor mittig unter der Hülle; bei gerader Zahl wahlweise ein Paar gemeinsam in der Mittelgondel
+      { typ: 'seg', key: '_mpaar', label: 'Motorgondeln am Rumpf', when: d => d.antrieb.lage === 'R' && d.antrieb.n >= 2 && d.antrieb.n % 2 === 0, opts: [['0', 'Je Motor eine Gondel'], ['1', 'Ein Paar in Mittelgondel']] },
       { typ: 'num', key: 'antrieb.kWh', label: 'Akku', unit: 'kWh', min: 0.001, max: 5000, log: true, k: 3, when: d => d.antrieb.art !== 'V', vorschlag: (d, r) => r.Preise * 8 / 3.6e6 / 0.85 * 3.6 },
       { typ: 'num', key: 'antrieb.whkg', label: 'Energiedichte Akku', unit: 'Wh/kg', min: 80, max: 400, step: 5, k: 0, when: d => d.antrieb.art !== 'V', vorschlag: () => 180 },
       { typ: 'num', key: 'antrieb.kraftstoff', label: 'Kraftstoff', unit: 'kg', min: 0, max: 100000, log0: true, k: 0, when: d => d.antrieb.art === 'V', vorschlag: (d, r) => r.Preise * 24 / 3.6e6 * (d.antrieb.sfc || 0.3) },
       { typ: 'num', key: 'antrieb.eta', label: 'Propellerwirkungsgrad', min: 0.3, max: 0.9, step: 0.01, k: 0, pct: true, vorschlag: d => d.V < 50 ? 0.5 : 0.7 },
-    ], text: (d, r) => `<b>Vorschlag nach Burgess:</b> P = ρ·v³·V<sup>2/3</sup>/K mit K = ${d.bauweise === 'S' ? '63,5' : '40'} für ${de((d.v_ziel || d.v_reise * 1.3))} km/h ⇒ ${fp(r.P_burgess)} gesamt. Antrieb ${fm(r.leer.antrieb)}, Energie ${fm(r.propulsion.mEnergie)}.` },
+    ], text: (d, r) => `<b>Vorschlag nach Burgess:</b> P = ρ·v³·V<sup>2/3</sup>/K mit K = ${d.bauweise === 'S' ? '63,5' : '40'} für ${de((d.v_ziel || d.v_reise * 1.3))} km/h ⇒ ${fp(r.P_burgess)} gesamt. Antrieb ${fm(r.leer.antrieb)}, Energie ${fm(r.propulsion.mEnergie)}.` + (d.antrieb.lage === 'R' ? (N => `<br>Motorgondeln am Rumpf: ${N.paare ? N.paare + (N.paare > 1 ? ' Paare' : ' Paar') + ' links/rechts auf gleicher Länge' : ''}${N.paare && N.mitte ? ', ' : ''}${N.mitte ? 'Mittelgondel unter der Hülle mit ' + (N.mitte === 2 ? 'einem Motorpaar' : 'einem Motor') : ''} ⇒ ${N.g} Gondeln.`)(C.nacelles(d.antrieb)) : '') },
   { id: 'v', titel: 'Geschwindigkeit', frage: 'Mit welcher Reisegeschwindigkeit fährt es?', fields: [
       { typ: 'num', key: 'v_reise', label: 'Reisegeschwindigkeit', unit: 'km/h', min: 1, max: 160, step: 1, k: 0, vorschlag: (d, r) => Math.round(r.vmax_kmh * 0.7) },
     ], text: (d, r) => `Höchstgeschwindigkeit mit voller Leistung: ${de(r.vmax_kmh)} km/h. Bei ${de(d.v_reise)} km/h braucht es ${fp(r.Preise)} an der Welle.` },
@@ -285,7 +295,7 @@ function showBau() {
   $('#app').innerHTML = `<div class="top"><button class="lnk" id="bBack">‹ Auswahl</button><span class="t">${escapeHtml(d.name)}</span><button class="lnk" id="bErg">Ergebnis ›</button></div>
     <div class="view" id="view"><div class="pill" style="left:8px;bottom:7px">⟳ 1 Finger drehen · 2 Finger zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
     <div class="kpis" id="kpis"></div>
-    <div class="steps" id="steps">${STEPS.map((s, i) => `<button class="chip ${i === S.step ? 'cur' : i < S.step ? 'done' : ''}" data-i="${i}">${i < S.step ? '✓ ' : ''}${s.titel}</button>`).join('')}</div>
+    <div class="stepw"><button class="sarr l" id="sL" aria-label="Schritte nach links">‹</button><div class="steps" id="steps">${STEPS.map((s, i) => `<button class="chip ${i === S.step ? 'cur' : i < S.step ? 'done' : ''}" data-i="${i}">${i < S.step ? '✓ ' : ''}${s.titel}</button>`).join('')}</div><button class="sarr r" id="sR" aria-label="Schritte nach rechts">›</button></div>
     <div class="scroll"><div class="body" id="body"></div></div>
     <div class="btns"><button class="btn s" id="bPrev"${S.step === 0 ? ' disabled' : ''}>‹ Zurück</button><button class="btn s" id="bSug">Vorschlag</button><button class="btn p" id="bNext">${S.step === STEPS.length - 1 ? 'Fertig ✓' : 'Weiter ›'}</button></div>`;
   $('#bBack').onclick = showAuswahl;
@@ -293,10 +303,32 @@ function showBau() {
   $('#bPrev').onclick = () => { S.step--; showBau(); };
   $('#bNext').onclick = () => { if (S.step < STEPS.length - 1) { S.step++; showBau(); } else showErgebnis(); };
   $('#bSug').onclick = applySuggestions;
-  document.querySelectorAll('#steps .chip').forEach(b => b.onclick = () => { S.step = +b.dataset.i; showBau(); });
-  $('#steps .cur').scrollIntoView({ inline: 'center', block: 'nearest' });
+  document.querySelectorAll('#steps .chip').forEach(b => b.onclick = () => { if (stepsDragged) return; S.step = +b.dataset.i; showBau(); });
+  stepScroller($('#steps'), $('#sL'), $('#sR'));
+  { const bar = $('#steps'), cur = $('#steps .cur'); bar.scrollLeft = cur.offsetLeft - (bar.clientWidth - cur.offsetWidth) / 2; }
   mountView($('#view'));
   renderBody(); renderKpis(true);
+}
+
+/* Schrittleiste seitlich scrollen: Wischen (Touch), Pfeile ‹ ›, Mausrad und Ziehen mit der Maus.
+   Die Pfeile werden blass, wenn es in ihre Richtung nicht weitergeht. Nach einem Ziehen wird der
+   Klick auf einen Schritt unterdrückt (stepsDragged), damit man nicht versehentlich springt. */
+let stepsDragged = false;
+function stepScroller(bar, bl, br) {
+  const upd = () => { bl.classList.toggle('off', bar.scrollLeft <= 2); br.classList.toggle('off', bar.scrollLeft >= bar.scrollWidth - bar.clientWidth - 2); };
+  bl.onclick = () => bar.scrollBy({ left: -bar.clientWidth * 0.6, behavior: 'smooth' });
+  br.onclick = () => bar.scrollBy({ left: bar.clientWidth * 0.6, behavior: 'smooth' });
+  bar.addEventListener('scroll', upd, { passive: true });
+  // Mausrad: senkrechtes Drehen schiebt die Leiste waagerecht
+  bar.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { bar.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+  // Ziehen mit der Maus (Touch scrollt der Browser selbst); Ereignisse nur an der Leiste, damit nichts liegen bleibt
+  let x0 = null, s0 = 0;
+  bar.onpointerdown = e => { if (e.pointerType !== 'mouse') return; x0 = e.clientX; s0 = bar.scrollLeft; stepsDragged = false; };
+  bar.onpointermove = e => { if (x0 === null) return; const dx = e.clientX - x0;
+    if (!stepsDragged && Math.abs(dx) > 5) { stepsDragged = true; bar.classList.add('drag'); bar.setPointerCapture(e.pointerId); }
+    if (stepsDragged) bar.scrollLeft = s0 - dx; };
+  bar.onpointerup = bar.onpointercancel = () => { x0 = null; bar.classList.remove('drag'); setTimeout(() => { stepsDragged = false; }, 0); };
+  setTimeout(upd, 0);
 }
 
 function renderBody() {
@@ -307,7 +339,7 @@ function renderBody() {
     if (f.label) h += `<div class="lab">${f.label}</div>`;
     if (f.typ === 'seg' || f.typ === 'chips') {
       const opts = typeof f.opts === 'function' ? f.opts(d) : f.opts;
-      const cur = f.key === '_form' ? formKey(d.form) : getByPath(d, f.key);
+      const cur = f.key === '_form' ? formKey(d.form) : f.key === '_mpaar' ? (C.nacelles(d.antrieb).mitte === 2 ? '1' : '0') : getByPath(d, f.key);
       h += `<div class="${f.typ === 'seg' ? 'seg' : 'chips'}">` + opts.map(([v, t, dis]) => `<button data-f="${i}" data-v="${v}"${(f.typ === 'seg' && String(cur) === String(v)) ? ' class="on"' : ''}${dis ? ' disabled title="folgt"' : ''}>${t}</button>`).join('') + '</div>';
     } else if (f.typ === 'num') {
       const v = getByPath(d, f.key) ?? (f.def ? f.def() : 0), sv = f.vorschlag ? f.vorschlag(d, r) : null;
@@ -327,6 +359,8 @@ function renderBody() {
   $('#body').querySelectorAll('button[data-f]').forEach(b => b.onclick = () => {
     const f = st.fields[+b.dataset.f]; let v = b.dataset.v;
     if (f.key === '_form') { if (v !== 'eigen') Object.assign(d.form, clone(C.FORMS[v]), { name: undefined }); change(); return; }
+    // Sonderfall Motorpaar in der Mittelgondel: gespeichert als Zahl der Gondeln = Motoren − 1
+    if (f.key === '_mpaar') { if (v === '1') d.antrieb.gondeln = d.antrieb.n - 1; else delete d.antrieb.gondeln; change(); return; }
     if (f.num || f.typ === 'chips') v = +v;
     setByPath(d, f.key, v);
     if (f.key === 'ltw.n') d.ltw.anord = ({ 1: '|', 2: '|', 3: 'Y' })[v] || '+';
@@ -407,13 +441,13 @@ function showErgebnis() {
   const G = [];   // Gruppen der Massenliste je nach Bauweise
   if (e.laengstraeger) G.push(['Struktur', '#5b6f8a', [['Gerüst: Längsträger, Laufgang', e.laengstraeger], ['Gerüst: Ringe, Drähte, Netze', e.ringe]]]);
   if (e.kiel) G.push(['Struktur', '#5b6f8a', [['Kiel / Innengerüst', e.kiel], ['Nasenlatten', e.nasenlatten || 0]]]);
-  else if (e.nasenlatten) G.push(['Struktur', '#5b6f8a', [[d.latten ? `Nasenlatten (${d.latten.n} × ${de(d.latten.len, 1)} m)` : 'Nasenlatten', e.nasenlatten]]]);
+  else if (e.nasenlatten) G.push(['Struktur', '#5b6f8a', [[d.latten ? `Nasenlatten (${d.latten.n} Stück × ${de(d.latten.len, 1)} m)` : 'Nasenlatten', e.nasenlatten]]]);
   G.push(['Hülle und Gas', '#5b8fd6', [['Hülle außen', e.huelle], ['Gaszellen', e.zellen || 0], ['Ballonets', e.ballonet || 0], ['Gebläse', e.geblaese || 0]]]);
-  G.push(['Leitwerk', '#d65a3c', [[`Flossen und Ruder (${d.ltw.n})`, e.leitwerk]]]);
+  G.push(['Leitwerk', '#d65a3c', [[`Flossen und Ruder (${d.ltw.n} Stück)`, e.leitwerk]]]);
   G.push(['Gondel', '#7d6bd1', [[{ K: 'Korb', F: 'Gondel', I: 'Steuergondel, Räume im Rumpf', R: 'RC-Kapsel', N: 'keine' }[d.gondel], e.gondel], ['Aufhängung', e.aufhaengung || 0], ['Seile', e.seile || 0]]]);
-  G.push(['Antrieb', '#c55d9d', [['Motoren, Propeller', e.antrieb]]]);
+  G.push(['Antrieb', '#c55d9d', [[`Motoren, Propeller (${d.antrieb.n} Stück${d.antrieb.lage === 'R' ? ', ' + C.nacelles(d.antrieb).g + ' Motorgondeln' : ''})`, e.antrieb]]]);
   G.push(['Ausrüstung', '#8a96a3', [['Armaturen, Ventile, Ballastanlage', e.armaturen || 0], ['Elektrik', e.elektrik || 0], ['Avionik', e.avionik || 0]]]);
-  const ZG = [['Zuladung', '#3fa37a', [[d.antrieb.art === 'V' ? 'Kraftstoff' : 'Akku', z.energie], ['Personen', z.personen], ['Nutzlast', z.nutzlast], ['Ballast', z.ballast], ['Schlepptau', z.schlepptau]]]];
+  const ZG = [['Zuladung', '#3fa37a', [[d.antrieb.art === 'V' ? 'Kraftstoff' : 'Akku', z.energie], [`Personen (${(d.crew || 0) + (d.pax || 0)} × ${de(d.m_person)} kg)`, z.personen], ['Nutzlast', z.nutzlast], ['Ballast', z.ballast], ['Schlepptau', z.schlepptau]]]];
   const line = (n, v, c) => `<div class="mrow"><span>${n}</span><span class="bar"><i style="width:${Math.min(100, v / L0 * 250)}%;background:${c}"></i></span><span class="n">${fm(v)}</span><span class="p">${de(v / L0 * 100, 1)} %</span></div>`;
   const block = gs => gs.map(([g, c, it]) => { it = it.filter(x => x[1] > 0); if (!it.length) return ''; return `<div class="mrow h"><span>${g}</span><span>${fm(it.reduce((s, x) => s + x[1], 0))}</span></div>` + it.map(([n, v]) => line(n, v, c)).join(''); }).join('');
   const code = C.encode(d);
@@ -432,7 +466,7 @@ function showErgebnis() {
         <div class="tr"><span>Länge × Durchmesser</span><b>${de(r.geo.L, r.geo.L < 10 ? 2 : 1)} m × ${de(r.geo.D, r.geo.D < 10 ? 2 : 1)} m</b></div>
         <div class="tr"><span>Oberfläche · Hüllenstoff</span><b>${de(r.geo.S, r.geo.S < 10 ? 1 : 0)} m² · ${de(d.huelle_gm2)} g/m²</b></div>
         <div class="tr"><span>Prallhöhe · Füllung am Boden</span><b>${de(r.prallhoehe)} m · ${de(r.fill * 100)} %</b></div>
-        <div class="tr"><span>Antrieb</span><b>${d.antrieb.n} × ${fp(d.antrieb.kW * 1000)} ${{ E: 'elektrisch', V: 'Verbrenner', S: 'Solar + Akku', H: 'Hybrid' }[d.antrieb.art]}</b></div>
+        <div class="tr"><span>Antrieb</span><b>${d.antrieb.n} Motoren × ${fp(d.antrieb.kW * 1000)} ${{ E: 'elektrisch', V: 'Verbrenner', S: 'Solar + Akku', H: 'Hybrid' }[d.antrieb.art]}</b></div>
         <div class="tr"><span>v max · Reise · Leistung Reise</span><b>${de(r.vmax_kmh)} · ${de(r.v_reise_kmh)} km/h · ${fp(r.Preise)}</b></div>
         <div class="tr"><span>Fahrdauer · Reichweite (Windstille)</span><b>${fh(r.dauer_h)} · ${fkm(r.reichweite_km)}</b></div>
         <div class="tr"><span>Statische Gipfelhöhe</span><b>${de(Math.min(r.gipfel, 9999))} m</b></div>

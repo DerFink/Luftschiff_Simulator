@@ -1,3 +1,4 @@
+// 2026-10-13 22:15 · core.js 0.9: Motorgondeln nach fester Regel (Paare seitlich, ungerade Zahl ⇒ Mittelgondel, Sonderfall Motorpaar in Mittelgondel)
 // 2026-10-13 21:00 · core.js 0.8: Gasraum-Anteil überschreibbar (LZ 120 aus Windkanalmodell)
 //                    Widerstand, Leistung nach Burgess, Gipfelhöhe, Leitwerk im Überschlag, Speicher-Code)
 /* =================================================================================================
@@ -332,6 +333,21 @@
        k = 0,010 Motoren im Rumpf                                                                      */
   const NACELLE = { O: 0.063, V: 0.036 };
   function kNacelle(a) { return a.lage === 'I' ? 0.01 : NACELLE[a.mg || 'V']; }
+  /* Aufteilung der Motoren auf Motorgondeln am Rumpf (Regel des Nutzers, 13.10.2026):
+       – Motoren werden immer paarweise angeordnet: je ein Motor links und rechts, beide auf derselben x-Lage.
+       – Bei ungerader Motorzahl sitzt ein Motor in einer Gondel mittig unter der Hülle.
+       – Sonderfall: ein Motorpaar gemeinsam in einer Gondel mittig unter der Hülle (z. B. LZ 120 hinten).
+         Gespeichert wird das als gondeln = n − 1 bei gerader Motorzahl n.
+     Rückgabe: g = Zahl der Gondeln, paare = Zahl der seitlichen Paare, mitte = Motoren in der Mittelgondel (0, 1 oder 2).
+     Für Motoren an der Gondel oder am Heck bleibt es wie bisher (eine Widerstandsfläche je Motor). */
+  function nacelles(a) {
+    const n = Math.max(1, a.n | 0);
+    if (a.lage !== 'R') return { g: Math.max(1, a.gondeln || n), paare: 0, mitte: 0 };
+    const mpaar = n >= 2 && n % 2 === 0 && a.gondeln === n - 1;   // Sonderfall Motorpaar in der Mittelgondel
+    const mitte = mpaar ? 2 : n % 2;
+    const paare = (n - mitte) / 2;
+    return { g: 2 * paare + (mitte ? 1 : 0), paare, mitte };
+  }
   function dragCoeff(d, geo, tl, v, rho) {
     const Re = Math.max(v, 0.5) * geo.L / NU0 * (rho / 1.225);
     const cf = cfOf(Re), LD = geo.L / geo.D;
@@ -340,7 +356,7 @@
     const g = gondola(d, geo, d._hang, v);
     const gon = g.CdA / geo.Vs;
     // Motorgondeln: Zahl der Gondeln (z. B. LZ 120: 4 Motoren in 3 Gondeln), Widerstand ~ (Leistung je Gondel)^(2/3)
-    const ant = d.antrieb, ng = Math.max(1, ant.gondeln || ant.n), Pg = ant.n * Math.max(ant.kW, 0.01) / ng;
+    const ant = d.antrieb, ng = nacelles(ant).g, Pg = ant.n * Math.max(ant.kW, 0.01) / ng;
     const engines = ng * kNacelle(ant) * Math.pow(Pg, 2 / 3) / geo.Vs;
     const seile = g.ropes ? g.ropes.CdA / geo.Vs : 0;
     const extra = (d.anbauten || 0) / geo.Vs;
@@ -606,7 +622,7 @@
         const kopf = 'Maße ' + nn(G.l) + ' × ' + nn(G.b) + ' × ' + nn(G.h) + ' m, Stirnfläche ' + nn(G.b * G.h) + ' m², Re = ' + n(G.Re / 1e6, 1) + ' Mio., C_f = ' + n(G.cf, 4) + (G.ga > 0 ? '' : ', an der Hülle · 0,8');
         if (G.form_t === 'T') return kopf + '; Tropfenform: C_D = C_f · [3·(l/d) + 4,5·(d/l)^0,5 + 21·(d/l)²] = ' + n(G.cd, 3) + ' ⇒ C_D·A = ' + nn(G.CdA) + ' m², / V^(2/3)';
         return kopf + '; Form C_D ' + n(G.cd, 2) + ' · Stirnfläche = ' + nn(G.form) + ' m² + Reibung C_f · benetzte Fläche ' + nn(2 * (G.b + G.h) * G.l) + ' m² = ' + nn(G.fric) + ' m² ⇒ ' + nn(G.CdA) + ' m², / V^(2/3)'; })(), n(dr.gon, 4)],
-      ['Motorgondeln', Math.max(1, a.gondeln || a.n) + ' Gondel(n) · ' + n(kNacelle(a), 3) + ' (' + (a.lage === 'I' ? 'im Rumpf' : a.mg === 'O' ? 'offen mit Kühler, abgeglichen an LZ 126' : 'verkleidet, bestätigt am Zeppelin NT') + ') · (P je Gondel ' + nn(a.n * a.kW / Math.max(1, a.gondeln || a.n)) + ' kW)^(2/3) / V^(2/3)', n(dr.engines, 4)],
+      ['Motorgondeln', (() => { const N = nacelles(a); return N.g + ' Gondel(n)' + (a.lage === 'R' ? ' (' + N.paare + ' Paar(e) seitlich' + (N.mitte ? ', Mittelgondel mit ' + N.mitte + ' Motor(en)' : '') + ')' : ''); })() + ' · ' + n(kNacelle(a), 3) + ' (' + (a.lage === 'I' ? 'im Rumpf' : a.mg === 'O' ? 'offen mit Kühler, abgeglichen an LZ 126' : 'verkleidet, bestätigt am Zeppelin NT') + ') · (P je Gondel ' + nn(a.n * a.kW / nacelles(a).g) + ' kW)^(2/3) / V^(2/3)', n(dr.engines, 4)],
       ['Seile', r.gondel.ropes ? r.gondel.ropes.n + ' · 1,2 · Ø ' + nn(r.gondel.ropes.dmm) + ' mm · ' + nn(r.gondel.ropes.len) + ' m (Ø aus 2-facher Last ' + m(d._hang) + ' bei 60 N/mm²) / V^(2/3)' : 'keine außen (Gondel an der Hülle)', n(dr.seile, 4)],
       ['Zusatzfläche', nn(d.anbauten || 0) + ' m² / V^(2/3)', n(dr.extra, 4)],
       ['Summe', 'C_D bezogen auf V^(2/3)', n(dr.total, 4)],
@@ -679,7 +695,7 @@
     p.push('K:' + d.gondel + (d.gform ? ',' + d.gform : '') + (d.gabstand != null ? ',' + num(d.gabstand) : '') + (d.gseile ? ',' + d.gseile : ''), 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
     // Antrieb: Art, Zahl, kW je Motor, Lage, η, Energie (kWh, Wh/kg bzw. kg Kraftstoff, sfc), Motorgondeln, kg/kW
-    p.push('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (a.gondeln && a.gondeln !== a.n ? a.gondeln : '') + ',' + (a.kgkW ? num(a.kgkW) : '') + ',' + (a.mg === 'O' ? 'O' : ''));
+    p.push('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (nacelles(a).g !== a.n ? nacelles(a).g : '') + ',' + (a.kgkW ? num(a.kgkW) : '') + ',' + (a.mg === 'O' ? 'O' : ''));
     if (d.latten && d.latten.len) p.push('LA:' + d.latten.n + ',' + num(d.latten.len));
     p.push('S:' + num(d.v_reise), 'BL:' + num(d.ballast));
     if (d.nutzlast) p.push('NL:' + num(d.nutzlast));
@@ -759,8 +775,8 @@
   }
 
   const LSCore = {
-    VERSION: '0.8', G0, LB, FT, HP,
-    atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nose, noseNeed,
+    VERSION: '0.9', G0, LB, FT, HP,
+    atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nacelles, nose, noseNeed,
     dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSCore;

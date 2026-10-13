@@ -1,4 +1,5 @@
-<!-- 2026-10-13 23:20 · Build 2026-10-13.9: Überschrift der Schieberegler in derselben Zeile wie der Wert, Selbstdrehung ein/aus, Flächengewicht Leitwerk, 1 Flosse unten, ungerader Motor am Heck
+<!-- 2026-10-14 00:30 · ENTWURF: eckigere Knöpfe, Schalter Schnittansicht
+     2026-10-13 23:20 · Build 2026-10-13.9: Überschrift der Schieberegler in derselben Zeile wie der Wert, Selbstdrehung ein/aus, Flächengewicht Leitwerk, 1 Flosse unten, ungerader Motor am Heck
      2026-10-13 22:15 · Build 2026-10-13.8: Schrittleiste mit Pfeilen, Mausrad und Ziehen seitlich scrollbar; Einheiten (kg/Anzahl) an allen Zahlen; Mittelgondel für Motorpaar
      2026-10-13 21:05 · Build 2026-10-13.7: LZ 120 nach Windkanalmodell, Motorenpaare auf gleicher Lage, Pfeilung bis 75°
      2026-10-13 20:30 · Build 2026-10-13.5: Quellen im Rechenweg, Gondel-Reibung nach Reynolds-Zahl, Tropfenform
@@ -36,12 +37,12 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 .top .lnk{color:var(--acc);font-weight:700;font-size:14px;white-space:nowrap}
 .scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .btns{flex:none;padding:10px 14px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px;border-top:1px solid var(--line);background:#fff}
-.btn{flex:1;text-align:center;padding:12px 4px;border-radius:13px;font-weight:700;font-size:14px;white-space:nowrap}
+.btn{flex:1;text-align:center;padding:12px 4px;border-radius:7px;font-weight:700;font-size:14px;white-space:nowrap}
 .btn.p{background:var(--acc);color:#fff}.btn.s{background:var(--acc-soft);color:var(--acc)}
 .btn:disabled{opacity:.45}
 /* Auswahl */
 .grp{padding:10px 16px 2px;font-size:11.5px;font-weight:700;color:var(--mut);letter-spacing:.06em;text-transform:uppercase}
-.card{margin:5px 14px;border:1px solid var(--line);border-radius:13px;padding:7px 10px;display:flex;align-items:center;gap:10px;width:calc(100% - 28px);text-align:left}
+.card{margin:5px 14px;border:1px solid var(--line);border-radius:7px;padding:7px 10px;display:flex;align-items:center;gap:10px;width:calc(100% - 28px);text-align:left}
 .card b{font-size:14.5px;display:block}.card span{font-size:12px;color:var(--mut)}
 .card.sel{border-color:var(--acc);background:var(--acc-soft)}
 .card canvas{flex:none}
@@ -49,10 +50,11 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 /* Vorschau und Eckdaten */
 .view{flex:none;height:30vh;min-height:180px;max-height:260px;background:linear-gradient(var(--sky1),var(--sky2));position:relative;overflow:hidden}
 .view.klein{height:22vh;min-height:140px}
-.pill{position:absolute;font-size:11px;color:#4b6077;background:rgba(255,255,255,.82);padding:3px 8px;border-radius:9px;pointer-events:none}
+.pill{position:absolute;font-size:11px;color:#4b6077;background:rgba(255,255,255,.82);padding:3px 8px;border-radius:5px;pointer-events:none}
 /* Schalter für die Selbstdrehung der 3D-Vorschau */
-.rot{position:absolute;left:8px;top:8px;z-index:3;font-size:11.5px;font-weight:600;color:#4b6077;background:rgba(255,255,255,.88);padding:4px 9px;border-radius:9px}
+.rot{position:absolute;left:8px;top:8px;z-index:3;font-size:11.5px;font-weight:600;color:#4b6077;background:rgba(255,255,255,.88);padding:4px 9px;border-radius:5px}
 .rot.on{color:var(--acc)}
+.rot.rr{left:auto;right:8px}
 .kpis{flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line);background:#fbfcfd}
 .k{padding:5px 2px 4px;text-align:center;border-right:1px solid var(--line);transition:background .6s}
 .k:nth-child(4n){border-right:none}.k:nth-child(-n+4){border-bottom:1px solid var(--line)}
@@ -70,18 +72,18 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 .sarr.l{left:0;background:linear-gradient(90deg,var(--card) 60%,rgba(255,255,255,0))}
 .sarr.r{right:0;background:linear-gradient(270deg,var(--card) 60%,rgba(255,255,255,0))}
 .sarr.off{opacity:.25;pointer-events:none}
-.chip{font-size:12px;padding:5px 10px;border-radius:12px;background:#eef2f6;color:#4a5866;flex:none}
+.chip{font-size:12px;padding:5px 10px;border-radius:5px;background:#eef2f6;color:#4a5866;flex:none}
 .chip.done{background:#e3f4ea;color:#1b7a47}.chip.cur{background:var(--acc);color:#fff;font-weight:700}
 .body{padding:10px 16px 16px;display:flex;flex-direction:column;gap:9px}
 .q{font-size:15.5px;font-weight:700}
 .lab{font-size:12.5px;color:var(--mut);font-weight:600}
-.seg{display:flex;background:#eef2f6;border-radius:11px;padding:3px;gap:2px}
-.seg button{flex:1;text-align:center;font-size:13px;padding:7px 2px;border-radius:9px;color:#4a5866}
+.seg{display:flex;background:#eef2f6;border-radius:7px;padding:3px;gap:2px}
+.seg button{flex:1;text-align:center;font-size:13px;padding:7px 2px;border-radius:5px;color:#4a5866}
 .seg button.on{background:#fff;color:var(--acc);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .seg button:disabled{opacity:.4}
 .desc{font-size:12.3px;color:#4a5866;line-height:1.35}
-.sug{background:var(--acc-soft);border-radius:12px;padding:8px 11px;font-size:12.8px;line-height:1.38}.sug b{color:var(--acc)}
-.info{background:#f3f5f8;border-radius:10px;padding:8px 10px;font-size:12.3px;line-height:1.38;color:#3a4a5c}
+.sug{background:var(--acc-soft);border-radius:6px;padding:8px 11px;font-size:12.8px;line-height:1.38}.sug b{color:var(--acc)}
+.info{background:#f3f5f8;border-radius:6px;padding:8px 10px;font-size:12.3px;line-height:1.38;color:#3a4a5c}
 .warn{background:var(--warn-soft);border-left:4px solid var(--warn);border-radius:8px;padding:7px 10px;font-size:12.3px;line-height:1.35}
 .num{display:flex;flex-direction:column;gap:3px}
 .num{margin-top:8px}
@@ -89,14 +91,14 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 .num .hd .lab{flex:1;line-height:1.25}
 .num .hd>span:last-child{flex:none;white-space:nowrap}
 .num .rg{margin-top:-2px}
-.num .hd input{width:96px;text-align:right;font:inherit;font-weight:700;border:1px solid var(--line);border-radius:8px;padding:3px 6px}
+.num .hd input{width:96px;text-align:right;font:inherit;font-weight:700;border:1px solid var(--line);border-radius:5px;padding:3px 6px}
 .num .hd .u{color:var(--mut);font-size:12px;margin-left:4px}
 .num .rg{position:relative;height:26px}
 .num input[type=range]{width:100%;accent-color:var(--acc);height:26px}
 .num .mark{position:absolute;top:2px;width:3px;height:22px;background:#7aa7de;border-radius:2px;pointer-events:none;transform:translateX(-1px)}
 .num .sl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
-.chips button{font-size:12px;padding:5px 10px;border-radius:12px;background:#eef2f6;color:#4a5866}
+.chips button{font-size:12px;padding:5px 10px;border-radius:5px;background:#eef2f6;color:#4a5866}
 /* Ergebnis */
 .sec{font-size:11.5px;font-weight:700;color:var(--mut);letter-spacing:.06em;text-transform:uppercase;padding:10px 16px 3px}
 .mg{margin:0 14px}
@@ -110,7 +112,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 .code{margin:6px 14px;background:#1d2733;color:#d8f0ff;font-family:Consolas,Menlo,monospace;font-size:11px;border-radius:10px;padding:9px 10px;line-height:1.42;word-break:break-all;user-select:all}
 /* Rechenweg */
 .rw{margin:0 14px}
-.rw details{border:1px solid var(--line);border-radius:10px;margin:5px 0;background:#fbfcfd}
+.rw details{border:1px solid var(--line);border-radius:6px;margin:5px 0;background:#fbfcfd}
 .rw summary{font-size:13.2px;font-weight:700;padding:8px 10px;cursor:pointer}
 .rz{display:grid;grid-template-columns:1fr auto;gap:1px 8px;padding:6px 10px;border-top:1px dashed var(--line);font-size:12.2px;line-height:1.35}
 .rz b{grid-column:1}.rz em{grid-column:2;grid-row:1/3;font-style:normal;font-weight:700;text-align:right;align-self:center;max-width:9.5em}
@@ -118,7 +120,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 .rz i.q{grid-column:1/3;font-style:normal;font-size:10.5px;color:#8a96a3}
 /* Dialog */
 .modal{position:absolute;inset:0;background:rgba(20,30,45,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:5}
-.modal .box{background:#fff;border-radius:16px;padding:16px;width:100%;display:flex;flex-direction:column;gap:10px}
+.modal .box{background:#fff;border-radius:9px;padding:16px;width:100%;display:flex;flex-direction:column;gap:10px}
 .modal textarea{width:100%;height:110px;font-family:Consolas,Menlo,monospace;font-size:12px;border:1px solid var(--line);border-radius:10px;padding:8px}
 .toast{position:absolute;left:50%;bottom:86px;transform:translateX(-50%);background:#1d2733;color:#fff;font-size:13px;padding:8px 14px;border-radius:10px;z-index:6;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.on{opacity:.95}
@@ -303,7 +305,7 @@ function showBau() {
   S.screen = 'bau';
   const st = STEPS[S.step], d = S.d;
   $('#app').innerHTML = `<div class="top"><button class="lnk" id="bBack">‹ Auswahl</button><span class="t">${escapeHtml(d.name)}</span><button class="lnk" id="bErg">Ergebnis ›</button></div>
-    <div class="view" id="view"><button class="rot" id="bRot"></button><div class="pill" style="left:8px;bottom:7px">1 Finger drehen · 2 Finger zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
+    <div class="view" id="view"><button class="rot" id="bRot"></button><button class="rot rr" id="bCut"></button><div class="pill" style="left:8px;bottom:7px">1 Finger drehen · 2 Finger zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
     <div class="kpis" id="kpis"></div>
     <div class="stepw"><button class="sarr l" id="sL" aria-label="Schritte nach links">‹</button><div class="steps" id="steps">${STEPS.map((s, i) => `<button class="chip ${i === S.step ? 'cur' : i < S.step ? 'done' : ''}" data-i="${i}">${i < S.step ? '✓ ' : ''}${s.titel}</button>`).join('')}</div><button class="sarr r" id="sR" aria-label="Schritte nach rechts">›</button></div>
     <div class="scroll"><div class="body" id="body"></div></div>
@@ -462,7 +464,7 @@ function showErgebnis() {
   const block = gs => gs.map(([g, c, it]) => { it = it.filter(x => x[1] > 0); if (!it.length) return ''; return `<div class="mrow h"><span>${g}</span><span>${fm(it.reduce((s, x) => s + x[1], 0))}</span></div>` + it.map(([n, v]) => line(n, v, c)).join(''); }).join('');
   const code = C.encode(d);
   $('#app').innerHTML = `<div class="top"><button class="lnk" id="bBack">‹ Auswahl</button><span class="t">${escapeHtml(d.name)}</span><button class="lnk" id="bEdit">Bearbeiten</button></div>
-    <div class="view klein" id="view"><button class="rot" id="bRot"></button><div class="pill" style="left:8px;bottom:7px">drehen · zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
+    <div class="view klein" id="view"><button class="rot" id="bRot"></button><button class="rot rr" id="bCut"></button><div class="pill" style="left:8px;bottom:7px">drehen · zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
     <div class="kpis" id="kpis"></div>
     <div class="scroll">
       ${r.warn.map(w => `<div class="warn" style="margin:8px 14px 0">⚠ ${w}</div>`).join('')}
@@ -542,6 +544,11 @@ function wireRot() {
   const show = () => { const on = rotOn(); b.textContent = on ? '⟳ Drehen: an' : '⟳ Drehen: aus'; b.classList.toggle('on', on); if (viewer) viewer.setAutoRotate(on); };
   b.onclick = () => { try { localStorage.setItem('ls_drehen', rotOn() ? '0' : '1'); } catch (e) {} show(); };
   show();
+  // Schnittansicht: vordere Hälfte der Hülle weg, Gerüst, Gaszellen, Ballonets und Kiel sichtbar
+  const c = $('#bCut'); if (!c) return;
+  const showC = () => { c.textContent = S.schnitt ? '◧ Schnitt: an' : '◧ Schnitt: aus'; c.classList.toggle('on', !!S.schnitt); if (viewer) viewer.setCutaway(!!S.schnitt); };
+  c.onclick = () => { S.schnitt = !S.schnitt; showC(); };
+  showC();
 }
 
 /* ---------------- 7. Start ---------------- */

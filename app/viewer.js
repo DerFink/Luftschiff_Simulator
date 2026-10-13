@@ -1,3 +1,4 @@
+// 2026-10-14 00:30 · viewer.js 0.7 (ENTWURF): Gondel als Körper nach Seitenriss (Stromlinie/Tropfen/Kasten, Fenster, Abstand mit Seilen), Schnittansicht (Gerüst, Gaszellen, Ballonets, Kiel)
 // 2026-10-13 23:20 · viewer.js 0.6: Motorpaar der Mittelgondel hintereinander mit einem Propeller (LZ 120), einzelner Motor am Heck (Zeppelin NT), 1 Flosse unten, Selbstdrehung schaltbar
 // 2026-10-13 22:15 · viewer.js 0.5: Motorgondeln am Rumpf als Körper mit Strebe; Paare seitlich auf gleicher x-Lage, Mittelgondel mittig unter der Hülle (1 Motor oder Motorpaar)
 // 2026-10-13 21:05 · viewer.js 0.4: Motorenpaare auf gleicher Lage in Längsrichtung, ungerade Motorgondel hinten mittig
@@ -41,6 +42,7 @@ export function createViewer(host) {
   controls.addEventListener('end', () => { if (autoOn) resumeTimer = setTimeout(() => controls.autoRotate = true, 3000); });
 
   let ship = null;   // aktuelle Gruppe mit allen Teilen
+  let schnitt = false, last = null;   // Schnittansicht, letztes Rechenergebnis (zum Neuzeichnen)
 
   /* ---------- Größe an den Rahmen anpassen ---------- */
   function resize() {
@@ -52,6 +54,114 @@ export function createViewer(host) {
 
   /* ---------- Zeichenschleife ---------- */
   (function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+  /* ---------- Gondelkörper nach Seitenriss ----------
+     Lofting aus Querschnitten entlang der Länge (t = 0 Bug … 1 Heck):
+       Breite  w(t): Grundriss je Form (T Tropfen wie Jaray, S Stromlinie, E Kasten mit runden Ecken)
+       Höhe    h(t): Oberkante gerade an der Hülle, Unterkante flach, Bug rund, Heck läuft nach oben aus
+       Querschnitt: Superellipse (eckig mit runden Ecken), dazu ein Fensterband auf beiden Seiten.        */
+  function gondelKoerper(len, w, h, form) {
+    const NS = 40, NK = 28, pos = [], idx = [];
+    const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const W = t => form === 'T' ? Math.pow(Math.sin(Math.PI * Math.pow(t, 0.62)), 0.75)            // Tropfen: vorn voll, hinten spitz
+                 : form === 'S' ? Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 0.9) / 1.1, 2.6)), 0.5)   // Stromlinie
+                 : Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 1), 8)), 0.25);             // Kasten
+    const H = t => form === 'E' ? Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 1), 10)), 0.2)
+                 : ss(0, 0.16, t) * (1 - 0.8 * ss(0.62, 1, t)) * 0.97 + 0.03;
+    const ex = form === 'E' ? 6 : 3.2;  // Superellipse: je größer, desto eckiger
+    for (let i = 0; i <= NS; i++) {
+      const t = i / NS, hw = Math.max(1e-3, w / 2 * W(t)), hh = Math.max(1e-3, h * H(t));
+      for (let k = 0; k < NK; k++) {
+        const a = k / NK * 2 * Math.PI, c = Math.cos(a), sn = Math.sin(a);
+        const cy = Math.sign(c) * Math.pow(Math.abs(c), 2 / ex), cz = Math.sign(sn) * Math.pow(Math.abs(sn), 2 / ex);
+        pos.push(t * len, -hh / 2 + cy * hh / 2, cz * hw);
+      }
+    }
+    for (let i = 0; i < NS; i++) for (let k = 0; k < NK; k++) {
+      const a = i * NK + k, b = i * NK + (k + 1) % NK, c2 = a + NK, d2 = b + NK;
+      idx.push(a, c2, b, b, c2, d2);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+    const grp = new THREE.Group();
+    grp.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: COL.gondel, roughness: 0.45, side: THREE.DoubleSide })));
+    // Fensterband: dunkle Felder auf beiden Seiten, im vorderen und mittleren Teil
+    const fm = new THREE.MeshStandardMaterial({ color: 0x35475c, roughness: 0.3 });
+    const nF = Math.max(2, Math.round(len / (h * 0.9)));
+    for (let j = 0; j < nF; j++) {
+      const t = 0.12 + 0.6 * (j + 0.5) / nF; if (H(t) < 0.6) continue;
+      const fw = len * 0.6 / nF * 0.7, fh = h * H(t) * 0.28, hw = w / 2 * W(t);
+      for (const side of [-1, 1]) {
+        const f = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), fm);
+        f.position.set(t * len, -h * H(t) * 0.38, side * (hw * 1.005 + 0.002)); if (side < 0) f.rotation.y = Math.PI; grp.add(f);
+      }
+    }
+    return grp;
+  }
+
+  /* ---------- Schnittansicht: Innenleben ----------
+     Starr:     Ringe (Vieleck) und Längsträger, Laufgang unten, Gaszellen zwischen den Ringen
+     Halbstarr: Kiel als Dreiecksfachwerk unten, Ballonets vorn und hinten
+     Prall:     Ballonets vorn und hinten (Volumen aus dem Ballonet-Anteil)                               */
+  function innenleben(g, d, geo, R, Ls, rad, X) {
+    const L = geo.L;
+    if (d.bauweise === 'S') {
+      const nZ = d.zellen || Math.max(4, Math.min(20, Math.round(L / 10)));      // Gaszellen, sonst etwa alle 10 m ein Ring
+      const nE = d.traeger || 17;                                                // Längsträger (Ecken des Ringvielecks)
+      const x0 = 0.03, x1 = 0.97, xs = Array.from({ length: nZ + 1 }, (_, i) => x0 + (x1 - x0) * i / nZ);
+      const gm = new THREE.LineBasicMaterial({ color: 0x4f5a68 });
+      for (const x of xs) {                                                      // Ringe als Vieleck
+        const rr = rad(x) * 0.985, pts = [];
+        for (let k = 0; k <= nE; k++) { const th = k / nE * 2 * Math.PI; pts.push(new THREE.Vector3(X(x), rr * Math.cos(th), rr * Math.sin(th))); }
+        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gm));
+      }
+      for (let k = 0; k < nE; k++) {                                             // Längsträger
+        const th = k / nE * 2 * Math.PI, pts = [];
+        for (let i = 0; i <= 60; i++) { const x = 0.01 + 0.98 * i / 60, rr = rad(x) * 0.985; pts.push(new THREE.Vector3(X(x), rr * Math.cos(th), rr * Math.sin(th))); }
+        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gm));
+      }
+      const cm = new THREE.MeshStandardMaterial({ color: 0xe8d9a8, roughness: 0.9, side: THREE.DoubleSide });
+      for (let i = 0; i < nZ; i++) {                                             // Gaszellen (hintere Hälfte, prall gefüllt)
+        const pc = [], a = xs[i], b = xs[i + 1];
+        for (let j = 0; j <= 16; j++) { const t = j / 16, x = a + (b - a) * t; pc.push(new THREE.Vector2(Math.max(1e-4, rad(x) * 0.95 * Math.pow(Math.sin(Math.PI * t), 0.18)), X(x))); }
+        const cell = new THREE.Mesh(new THREE.LatheGeometry(pc, 32, Math.PI / 2, Math.PI), cm);
+        cell.rotation.z = -Math.PI / 2; g.add(cell);
+      }
+      // Laufgang im Kiel: folgt der Unterseite der Kontur (innen)
+      const lp = []; for (let i = 0; i <= 40; i++) { const x = 0.08 + 0.84 * i / 40; lp.push(new THREE.Vector3(X(x), -rad(x) * 0.9, 0)); }
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lp), 80, 0.035 * R, 6), new THREE.MeshStandardMaterial({ color: 0x8a6d4a })));
+      return;
+    }
+    if (d.bauweise === 'H') {                                                    // Kiel: Dreiecksfachwerk
+      const km = new THREE.LineBasicMaterial({ color: 0x4f5a68 }), xa = 0.08, xb = 0.85, nF = 30, ptsA = [], ptsB = [], ptsC = [];
+      for (let i = 0; i <= nF; i++) {
+        const x = xa + (xb - xa) * i / nF, rr = rad(x), yb = -rr * 0.97, kh = Math.min(0.18 * R, rr * 0.4);
+        ptsA.push(new THREE.Vector3(X(x), yb, -kh * 0.6)); ptsB.push(new THREE.Vector3(X(x), yb, kh * 0.6)); ptsC.push(new THREE.Vector3(X(x), yb + kh, 0));
+        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([ptsA[i], ptsB[i], ptsC[i], ptsA[i]]), km));
+      }
+      for (const P of [ptsA, ptsB, ptsC]) g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(P), km));
+    }
+    // Ballonets vorn und hinten: unterer Kreisabschnitt, Volumen = Ballonet-Anteil · V
+    const bo = (d.ballonet ?? 25) / 100; if (!(bo > 0) || d.bauweise === 'O') return;
+    const segFrac = al => (2 * al - Math.sin(2 * al)) / (2 * Math.PI);           // Flächenanteil des Kreisabschnitts
+    const alpha = f => { let lo = 0, hi = Math.PI; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; segFrac(m) < f ? lo = m : hi = m; } return lo; };
+    const bm = new THREE.MeshStandardMaterial({ color: 0x9cc3e8, roughness: 0.8, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
+    for (const [a, b] of [[0.12, 0.42], [0.55, 0.85]]) {
+      // Füllgrad f0 so, dass das Ballonet die Hälfte des Ballonet-Volumens hat (Enden laufen weich aus)
+      let I = 0; const NI = 50; for (let i = 0; i < NI; i++) { const t = (i + 0.5) / NI, x = a + (b - a) * t; I += Math.pow(Math.sin(Math.PI * t), 0.5) * Math.PI * Math.pow(rad(x) * L / Ls / 2 * 2, 2) / 1 * (b - a) * L / NI; }
+      const f0 = Math.min(0.9, bo * geo.V / 2 / I);
+      const NS = 30, NK = 20, pos = [], idx = [];
+      for (let i = 0; i <= NS; i++) {
+        const t = i / NS, x = a + (b - a) * t, rr = rad(x) * 0.97, al = alpha(Math.max(1e-4, f0 * Math.pow(Math.sin(Math.PI * t), 0.5)));
+        for (let k = 0; k < NK; k++) { const q = -al + 2 * al * k / (NK - 1); pos.push(X(x), -rr * Math.cos(q), rr * Math.sin(q)); }   // Bogen
+        for (let k = 0; k < NK; k++) { const q = al - 2 * al * k / (NK - 1); pos.push(X(x), -rr * Math.cos(al), rr * Math.sin(q)); }   // Deckfläche
+      }
+      const M = 2 * NK;
+      for (let i = 0; i < NS; i++) for (let k = 0; k < M; k++) { const p0 = i * M + k, p1 = i * M + (k + 1) % M; idx.push(p0, p0 + M, p1, p1, p0 + M, p1 + M); }
+      const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.setIndex(idx); bg.computeVertexNormals();
+      g.add(new THREE.Mesh(bg, bm));
+    }
+  }
 
   /* ---------- Luftschiff aus dem Rechenergebnis bauen ----------
      Maßstab: Rumpflänge = 10 Einheiten; x-Achse = Längsachse (Nase bei −5), y nach oben.          */
@@ -65,14 +175,16 @@ export function createViewer(host) {
     const pts = []; const N = 120;
     for (let i = 0; i <= N; i++) { const x = i / N; pts.push(new THREE.Vector2(Math.max(rad(x), 1e-4), X(x))); }
     const rigid = d.bauweise === 'S';
+    const cut = schnitt;               // Schnittansicht an/aus
     const hullCol = rigid ? COL.huelleStarr : (geo.V < 5000 ? COL.huelleKlein : COL.huellePrall);
-    const hull = new THREE.Mesh(new THREE.LatheGeometry(pts, 64),
-      new THREE.MeshStandardMaterial({ color: hullCol, roughness: 0.75, metalness: 0.05 }));
+    // Schnittansicht: nur die vom Betrachter abgewandte Hälfte (z ≤ 0) zeichnen, Innenseite sichtbar
+    const hull = new THREE.Mesh(cut ? new THREE.LatheGeometry(pts, 64, Math.PI / 2, Math.PI) : new THREE.LatheGeometry(pts, 64),
+      new THREE.MeshStandardMaterial({ color: hullCol, roughness: 0.75, metalness: 0.05, side: cut ? THREE.DoubleSide : THREE.FrontSide }));
     hull.rotation.z = -Math.PI / 2;     // Drehachse y → x
     g.add(hull);
 
     // Nur Starrschiffe: Längsträger zeichnen sich als Striche auf der Hülle ab, dazu Hauptringe
-    if (rigid) {
+    if (rigid && !cut) {
       const mat = new THREE.LineBasicMaterial({ color: COL.gerippe, transparent: true, opacity: 0.55 });
       const nLong = 18;
       for (let k = 0; k < nLong; k++) {
@@ -86,6 +198,8 @@ export function createViewer(host) {
         g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ring), mat));
       }
     }
+
+    if (cut) innenleben(g, d, geo, R, Ls, rad, X);
 
     // Leitwerk: Winkel der Flossen (0 = oben, gegen den Uhrzeigersinn von hinten gesehen)
     const n = d.ltw.n, an = d.ltw.anord;
@@ -124,10 +238,22 @@ export function createViewer(host) {
       }
       g.userData.motorY = yb - drop - h * 0.4; g.userData.motorX = xg - len * 0.3; g.userData.motorZ = w / 2 + 0.5 * s;
     } else if (d.gondel === 'F' || d.gondel === 'I') {   // Gondel fest am Rumpf bzw. kleine Führergondel
-      const len = (d.gondel === 'I' ? 0.06 : Math.min(0.3, 0.12 + 0.004 * pers)) * Ls, h = Math.max(0.12 * R, 2.2 * s), w = Math.max(0.2 * R, 2.4 * s);
-      const gm = new THREE.Mesh(new THREE.CapsuleGeometry(Math.min(h, w) / 2, len, 6, 12), new THREE.MeshStandardMaterial({ color: COL.gondel, roughness: 0.5 }));
-      gm.rotation.z = Math.PI / 2; gm.position.set(X(d.gondel === 'I' ? 0.18 : 0.38), yb - h * 0.25, 0); g.add(gm);
-      g.userData.motorY = yb - h * 0.2; g.userData.motorX = X(0.4); g.userData.motorZ = w / 2 + 0.6 * s;
+      // Maße aus dem Rechenkern (r.gondel: Länge, Breite, Höhe, Abstand zur Hülle in m)
+      const G = r.gondel, len = G.l * s, w = G.b * s, h = G.h * s, ga = (G.ga || 0) * s;
+      const xc = X(d.gondel === 'I' ? 0.18 : 0.33);
+      const top = rad(0.33 + 0) > 0 ? -rad((xc / Ls) + 0.5) + 0.02 * R : yb;     // Oberkante an der Hülle
+      const gm = gondelKoerper(len, w, h, d.gondel === 'I' ? 'S' : (d.gform || 'E'));
+      gm.position.set(xc - len / 2, top - ga, 0); g.add(gm);
+      if (ga > 0) {                     // Gondel hängt an Seilen unter der Hülle (Blimp)
+        const sm = new THREE.LineBasicMaterial({ color: COL.seil }), nS = (G.ropes && G.ropes.n) || 4;
+        for (let k = 0; k < nS; k++) {
+          const t = nS > 1 ? k / (nS - 1) : 0.5, side = k % 2 ? 1 : -1, xs = xc - len * 0.4 + t * len * 0.8;
+          const xh = xc + (xs - xc) * 1.8, rh = rad(xh / Ls + 0.5);
+          g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(xs, top - ga, side * w * 0.4), new THREE.Vector3(xh, -rh * 0.85, side * rh * 0.5)]), sm));
+        }
+      }
+      g.userData.motorY = top - ga - h * 0.5; g.userData.motorX = xc; g.userData.motorZ = w / 2 + 0.6 * s;
     } else if (d.gondel === 'R') {     // RC: kleine Elektronik-Kapsel
       const gm = new THREE.Mesh(new THREE.BoxGeometry(0.06 * Ls, 0.03 * Ls, 0.03 * Ls), new THREE.MeshStandardMaterial({ color: 0x333a44 }));
       gm.position.set(xg, yb - 0.01 * Ls, 0); g.add(gm);
@@ -198,10 +324,12 @@ export function createViewer(host) {
   return {
     update(result) {
       if (ship) { scene.remove(ship); ship.traverse(o => { o.geometry && o.geometry.dispose(); }); }
-      ship = build(result); scene.add(ship);
+      last = result; ship = build(result); scene.add(ship);
     },
     snapshot() { return renderer.domElement.toDataURL('image/png'); },
     // Selbstdrehung ein- oder ausschalten; von Hand drehen und zoomen geht immer
+    // Schnittansicht ein/aus: vordere Hälfte der Hülle weglassen und das Innere zeigen
+    setCutaway(on) { schnitt = !!on; if (last) this.update(last); },
     setAutoRotate(on) { autoOn = !!on; controls.autoRotate = autoOn; clearTimeout(resumeTimer); },
   };
 }

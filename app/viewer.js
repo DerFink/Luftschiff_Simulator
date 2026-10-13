@@ -1,4 +1,4 @@
-// 2026-10-13 17:20 · viewer.js 0.1: 3D-Vorschau mit Three.js (Rumpf aus Gertler-Kontur, Gerüststriche nur bei Starr,
+// 2026-10-13 19:00 · viewer.js 0.2: Flossen mit Geometrie aus dem Rechenkern (Jones: Spannweite, Wurzel-/Endtiefe)
 //                    Leitwerk 1–6 Flossen inkl. V/umgekehrtes V/Y, Gondelarten, Motoren, Appendix; Selbstdrehung, Touch)
 /* =================================================================================================
    3D-VORSCHAU
@@ -91,14 +91,14 @@ export function createViewer(host) {
     else if (n === 2) angs = an === 'V' ? [Math.PI / 4, -Math.PI / 4] : an === 'A' ? [3 * Math.PI / 4, -3 * Math.PI / 4] : [0, Math.PI];
     else if (n === 3) angs = an === 'L' ? [0, 2 * Math.PI / 3, -2 * Math.PI / 3] : [Math.PI, Math.PI / 3, -Math.PI / 3];
     else { const off = an === 'X' ? Math.PI / n : 0; angs = Array.from({ length: n }, (_, k) => off + k * 2 * Math.PI / n); }
-    // Flossenfläche (m²) aus dem Rechenkern → Spannweite bei Seitenverhältnis ~0,8
-    const Afin = r.tail.Afin * s * s, chord = Math.sqrt(Afin / 0.8), span = 0.8 * chord;
+    // Flossen mit der Geometrie aus dem Rechenkern: Trapez, Hinterkante senkrecht bei xTE·L,
+    // Spannweite b, Wurzeltiefe c_r, Endtiefe c_t (alles in Meter → Einheiten)
+    const T = r.tail, xTE = T.o.xTE, cr = T.cr * s, ct = T.ct * s, span = T.b * s;
     const finMat = new THREE.MeshStandardMaterial({ color: COL.flosse, roughness: 0.6, side: THREE.DoubleSide });
     for (const th of angs) {
-      const xa = 0.97 - chord / Ls, xb = 0.97;
-      const ra = rad(xa), rb = rad(xb);
+      const xb = X(xTE), xa = xb - cr, ra = rad(xTE - cr / Ls), rb = rad(xTE);
       const shape = new THREE.Shape();
-      shape.moveTo(X(xa), ra); shape.lineTo(X(xb), rb); shape.lineTo(X(xb), rb + span); shape.lineTo(X(xa) + chord * 0.45, ra + span * 0.8); shape.closePath();
+      shape.moveTo(xa, ra); shape.lineTo(xb, rb); shape.lineTo(xb, rb + span); shape.lineTo(xb - ct, rb + span); shape.closePath();
       const fin = new THREE.Mesh(new THREE.ShapeGeometry(shape), finMat);
       fin.rotation.x = th;              // Flosse um die Längsachse an ihre Stelle drehen
       g.add(fin);

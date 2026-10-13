@@ -1,4 +1,4 @@
-// 2026-10-13 16:10 · models.js 0.1: die 9 festen Luftschiffe der Auswahl mit Quellen und Annahmen
+// 2026-10-13 18:50 · models.js 0.2: Leitwerksflächen von LZ 126 und C-7 fest aus Burgess Tab. 4, übrige nach Jones
 /* =================================================================================================
    FESTE AUSWAHL
    -------------------------------------------------------------------------------------------------
@@ -27,7 +27,7 @@
         V: 78155,                                                                            // [B] Luftvolumen
         form: { LD: 200 / 27.64, m: 0.42, Cp: cp(78155, 200, 27.64), r0: 0.5, r1: 0.10 },   // [W] Maße, m/r0/r1 [A]
         huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 1500,                   // [A] Bauweise wie L-49 (Stand 1917)
-        ltw: { n: 4, anord: '+', faktor: (2335 + 2870) / 2 / 0.13 / Math.pow(2760000, 2 / 3) }, // [B] Tab. 4
+        ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (2335 + 2870) / 2 * 0.0929 },               // [B] Tab. 4: Mittel senkrecht/waagerecht je Ebene
         gondel: 'F', crew: 30, pax: 0, m_person: 80,                                         // [W]
         antrieb: { art: 'V', n: 5, kW: 298, lage: 'R', eta: 0.72, kraftstoff: 15000, sfc: 0.33, kgkW: 3.5 }, // [G] Leistung; Rest [A]
         v_reise: 100, ballast: 3000,                                                         // [A]
@@ -101,7 +101,7 @@
         V: 5125,
         form: { LD: 59.76 / 12.8, m: 0.42, Cp: cp(5125, 59.76, 12.8), r0: 0.5, r1: 0.10 },
         huelle_gm2: 475, ballonet: 25, prallhoehe: 1219,                                      // [B] 14 oz/yd²; 4.000 ft
-        ltw: { n: 4, anord: '+', faktor: (424 + 536) / 2 / 0.13 / Math.pow(180000, 2 / 3) },   // [B] Tab. 4
+        ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (424 + 536) / 2 * 0.0929 },                 // [B] Tab. 4: Mittel senkrecht/waagerecht je Ebene
         gondel: 'F', crew: 4, pax: 0, m_person: 80,
         antrieb: { art: 'V', n: 2, kW: 112, lage: 'G', eta: 0.65, kraftstoff: 800, sfc: 0.365, kgkW: 3.65 }, // [W]/[B]
         v_reise: 70, ballast: 200,

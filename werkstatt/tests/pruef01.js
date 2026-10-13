@@ -1,4 +1,4 @@
-// 2026-10-13 15:25 · pruef01.js: Quelle der C-Klassen-Nutzlast präzisiert (Klassenangabe, vermutlich H₂)
+// 2026-10-13 19:10 · pruef01.js: Leitwerksflächen aus Burgess Tab. 4 als feste Fläche (A_ebene), Jones-Vergleich C-7
 /* =================================================================================================
    Prüfung des Rechenkerns gegen geschlossene Formeln und gegen Werte aus Burgess (1927).
    Aufruf:  node werkstatt/tests/pruef01.js        (gibt eine Tabelle aus und schreibt pruef01.json)
@@ -60,7 +60,7 @@ const ft3 = Math.pow(C.FT, 3);
     name: 'L-49', bauweise: 'S', gas: 'H2', reinheit: 0.97, V: 164000 / 0.07635 * ft3,
     form: { LD: 196 / 23.98, m: 0.45, Cp: 0.0, r0: 0.5, r1: 0.1 },
     huelle_gm2: 148.5, zellen_gm2: 168.7, werkstoff: 1, prallhoehe: 0,
-    ltw: { n: 4, anord: '+', faktor: (1864 + 2456) / 2 / 0.13 / Math.pow(2100000, 2 / 3) },
+    ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (1864 + 2456) / 2 * 0.0929 },   // Burgess Tab. 4
     gondel: 'F', crew: 20, pax: 0, m_person: 80,
     antrieb: { art: 'V', n: 5, kW: 1100 * C.HP / 5 / 1000, lage: 'R', eta: 0.7, kraftstoff: 58990 * C.LB * 0.9, sfc: 0.365, kgkW: 12000 * C.LB / (1100 * C.HP / 1000) },
     v_reise: 45 * 1.609, ballast: 0,
@@ -89,7 +89,7 @@ const ft3 = Math.pow(C.FT, 3);
     name: 'US Navy C-7', bauweise: 'P', gas: 'He', reinheit: 0.94, V,
     form: { LD: L / D, m: 0.42, Cp, r0: 0.5, r1: 0.1 },
     huelle_gm2: 475, ballonet: 25, prallhoehe: 4000 * C.FT,
-    ltw: { n: 4, anord: '+', faktor: (424 + 536) / 2 / 0.13 / Math.pow(180000, 2 / 3) },
+    ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (424 + 536) / 2 * 0.0929 },     // Burgess Tab. 4
     gondel: 'F', crew: 4, pax: 0, m_person: 80,
     antrieb: { art: 'V', n: 2, kW: 150 * C.HP / 1000, lage: 'G', eta: 0.65, kraftstoff: 1000, sfc: 0.365, kgkW: 6 * C.LB / (C.HP / 1000) },
     v_reise: 70, ballast: 200,
@@ -99,7 +99,7 @@ const ft3 = Math.pow(C.FT, 3);
   const fest = r.mLeer - r.leer.antrieb;
   row('C-7', 'Länge', L, r.geo.L, 'm', 'Wikipedia (196 ft)', 0.01);
   row('C-7', 'Feste Massen ohne Antrieb / D', 0.40, fest / Dm, '-', 'Burgess Kap. II Aufgabe 4 (Blimp)', 0.15);
-  row('C-7', 'Leitwerk senkrecht', 424 * C.FT * C.FT, r.tail.Aplane, 'm²', 'Burgess Tab. 4 (Abgleich)', 0.15);
+  row('C-7', 'Leitwerk nach Jones je Ebene (Vergleich gebaut: Mittel 480 ft²)', 480 * C.FT * C.FT, r.tail.A_jones, 'm²', 'Burgess Tab. 4; Jones liegt bei Blimps 30–55 % darüber', 0.6);
   row('C-7', 'Höchstgeschwindigkeit (2 × 150 PS)', 97, r.vmax_kmh, 'km/h', 'Wikipedia (60 mph, 2 × 150 hp Hispano-Suiza)', 0.10);
   row('C-7', 'Höchstgeschwindigkeit nach Burgess K = 40', Math.cbrt(300 * C.HP * 40 / (1.225 * r.geo.Vs)) * 3.6, r.vmax_kmh, 'km/h', 'Burgess Kap. II', 0.10);
   { const rH = C.compute(Object.assign({}, d, { gas: 'H2', reinheit: 0.97 }));
@@ -115,7 +115,7 @@ const ft3 = Math.pow(C.FT, 3);
     name: 'USS Los Angeles', bauweise: 'S', gas: 'He', reinheit: 0.95, V,
     form: { LD: L / D, m: 0.42, Cp: V / (Math.PI / 4 * D * D * L), r0: 0.5, r1: 0.1 },
     huelle_gm2: 148.5, zellen_gm2: 168.7, werkstoff: 0.85, prallhoehe: 1500,
-    ltw: { n: 4, anord: '+', faktor: (2335 + 2870) / 2 / 0.13 / Math.pow(2760000, 2 / 3) },
+    ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (2335 + 2870) / 2 * 0.0929 },   // Burgess Tab. 4
     gondel: 'F', crew: 30, pax: 0, m_person: 80,
     antrieb: { art: 'V', n: 5, kW: 400 * C.HP / 1000, lage: 'R', eta: 0.72, kraftstoff: 15000, sfc: 0.33, kgkW: 3.5 },
     v_reise: 100, ballast: 3000,

@@ -1,4 +1,4 @@
-# 2026-10-13 18:15 · ablauf01.py: Durchlauf Version 1 im Handyformat (Auswahl → Ergebnis → Baukasten → Speichern → Code laden)
+# 2026-10-13 19:15 · ablauf01.py: zusätzlich Rechenweg (Leitwerk) und Leitwerksschritt am Zeppelin NT
 # Aufruf: python3 -m http.server 8765 im Repository starten, dann  python3 werkstatt/tests/ablauf01.py <Ausgabeordner>
 import sys, os
 from playwright.sync_api import sync_playwright
@@ -24,5 +24,9 @@ with sync_playwright() as p:
     code = pg.inner_text('#code')
     pg.click('#bBack'); shot('09_auswahl_meine.png')
     pg.click('#bCode'); pg.fill('#mCode', code); pg.click('#mOk'); shot('10_code_geladen.png')
+    # Rechenweg: Leitwerk-Abschnitt aufklappen und ansehen (Zeppelin NT)
+    pg.click('#bBack'); pg.click('button.card[data-id="nt07"]'); pg.click('#bOpen')
+    pg.eval_on_selector_all('.rw details', "els => { els[3].open = true; els[3].scrollIntoView(); }"); shot('11_rechenweg_leitwerk.png')
+    pg.click('#bEdit'); pg.click('#steps .chip[data-i="2"]'); shot('12_nt_leitwerk.png')
     print('Fehler:', errs); print('Code:', code)
     b.close()

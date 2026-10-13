@@ -1,4 +1,4 @@
-// 2026-10-13 18:30 · core.js 0.3: Reise höchstens mit vmax (Warnung bei zu kleinem Antrieb); V-Leitwerk; Formen Albacore/Zeppelin/Blimp
+// 2026-10-13 18:45 · core.js 0.4: Leitwerk nach Jones (Munk-Moment, Helmbold, Neutralpunkt 25 % MAC, Hebel ab C.B.), Rechenweg
 //                    Widerstand, Leistung nach Burgess, Gipfelhöhe, Leitwerk im Überschlag, Speicher-Code)
 /* =================================================================================================
    LUFTSCHIFF-SIMULATOR · RECHENKERN
@@ -155,25 +155,66 @@
   };
 
   /* -----------------------------------------------------------------------------------------------
-     5. LEITWERK IM ÜBERSCHLAG (Burgess Kap. III und V)
-     Fläche je Ebene (senkrecht oder waagerecht): A = 0,13 · V^(2/3)  (Burgess S. 57).
-     Zahl der Flossen n und Anordnung:
-       1 Flosse (oben) oder 2 Flossen senkrecht oben/unten („|“) = nur senkrechte Ebene, kein Höhenruder;
-       2 Flossen als V („V“) oder umgekehrtes V („A“) = Ruderflächen wirken für Seite und Höhe
-         (Höhenruder vorhanden, Entscheidung Nutzer 13.10.2026);
-       ab 3 Flossen (+, X, Y …) beide Ebenen, aufgeteilt auf n Flossen.
-     „faktor“ skaliert die Größe frei.
-     Flossenlast nach Burgess S. 110: P = 0,026 · V^(2/3) · ρ · v² je Ebene.
+     5. LEITWERK NACH JONES (Burgess Kap. V, S. 100–103)
+     Der angeströmte Rumpf will sich quer stellen (Munk-Moment, ein reines Kräftepaar):
+        M_Rumpf = q · Vol · (k2 − k1) · sin 2α ≈ 2 · q · Vol · (k2 − k1) · α
+     k1, k2 = zusätzliche Massen des Rotationsellipsoids längs und quer (Lamb), abhängig nur von L/D.
+     Das Leitwerk hält mit seiner Querkraft im Neutralpunkt der Flossen dagegen:
+        M_LTW  = q · A · a_eff · l_t · α          (A = Fläche je Ebene)
+     a_eff = a(Helmbold, Seitenverhältnis) · η (Staudruck am Heck) · K (Rumpf-Flossen-Interferenz)
+     l_t   = Abstand Auftriebsschwerpunkt (C.B.) → Neutralpunkt der Flosse bei 25 % der mittleren
+             Profiltiefe (wie beim Flügel, nicht in Flossenmitte).
+     Statisch neutral (M_Rumpf = M_LTW):   A = 2 · Vol · (k2 − k1) / (a_eff · l_t)
+       → ergibt 2,5- bis 4-mal größere Leitwerke als gebaut (Burgess S. 103: dämpfende Wirkung fehlt).
+     Jones (Burgess S. 103) berücksichtigt die Dämpfung beim Drehen (R·θ = 0,9·l_t, Formel 33–34):
+        A_Jones = 1,8 · Vol · (k2 − k1) / (1,9 · a_eff · l_t)
+     Vorschlag = A_Jones; „faktor“ skaliert ihn; „A_ebene“ (m²) setzt eine bekannte Fläche fest
+     (z. B. aus Burgess Tabelle 4). Zum Vergleich: Burgess' Faustwert 0,13 · V^(2/3).
+     Anordnung: Flossen schräg zur Achse zählen mit cos² bzw. sin² für senkrechte/waagerechte Ebene.
+       1 Flosse oben oder 2 Flossen oben/unten („|“): nur senkrecht, kein Höhenruder.
+       2 Flossen V / umgekehrtes V: beide Ebenen (Höhenruder vorhanden), je Flosse A.
+       ab 3 Flossen (+, X, Y, umgek. Y): beide Ebenen, je Flosse 2·A/n.
      ----------------------------------------------------------------------------------------------- */
+  const LTW_ANNAHMEN = { ar: 1.6, lam: 0.6, xTE: 0.97, eta: 0.85, K: 1.3 };   // Seitenverhältnis Flossenpaar, Zuspitzung, Lage Hinterkante, η, K
+  function lamb(LD) {                       // zusätzliche Massen k1 (längs), k2 (quer) nach Lamb
+    const e = Math.sqrt(1 - 1 / (LD * LD)), l = Math.log((1 + e) / (1 - e));
+    const a0 = 2 * (1 - e * e) / (e * e * e) * (0.5 * l - e), b0 = 1 / (e * e) - (1 - e * e) / (2 * e * e * e) * l;
+    return { k1: a0 / (2 - a0), k2: b0 / (2 - b0) };
+  }
+  const helmbold = A => 2 * Math.PI * A / (2 + Math.sqrt(4 + A * A));        // Auftriebsanstieg [1/rad]
+  // Flossengeometrie: Trapez mit senkrechter Hinterkante bei xTE·L; liefert Spannweite, Tiefen, Neutralpunkt
+  function finGeo(Sf, L, xB, o) {
+    const b = Math.sqrt(o.ar * Sf / 2);                   // Seitenverhältnis des Paares: (2b)² / (2·Sf)
+    const cr = 2 * Sf / (b * (1 + o.lam)), ct = cr * o.lam;
+    const mac = 2 / 3 * cr * (1 + o.lam + o.lam * o.lam) / (1 + o.lam);       // mittlere Profiltiefe
+    const ym = b / 3 * (1 + 2 * o.lam) / (1 + o.lam);                          // Lage der MAC über der Wurzel
+    const xLE = o.xTE * L - (cr - (cr - ct) * ym / b);                         // Vorderkante an der MAC
+    const xAC = xLE + 0.25 * mac;                                              // Neutralpunkt
+    return { b, cr, ct, mac, xAC, lt: xAC - xB * L };
+  }
   function tail(ltw, geo, vmax) {
-    const n = ltw.n, f = ltw.faktor || 1;
-    const Aplane = 0.13 * geo.Vs * f;
-    const vee = n === 2 && (ltw.anord === 'V' || ltw.anord === 'A');
+    const o = Object.assign({}, LTW_ANNAHMEN, ltw.ar ? { ar: ltw.ar } : {});
+    const n = ltw.n, an = ltw.anord, f = ltw.faktor || 1;
+    const LD = geo.L / geo.D, lk = lamb(LD), dk = lk.k2 - lk.k1;
+    const a = helmbold(o.ar), aeff = a * o.eta * o.K;
+    const vee = n === 2 && (an === 'V' || an === 'A');
     const planes = (n <= 2 && !vee) ? 1 : 2;
-    const Atot = Aplane * planes;
-    const elevator = n >= 3 || vee;
-    const load = 0.026 * geo.Vs * f * 1.225 * vmax * vmax;   // [N] je Ebene bei vmax am Boden
-    return { n, Aplane, Atot, Afin: Atot / n, elevator, load };
+    const elevator = planes === 2;
+    // Fläche je Flosse aus Fläche je Ebene
+    const finShare = (n === 1) ? 1 : (n === 2 && !vee) ? 0.5 : vee ? 1 : 2 / n;
+    // Jones: Hebelarm hängt von der Flossengröße ab ⇒ kurz iterieren
+    let A = 0.13 * geo.Vs, fg;
+    for (let i = 0; i < 25; i++) { fg = finGeo(A * finShare, geo.L, geo.xB, o); A = 1.8 * geo.V * dk / (1.9 * aeff * fg.lt); }
+    const A_jones = A;
+    const fgS = finGeo(2 * geo.V * dk / (aeff * fg.lt) * finShare, geo.L, geo.xB, o);
+    const A_static = 2 * geo.V * dk / (aeff * fgS.lt);
+    const Aplane = ltw.A_ebene ? ltw.A_ebene : A_jones * f;          // gewählte Fläche je Ebene
+    const Afin = Aplane * finShare;
+    const g = finGeo(Afin, geo.L, geo.xB, o);
+    const Atot = Afin * n;                                            // gesamte Flossenfläche (Masse, Widerstand)
+    const load = 0.026 * geo.Vs * (Aplane / (0.13 * geo.Vs)) * 1.225 * vmax * vmax;   // Burgess S. 110, je Ebene
+    return { n, anord: an, Aplane, Atot, Afin, elevator, planes, load, A_jones, A_static, A_burgess: 0.13 * geo.Vs,
+             k1: lk.k1, k2: lk.k2, dk, a, aeff, o, b: g.b, cr: g.cr, ct: g.ct, mac: g.mac, xAC: g.xAC, lt: g.lt, finShare };
   }
 
   /* -----------------------------------------------------------------------------------------------
@@ -388,6 +429,108 @@
   }
 
   /* -----------------------------------------------------------------------------------------------
+     9b. RECHENWEG
+     Gibt alle Rechenschritte als lesbare Liste zurück, damit jeder nachvollziehen kann, wie die
+     Ergebnisse entstehen. Jede Zeile: [Was, Formel mit eingesetzten Werten, Ergebnis].
+     ----------------------------------------------------------------------------------------------- */
+  function rechenweg(r) {
+    const d = r.d, g = r.geo, t = r.tail, dr = r.drag, a = d.antrieb, pr = r.propulsion;
+    const n = (x, k) => (+x).toLocaleString('de-DE', { minimumFractionDigits: k || 0, maximumFractionDigits: k || 0 });
+    const nn = x => { const ax = Math.abs(x); return ax === 0 ? '0' : n(x, ax >= 1000 ? 0 : ax >= 100 ? 1 : ax >= 10 ? 2 : ax >= 1 ? 3 : 4); };
+    const m = fmtMass, S = [];
+    const atm = atmos(0), rhoG = atm.p * M_GAS[d.gas] / (R_UNIV * atm.T);
+    S.push({ titel: '1 Rumpfform und Abmessungen (Gertler, Series 58)', zeilen: [
+      ['Kontur', 'y²(x) = a₁x + a₂x² + … + a₆x⁶ mit L/D ' + nn(d.form.LD) + ', m ' + nn(d.form.m) + ', Cp ' + nn(d.form.Cp) + ', r₀ ' + nn(d.form.r0) + ', r₁ ' + nn(d.form.r1), 'a = ' + g.a.map(x => n(x, 3)).join(' / ')],
+      ['Durchmesser', 'D = (V / (Cp · π/4 · L/D))^(1/3) = (' + nn(g.V) + ' / (' + nn(d.form.Cp) + ' · 0,7854 · ' + nn(d.form.LD) + '))^(1/3)', nn(g.D) + ' m'],
+      ['Länge', 'L = L/D · D = ' + nn(d.form.LD) + ' · ' + nn(g.D), nn(g.L) + ' m'],
+      ['Oberfläche', 'S = ∫ 2π·r·√(1 + r′²) dx (400 Abschnitte); Flächenbeiwert Cs = S/√(V·L) = ' + n(g.Cs, 3) + ' (Burgess typisch 3,45)', nn(g.S) + ' m²'],
+      ['Auftriebsschwerpunkt', 'x_B = ∫x·y² dx / ∫y² dx', n(g.xB, 3) + ' · L = ' + nn(g.xB * g.L) + ' m ab Nase'],
+      ['Bezugsfläche', 'V^(2/3) = ' + nn(g.V) + '^(2/3)', nn(g.Vs) + ' m²'],
+    ] });
+    S.push({ titel: '2 Traggas und Bruttoauftrieb', zeilen: [
+      ['Luft am Boden (ISA)', 'ρ = p·M/(R·T) = 101.325 · 0,028964 / (8,3145 · 288,15)', n(atm.rho, 4) + ' kg/m³'],
+      ['Gas ' + (d.gas === 'H2' ? 'H₂' : 'He') + ' rein', 'ρ_Gas = p·M_Gas/(R·T) mit M = ' + n(M_GAS[d.gas] * 1000, 3) + ' g/mol', n(rhoG, 4) + ' kg/m³'],
+      ['Auftrieb je m³', 'ρ_Luft − (Reinheit·ρ_Gas + (1 − Reinheit)·ρ_Luft), Reinheit ' + n(d.reinheit * 100, 1) + ' %', n(r.lpm, 4) + ' kg/m³'],
+      ['Füllung am Boden', d.bauweise === 'O' ? 'offener Appendix: beim Start prall' : 'σ(Prallhöhe ' + n(d.prallhoehe) + ' m) = ρ(h)/ρ₀', n(r.fill * 100, 1) + ' %'],
+      ['Gasraum', d.bauweise === 'S' ? 'Starr: 95 % der Luftverdrängung (Burgess 90–96 %)' : 'Prallhülle: 99 % (Gondel, Leitwerk außen)', n(r.gasShare * 100) + ' %'],
+      ['Bruttoauftrieb', 'V · Gasraum · Füllung · Auftrieb je m³ = ' + nn(g.V) + ' · ' + n(r.gasShare, 2) + ' · ' + n(r.fill, 3) + ' · ' + n(r.lpm, 4), m(r.lift0)],
+    ] });
+    // Massen: je Bauteil die Formel
+    const e = r.leer, Z = [];
+    const sL = g.L / 196, sD = g.D / 23.98, sv = r.vmax / 26.82;
+    if (d.bauweise === 'S') {
+      Z.push(['Außenhülle', 'S · Flächengewicht = ' + nn(g.S) + ' m² · ' + n(d.huelle_gm2) + ' g/m²', m(e.huelle)]);
+      Z.push(['Gaszellen', '(S + 20,7·D²) · ' + n(d.zellen_gm2) + ' g/m² (Mantel ~ S, Zellenenden ~ D², Burgess Kap. II)', m(e.zellen)]);
+      Z.push(['Gerüst: Längsträger, Laufgang', 'W · [3.778 kg · (L/196)³·(D/23,98) + 1.211 kg · (L/196)^(8/3)·(D/23,98)^(1/3)·(v/26,8)²]  (L-49, Normand) mit L/196 = ' + n(sL, 3) + ', D/23,98 = ' + n(sD, 3) + ', v/26,8 = ' + n(sv, 3) + ', W = ' + n(d.werkstoff, 2), m(e.laengstraeger)]);
+      Z.push(['Gerüst: Ringe, Drähte, Netze', 'W · 5.511 kg · (L/196) · (D/23,98)³  (L-49)', m(e.ringe)]);
+      Z.push(['Armaturen, Ballastanlage', '0,0708 kg/m³ · V · (W + 1)/2  (L-49)', m(e.armaturen)]);
+      Z.push(['Elektrik, Ausrüstung', '0,71 kg/m² · V^(2/3)  (L-49)', m(e.elektrik)]);
+      Z.push(['Leitwerk', 'Flossenfläche ' + nn(t.Atot) + ' m² · max(2,03 kg/m² · L/196 · v/26,8; 2 · Hüllengewicht)', m(e.leitwerk)]);
+    } else {
+      Z.push(['Hülle', 'S · Flächengewicht · 1,25 (Nähte, Gurte) = ' + nn(g.S) + ' m² · ' + n(d.huelle_gm2) + ' g/m² · 1,25', m(e.huelle)]);
+      if (e.ballonet) Z.push(['Ballonets', '2 · 2,2 · (Ballonet · V)^(2/3) · 0,6 · Flächengewicht, Ballonet ' + n(d.ballonet) + ' %', m(e.ballonet)]);
+      if (e.geblaese) Z.push(['Gebläse', '0,002 kg/m³ · V + 2 kg', m(e.geblaese)]);
+      Z.push(['Leitwerk', 'Flossenfläche ' + nn(t.Atot) + ' m² · (3 · Hüllengewicht + 0,012 · √V · v/20)', m(e.leitwerk)]);
+      Z.push(['Aufhängung, Seile', '4 % des Bruttoauftriebs', m(e.aufhaengung)]);
+      Z.push(['Armaturen, Ventile', g.V > 50 ? '0,01 kg/m³ · V + 15 kg' : '0,004 kg/m³ · V + 10 g', m(e.armaturen)]);
+      if (e.kiel) Z.push(['Kiel / Innengerüst', '4,5 % des Bruttoauftriebs · √(L/60)', m(e.kiel)]);
+      if (e.nasenlatten) Z.push(['Nasenlatten', '0,004 kg/m³ · V', m(e.nasenlatten)]);
+    }
+    const pers = (d.crew || 0) + (d.pax || 0);
+    Z.push(['Gondel', { K: 'Korb: 25 kg + 22 kg je Person', F: 'Gondel: 150 kg + 60 kg je Person', I: 'Führergondel/Räume: 100 kg + 45 kg je Person', R: 'RC-Kapsel (unter Avionik)', N: 'keine' }[d.gondel] + ' · ' + pers + ' Personen', m(e.gondel)]);
+    Z.push(['Antrieb', (a.art === 'V' ? a.n + ' · ' + nn(a.kW) + ' kW · ' + nn(a.kgkW || 1.3) + ' kg/kW' : a.n + ' · ' + nn(a.kW) + ' kW · ' + nn(a.kgkW || 0.45) + ' kg/kW + Propeller 0,15 kg · n · P^0,6'), m(e.antrieb)]);
+    if (e.avionik) Z.push(['Avionik', 'Eingabe', m(e.avionik)]);
+    Z.push(['Leermasse', 'Summe', m(r.mLeer)]);
+    Z.push([a.art === 'V' ? 'Kraftstoff' : 'Akku', a.art === 'V' ? 'Eingabe' : nn(a.kWh) + ' kWh / ' + n(a.whkg) + ' Wh/kg', m(r.zuladung.energie)]);
+    Z.push(['Personen', pers + ' · ' + n(d.m_person) + ' kg', m(r.zuladung.personen)]);
+    if (d.nutzlast) Z.push(['Nutzlast', 'Eingabe', m(d.nutzlast)]);
+    Z.push(['Ballast', 'Eingabe', m(d.ballast)]);
+    if (d.schlepptau) Z.push(['Schlepptau', 'Eingabe', m(d.schlepptau)]);
+    Z.push([r.frei >= 0 ? 'Noch frei' : 'Fehlt', 'Bruttoauftrieb − Leermasse − Zuladung', m(Math.abs(r.frei))]);
+    S.push({ titel: '3 Massen nach Bauteilen', zeilen: Z });
+    S.push({ titel: '4 Leitwerk nach Jones (Burgess S. 100–103)', zeilen: [
+      ['Zusätzliche Massen (Lamb)', 'L/D = ' + nn(g.L / g.D) + ' ⇒ k₁ = ' + n(t.k1, 3) + ', k₂ = ' + n(t.k2, 3), 'k₂ − k₁ = ' + n(t.dk, 3)],
+      ['Munk-Moment des Rumpfes', 'M = q · Vol · (k₂ − k₁) · sin 2α ≈ q · ' + nn(2 * g.V * t.dk) + ' m³ · α', 'je rad Anstellung'],
+      ['Auftriebsanstieg Flosse (Helmbold)', 'a = 2π·Λ / (2 + √(4 + Λ²)) mit Λ = ' + nn(t.o.ar) + ' (Flossenpaar)', n(t.a, 3) + ' /rad'],
+      ['Wirksamer Anstieg', 'a_eff = a · η · K = ' + n(t.a, 3) + ' · ' + n(t.o.eta, 2) + ' (Staudruck am Heck) · ' + n(t.o.K, 2) + ' (Rumpf-Flossen-Interferenz)', n(t.aeff, 3) + ' /rad'],
+      ['Flosse (Trapez, Zuspitzung ' + n(t.o.lam, 1) + ')', 'Spannweite b = √(Λ·S_Flosse/2), Wurzeltiefe c_r = 2·S_Flosse/(b·(1+λ)), mittlere Tiefe MAC = ⅔·c_r·(1+λ+λ²)/(1+λ)', 'b ' + nn(t.b) + ' m, c_r ' + nn(t.cr) + ' m, MAC ' + nn(t.mac) + ' m'],
+      ['Neutralpunkt der Flosse', 'Hinterkante bei ' + n(t.o.xTE, 2) + ' · L; Kraftangriff bei 25 % MAC (wie beim Flügel)', nn(t.xAC) + ' m ab Nase = ' + n(t.xAC / g.L, 3) + ' · L'],
+      ['Hebelarm', 'l_t = Neutralpunkt − Auftriebsschwerpunkt = ' + nn(t.xAC) + ' − ' + nn(g.xB * g.L), nn(t.lt) + ' m'],
+      ['Statisch neutral', 'A = 2 · Vol · (k₂−k₁) / (a_eff · l_t)  (ohne Dämpfung, zu groß laut Burgess S. 103)', nn(t.A_static) + ' m² je Ebene'],
+      ['Jones-Kriterium', 'A = 1,8 · Vol · (k₂−k₁) / (1,9 · a_eff · l_t) = 1,8 · ' + nn(g.V) + ' · ' + n(t.dk, 3) + ' / (1,9 · ' + n(t.aeff, 3) + ' · ' + nn(t.lt) + ')', nn(t.A_jones) + ' m² je Ebene'],
+      ['Burgess-Faustwert (Vergleich)', '0,13 · V^(2/3)', nn(t.A_burgess) + ' m² je Ebene'],
+      ['Gewählt', d.ltw.A_ebene ? 'feste Fläche (Quelle siehe Modell)' : 'Jones · ' + n((d.ltw.faktor || 1) * 100) + ' %', nn(t.Aplane) + ' m² je Ebene, ' + t.n + ' Flossen à ' + nn(t.Afin) + ' m²' + (t.elevator ? '' : ', kein Höhenruder')],
+    ] });
+    S.push({ titel: '5 Widerstand bei Höchstfahrt', zeilen: [
+      ['Reynolds-Zahl', 'Re = v · L / ν = ' + nn(r.vmax) + ' · ' + nn(g.L) + ' / 1,46·10⁻⁵', n(dr.Re / 1e6, 2) + ' Mio.'],
+      ['Reibungsbeiwert (turbulent)', 'C_f = 0,455 / (log₁₀ Re)^2,58', n(dr.cf, 5)],
+      ['Rumpf (Hoerner)', 'C_D = C_f · [4·(L/D)^(1/3) + 6·(L/D)^(−7/6) + 24·(L/D)^(−8/3)], L/D ' + nn(g.L / g.D), n(dr.hull, 4)],
+      ['Leitwerk', '2 · Flossenfläche · C_f(Flosse) · 1,25 / V^(2/3)', n(dr.fins, 4)],
+      ['Gondel', 'C_D·A der Gondel / V^(2/3)', n(dr.gon, 4)],
+      ['Motoren', 'n · ' + (a.lage === 'I' ? '0,01' : '0,036') + ' · P_kW^(2/3) / V^(2/3)', n(dr.engines, 4)],
+      ['Seile, Zusatz', 'Prallschiff mit Gondel 0,0025; Zusatzfläche ' + nn(d.anbauten || 0) + ' m²', n(dr.seile + dr.extra, 4)],
+      ['Summe', 'C_D bezogen auf V^(2/3)', n(dr.total, 4)],
+    ] });
+    const Pin = a.n * a.kW * 1000;
+    S.push({ titel: '6 Leistung und Geschwindigkeit', zeilen: [
+      ['Leistungsbedarf', 'P(v) = ½ · ρ · v³ · C_D · V^(2/3) / η_Propeller, η = ' + n(a.eta, 2), ''],
+      ['Höchstgeschwindigkeit', 'P(v) = eingebaute Leistung ' + nn(Pin / 1000) + ' kW (Bisektion)', nn(r.vmax_kmh) + ' km/h'],
+      ['Gesamtwirkungsgrad K (Burgess)', 'K = ρ · v³ · V^(2/3) / P (Starr ≈ 63,5, Blimp ≈ 40)', nn(r.K_eff)],
+      ['Vorschlag Burgess', 'P = ρ · v³ · V^(2/3) / K für ' + nn(d.v_ziel || d.v_reise * 1.3) + ' km/h', nn(r.P_burgess / 1000) + ' kW'],
+      ['Reiseleistung', 'P(' + nn(r.v_reise_kmh) + ' km/h)' + (pr.solarW ? ' − Solar ' + nn(pr.solarW / 1000) + ' kW' : ''), nn(r.Preise / 1000) + ' kW'],
+      ['Nutzbare Energie', a.art === 'V' ? 'Kraftstoff / spez. Verbrauch = ' + nn(a.kraftstoff) + ' kg / ' + n(a.sfc, 3) + ' kg/kWh' : '85 % von ' + nn(a.kWh) + ' kWh', nn(pr.E_J / 3.6e6) + ' kWh'],
+      ['Fahrdauer', 'Energie / Reiseleistung', n(r.dauer_h, 1) + ' h'],
+      ['Reichweite (Windstille)', 'v_Reise · Fahrdauer', nn(r.reichweite_km) + ' km'],
+    ] });
+    const abw = d.ballast + (pr.verbrauchMasse ? pr.mEnergie : 0);
+    const Z2 = [['Statische Gipfelhöhe (Burgess Kap. II)', 'σ = Füllung · (Masse am Start − abwerfbar ' + m(abw) + ') / Bruttoauftrieb; Höhe mit ρ(h)/ρ₀ = σ, mindestens Prallhöhe', nn(r.gipfel) + ' m']];
+    if (r.v_beulen) Z2.push(['Nase beult ein (offener Appendix)', 'Δp = g · Auftrieb je m³ · R = 9,81 · ' + n(r.lpm, 3) + ' · ' + nn(g.R) + ' m; v = √(2·Δp/ρ)', nn(r.v_beulen * 3.6) + ' km/h']);
+    if (r.huelleAuslastung != null) Z2.push(['Hülle (Prall)', 'Überdruck max(1,2 · ½ρv²; 150 Pa); Umfangsspannung T = Δp · R; Festigkeit 60 N/m je g/m², Sicherheit 4', n(r.huelleAuslastung * 100) + ' % ausgelastet']);
+    S.push({ titel: '7 Höhe und Druck', zeilen: Z2 });
+    return S;
+  }
+
+  /* -----------------------------------------------------------------------------------------------
      10. SPEICHER-CODE
      Kurzer, lesbarer Text mit allen Entscheidungen, z. B.
        LS1|N:Kleines H2-LS|B:O|G:H2|V:2000|F:3.5,.43,.6,.5,.2|H:200|T:4,+|K:K|C:1|P:1|A:E,2,12,G,40|S:30|BL:300
@@ -402,7 +545,7 @@
     p.push('H:' + num(d.huelle_gm2));
     if (d.bauweise === 'S') p.push('Z:' + num(d.zellen_gm2), 'W:' + num(d.werkstoff), 'HP:' + num(d.prallhoehe));
     if (d.bauweise === 'P' || d.bauweise === 'H') p.push('BO:' + num(d.ballonet));
-    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1)].join(','));
+    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : ''].join(',').replace(/,+$/, ''));
     p.push('K:' + d.gondel, 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
     p.push('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en);
@@ -431,7 +574,7 @@
         case 'W': d.werkstoff = +v; break;
         case 'HP': d.prallhoehe = +v; break;
         case 'BO': d.ballonet = +v; break;
-        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; break;
+        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; break;
         case 'K': d.gondel = v; break;
         case 'C': d.crew = +v; break;
         case 'P': d.pax = +v; break;
@@ -473,9 +616,9 @@
   }
 
   const LSCore = {
-    VERSION: '0.3', G0, LB, FT, HP,
-    atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail,
-    dragCoeff, powerAt, solveV, propulsion, compute, encode, decode, DEFAULTS, merge, fmtMass,
+    VERSION: '0.4', G0, LB, FT, HP,
+    atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN,
+    dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSCore;
   else root.LSCore = LSCore;

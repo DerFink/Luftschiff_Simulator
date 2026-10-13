@@ -1,4 +1,5 @@
-<!-- 2026-10-13 22:15 · Build 2026-10-13.8: Schrittleiste mit Pfeilen, Mausrad und Ziehen seitlich scrollbar; Einheiten (kg/Anzahl) an allen Zahlen; Mittelgondel für Motorpaar
+<!-- 2026-10-13 23:20 · Build 2026-10-13.9: Überschrift der Schieberegler in derselben Zeile wie der Wert, Selbstdrehung ein/aus, Flächengewicht Leitwerk, 1 Flosse unten, ungerader Motor am Heck
+     2026-10-13 22:15 · Build 2026-10-13.8: Schrittleiste mit Pfeilen, Mausrad und Ziehen seitlich scrollbar; Einheiten (kg/Anzahl) an allen Zahlen; Mittelgondel für Motorpaar
      2026-10-13 21:05 · Build 2026-10-13.7: LZ 120 nach Windkanalmodell, Motorenpaare auf gleicher Lage, Pfeilung bis 75°
      2026-10-13 20:30 · Build 2026-10-13.5: Quellen im Rechenweg, Gondel-Reibung nach Reynolds-Zahl, Tropfenform
      2026-10-13 20:10 · Build 2026-10-13.4: Motorgondel-Bauart, Flossen-Zuspitzung/-Pfeilung, Vorschlag Nasenlatten, Räume im Rumpf
@@ -49,6 +50,9 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 .view{flex:none;height:30vh;min-height:180px;max-height:260px;background:linear-gradient(var(--sky1),var(--sky2));position:relative;overflow:hidden}
 .view.klein{height:22vh;min-height:140px}
 .pill{position:absolute;font-size:11px;color:#4b6077;background:rgba(255,255,255,.82);padding:3px 8px;border-radius:9px;pointer-events:none}
+/* Schalter für die Selbstdrehung der 3D-Vorschau */
+.rot{position:absolute;left:8px;top:8px;z-index:3;font-size:11.5px;font-weight:600;color:#4b6077;background:rgba(255,255,255,.88);padding:4px 9px;border-radius:9px}
+.rot.on{color:var(--acc)}
 .kpis{flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line);background:#fbfcfd}
 .k{padding:5px 2px 4px;text-align:center;border-right:1px solid var(--line);transition:background .6s}
 .k:nth-child(4n){border-right:none}.k:nth-child(-n+4){border-bottom:1px solid var(--line)}
@@ -80,7 +84,11 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 .info{background:#f3f5f8;border-radius:10px;padding:8px 10px;font-size:12.3px;line-height:1.38;color:#3a4a5c}
 .warn{background:var(--warn-soft);border-left:4px solid var(--warn);border-radius:8px;padding:7px 10px;font-size:12.3px;line-height:1.35}
 .num{display:flex;flex-direction:column;gap:3px}
-.num .hd{display:flex;justify-content:space-between;align-items:center;font-size:13.5px}
+.num{margin-top:8px}
+.num .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px}
+.num .hd .lab{flex:1;line-height:1.25}
+.num .hd>span:last-child{flex:none;white-space:nowrap}
+.num .rg{margin-top:-2px}
 .num .hd input{width:96px;text-align:right;font:inherit;font-weight:700;border:1px solid var(--line);border-radius:8px;padding:3px 6px}
 .num .hd .u{color:var(--mut);font-size:12px;margin-left:4px}
 .num .rg{position:relative;height:26px}
@@ -131,7 +139,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-13.8';
+const BUILD = '2026-10-13.9';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -229,10 +237,11 @@ const STEPS = [
     ], text: d => ({ S: 'Gerüst aus Ringen und Längsträgern, Gas in Zellen; Form unabhängig vom Gasdruck. Burgess: erst ab rund 28.000 m³ sinnvoll.', H: 'Prallhülle mit tragendem Kiel bzw. Innengerüst (Norge, Zeppelin NT). Ballonets halten den Überdruck.', P: 'Die Form hält allein der Überdruck; Ballonets mit Gebläse gleichen Höhenänderungen aus.', O: 'Unten offen mit kurzem Appendix wie ein Gasballon: kein Ballonet, Innendruck nur aus der Gassäule. Steigt das Schiff, entweicht Gas.' })[d.bauweise] },
   { id: 'ltw', titel: 'Leitwerk', frage: 'Wie viele Flossen bekommt das Leitwerk?', fields: [
       { typ: 'seg', key: 'ltw.n', label: 'Zahl der Flossen (Anzahl)', opts: [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6'], [7, '7'], [8, '8']], num: true },
-      { typ: 'seg', key: 'ltw.anord', label: 'Anordnung', opts: d => ({ 1: [['|', 'oben']], 2: [['|', 'oben/unten'], ['V', 'V'], ['A', 'umgek. V']], 3: [['Y', 'Y'], ['L', 'umgek. Y']] }[d.ltw.n] || [['+', '+ Kreuz'], ['X', 'X']]) },
+      { typ: 'seg', key: 'ltw.anord', label: 'Anordnung', opts: d => ({ 1: [['|', 'oben'], ['u', 'unten']], 2: [['|', 'oben/unten'], ['V', 'V'], ['A', 'umgek. V']], 3: [['Y', 'Y'], ['L', 'umgek. Y']] }[d.ltw.n] || [['+', '+ Kreuz'], ['X', 'X']]) },
       { typ: 'num', key: 'ltw.faktor', label: 'Größe gegenüber Vorschlag nach Jones', min: 0.3, max: 2, step: 0.05, k: 0, pct: true, vorschlag: () => 1 },
       { typ: 'num', key: 'ltw.ar', label: 'Seitenverhältnis Flossenpaar Λ (schlanke Flossen wirken stärker)', min: 0.6, max: 3, step: 0.1, k: 1, vorschlag: () => C.LTW_ANNAHMEN.ar, def: () => C.LTW_ANNAHMEN.ar },
       { typ: 'num', key: 'ltw.lam', label: 'Zuspitzung λ = Endtiefe / Wurzeltiefe', min: 0.2, max: 1, step: 0.05, k: 2, vorschlag: () => C.LTW_ANNAHMEN.lam, def: () => C.LTW_ANNAHMEN.lam },
+      { typ: 'num', key: 'ltw.gm2', label: 'Flächengewicht Leitwerk (Gerüst, Bespannung, Ruder je m² Flossenfläche)', unit: 'g/m²', min: 20, max: 5000, log: true, k: 0, def: () => S.r.ltw_gm2_calc, vorschlag: (d, r) => r.ltw_gm2_calc },
       { typ: 'num', key: 'ltw.sweep', label: 'Pfeilung der Vorderkante', unit: '°', min: 0, max: 75, step: 1, k: 0, vorschlag: () => C.LTW_ANNAHMEN.sweep, def: () => C.LTW_ANNAHMEN.sweep },
     ], text: (d, r) => { const t = r.tail; return `<b>Vorschlag nach Jones</b> (Burgess S. 103): ${de(t.A_jones, 1)} m² je Ebene bei Hebelarm ${de(t.lt, 1)} m (Auftriebsschwerpunkt → Neutralpunkt der Flossen), k₂−k₁ = ${de(t.dk, 3)} aus L/D ${de(r.geo.L / r.geo.D, 2)} und Auftriebsanstieg ${de(t.a, 2)}/rad (Λ, Pfeilung). Statisch neutral wären ${de(t.A_static, 1)} m², Burgess-Faustwert ${de(t.A_burgess, 1)} m².<br>` +
       (d.ltw.A_ebene ? `Dieses Modell hat die bekannte Fläche ${de(t.Aplane, 1)} m² je Ebene (Quelle im Modell). Der Regler „Größe“ ersetzt sie.` : `Gewählt: ${de(t.Aplane, 1)} m² je Ebene, ${t.n} Flossen à ${de(t.Afin, 1)} m², Masse ${fm(r.leer.leitwerk)}.`) +
@@ -269,12 +278,13 @@ const STEPS = [
       { typ: 'seg', key: 'antrieb.lage', label: 'Lage', opts: [['G', 'An der Gondel'], ['R', 'Am Rumpf'], ['H', 'Am Heck']] },
       { typ: 'seg', key: 'antrieb.mg', label: 'Bauart der Motorgondeln', opts: [['O', 'Offen, mit Kühler (bis 1930er)'], ['V', 'Verkleidet (modern)']] },
       // Motorgondeln am Rumpf: immer paarweise; ungerade Zahl ⇒ ein Motor mittig unter der Hülle; bei gerader Zahl wahlweise ein Paar gemeinsam in der Mittelgondel
-      { typ: 'seg', key: '_mpaar', label: 'Motorgondeln am Rumpf', when: d => d.antrieb.lage === 'R' && d.antrieb.n >= 2 && d.antrieb.n % 2 === 0, opts: [['0', 'Je Motor eine Gondel'], ['1', 'Ein Paar in Mittelgondel']] },
+      { typ: 'seg', key: 'antrieb.ungerade', label: 'Einzelner Motor (ungerade Zahl)', when: d => d.antrieb.lage === 'R' && d.antrieb.n % 2 === 1, opts: [['U', 'Mittig unter der Hülle'], ['H', 'Ganz am Heck']] },
+      { typ: 'seg', key: '_mpaar', label: 'Motorgondeln am Rumpf', when: d => d.antrieb.lage === 'R' && d.antrieb.n >= 2 && d.antrieb.n % 2 === 0, opts: [['0', 'Je Motor eine Gondel'], ['1', 'Ein Paar in Mittelgondel (hintereinander, 1 Propeller)']] },
       { typ: 'num', key: 'antrieb.kWh', label: 'Akku', unit: 'kWh', min: 0.001, max: 5000, log: true, k: 3, when: d => d.antrieb.art !== 'V', vorschlag: (d, r) => r.Preise * 8 / 3.6e6 / 0.85 * 3.6 },
       { typ: 'num', key: 'antrieb.whkg', label: 'Energiedichte Akku', unit: 'Wh/kg', min: 80, max: 400, step: 5, k: 0, when: d => d.antrieb.art !== 'V', vorschlag: () => 180 },
       { typ: 'num', key: 'antrieb.kraftstoff', label: 'Kraftstoff', unit: 'kg', min: 0, max: 100000, log0: true, k: 0, when: d => d.antrieb.art === 'V', vorschlag: (d, r) => r.Preise * 24 / 3.6e6 * (d.antrieb.sfc || 0.3) },
       { typ: 'num', key: 'antrieb.eta', label: 'Propellerwirkungsgrad', min: 0.3, max: 0.9, step: 0.01, k: 0, pct: true, vorschlag: d => d.V < 50 ? 0.5 : 0.7 },
-    ], text: (d, r) => `<b>Vorschlag nach Burgess:</b> P = ρ·v³·V<sup>2/3</sup>/K mit K = ${d.bauweise === 'S' ? '63,5' : '40'} für ${de((d.v_ziel || d.v_reise * 1.3))} km/h ⇒ ${fp(r.P_burgess)} gesamt. Antrieb ${fm(r.leer.antrieb)}, Energie ${fm(r.propulsion.mEnergie)}.` + (d.antrieb.lage === 'R' ? (N => `<br>Motorgondeln am Rumpf: ${N.paare ? N.paare + (N.paare > 1 ? ' Paare' : ' Paar') + ' links/rechts auf gleicher Länge' : ''}${N.paare && N.mitte ? ', ' : ''}${N.mitte ? 'Mittelgondel unter der Hülle mit ' + (N.mitte === 2 ? 'einem Motorpaar' : 'einem Motor') : ''} ⇒ ${N.g} Gondeln.`)(C.nacelles(d.antrieb)) : '') },
+    ], text: (d, r) => `<b>Vorschlag nach Burgess:</b> P = ρ·v³·V<sup>2/3</sup>/K mit K = ${d.bauweise === 'S' ? '63,5' : '40'} für ${de((d.v_ziel || d.v_reise * 1.3))} km/h ⇒ ${fp(r.P_burgess)} gesamt. Antrieb ${fm(r.leer.antrieb)}, Energie ${fm(r.propulsion.mEnergie)}.` + (d.antrieb.lage === 'R' ? (N => `<br>Motorgondeln am Rumpf: ${N.paare ? N.paare + (N.paare > 1 ? ' Paare' : ' Paar') + ' links/rechts auf gleicher Länge' : ''}${N.paare && N.mitte ? ', ' : ''}${N.heck ? 'ein Motor ganz am Heck' : N.mitte ? 'Mittelgondel unter der Hülle mit ' + (N.mitte === 2 ? 'zwei Motoren hintereinander auf einen Propeller' : 'einem Motor') : ''} ⇒ ${N.g} Gondeln.`)(C.nacelles(d.antrieb)) : '') },
   { id: 'v', titel: 'Geschwindigkeit', frage: 'Mit welcher Reisegeschwindigkeit fährt es?', fields: [
       { typ: 'num', key: 'v_reise', label: 'Reisegeschwindigkeit', unit: 'km/h', min: 1, max: 160, step: 1, k: 0, vorschlag: (d, r) => Math.round(r.vmax_kmh * 0.7) },
     ], text: (d, r) => `Höchstgeschwindigkeit mit voller Leistung: ${de(r.vmax_kmh)} km/h. Bei ${de(d.v_reise)} km/h braucht es ${fp(r.Preise)} an der Welle.` },
@@ -293,7 +303,7 @@ function showBau() {
   S.screen = 'bau';
   const st = STEPS[S.step], d = S.d;
   $('#app').innerHTML = `<div class="top"><button class="lnk" id="bBack">‹ Auswahl</button><span class="t">${escapeHtml(d.name)}</span><button class="lnk" id="bErg">Ergebnis ›</button></div>
-    <div class="view" id="view"><div class="pill" style="left:8px;bottom:7px">⟳ 1 Finger drehen · 2 Finger zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
+    <div class="view" id="view"><button class="rot" id="bRot"></button><div class="pill" style="left:8px;bottom:7px">1 Finger drehen · 2 Finger zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
     <div class="kpis" id="kpis"></div>
     <div class="stepw"><button class="sarr l" id="sL" aria-label="Schritte nach links">‹</button><div class="steps" id="steps">${STEPS.map((s, i) => `<button class="chip ${i === S.step ? 'cur' : i < S.step ? 'done' : ''}" data-i="${i}">${i < S.step ? '✓ ' : ''}${s.titel}</button>`).join('')}</div><button class="sarr r" id="sR" aria-label="Schritte nach rechts">›</button></div>
     <div class="scroll"><div class="body" id="body"></div></div>
@@ -336,15 +346,15 @@ function renderBody() {
   let h = `<div class="q">${st.frage}</div>`;
   st.fields.forEach((f, i) => {
     if (f.when && !f.when(d)) return;
-    if (f.label) h += `<div class="lab">${f.label}</div>`;
+    if (f.label && f.typ !== 'num') h += `<div class="lab">${f.label}</div>`;   // Zahlenfelder: Überschrift steht in der Wertzeile
     if (f.typ === 'seg' || f.typ === 'chips') {
       const opts = typeof f.opts === 'function' ? f.opts(d) : f.opts;
-      const cur = f.key === '_form' ? formKey(d.form) : f.key === '_mpaar' ? (C.nacelles(d.antrieb).mitte === 2 ? '1' : '0') : getByPath(d, f.key);
+      const cur = f.key === '_form' ? formKey(d.form) : f.key === '_mpaar' ? (C.nacelles(d.antrieb).mitte === 2 ? '1' : '0') : f.key === 'antrieb.ungerade' ? (d.antrieb.ungerade || 'U') : getByPath(d, f.key);
       h += `<div class="${f.typ === 'seg' ? 'seg' : 'chips'}">` + opts.map(([v, t, dis]) => `<button data-f="${i}" data-v="${v}"${(f.typ === 'seg' && String(cur) === String(v)) ? ' class="on"' : ''}${dis ? ' disabled title="folgt"' : ''}>${t}</button>`).join('') + '</div>';
     } else if (f.typ === 'num') {
       const v = getByPath(d, f.key) ?? (f.def ? f.def() : 0), sv = f.vorschlag ? f.vorschlag(d, r) : null;
       const show = f.pct ? de(v * 100, f.k) : fmtNum(v, f);
-      h += `<div class="num"><div class="hd"><span></span><span><input type="text" inputmode="decimal" data-f="${i}" value="${show}"><span class="u">${f.pct ? '%' : (f.unit || '')}</span></span></div>
+      h += `<div class="num"><div class="hd"><span class="lab">${f.label || ''}</span><span><input type="text" inputmode="decimal" data-f="${i}" value="${show}"><span class="u">${f.pct ? '%' : (f.unit || '')}</span></span></div>
         <div class="rg"><input type="range" min="0" max="1000" step="1" data-f="${i}" value="${toSlider(v, f)}">${sv != null && isFinite(sv) ? `<div class="mark" style="left:${toSlider(sv, f) / 10}%" title="Vorschlag"></div>` : ''}</div>
         <div class="sl"><span>${f.pct ? de(f.min * 100) + ' %' : fmtNum(f.min, f)}</span><span>${sv != null && isFinite(sv) ? '▲ Vorschlag ' + (f.pct ? de(sv * 100, f.k) + ' %' : fmtNum(sv, f) + ' ' + (f.unit || '')) : ''}</span><span>${f.pct ? de(f.max * 100) + ' %' : fmtNum(f.max, f)}</span></div></div>`;
     }
@@ -452,7 +462,7 @@ function showErgebnis() {
   const block = gs => gs.map(([g, c, it]) => { it = it.filter(x => x[1] > 0); if (!it.length) return ''; return `<div class="mrow h"><span>${g}</span><span>${fm(it.reduce((s, x) => s + x[1], 0))}</span></div>` + it.map(([n, v]) => line(n, v, c)).join(''); }).join('');
   const code = C.encode(d);
   $('#app').innerHTML = `<div class="top"><button class="lnk" id="bBack">‹ Auswahl</button><span class="t">${escapeHtml(d.name)}</span><button class="lnk" id="bEdit">Bearbeiten</button></div>
-    <div class="view klein" id="view"><div class="pill" style="left:8px;bottom:7px">⟳ drehen · zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
+    <div class="view klein" id="view"><button class="rot" id="bRot"></button><div class="pill" style="left:8px;bottom:7px">drehen · zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
     <div class="kpis" id="kpis"></div>
     <div class="scroll">
       ${r.warn.map(w => `<div class="warn" style="margin:8px 14px 0">⚠ ${w}</div>`).join('')}
@@ -521,9 +531,18 @@ function mountView(el) {
   if (!window.LSView) { el.insertAdjacentHTML('afterbegin', '<div class="pill" style="left:8px;top:8px">3D wird geladen …</div>'); window.addEventListener('lsview', () => mountView(el), { once: true }); return; }
   if (!viewerHost) { viewerHost = document.createElement('div'); viewerHost.style.cssText = 'position:absolute;inset:0'; viewer = window.LSView.createViewer(viewerHost); }
   el.insertBefore(viewerHost, el.firstChild);
+  wireRot();
   updateView();
 }
 function updateView() { if (viewer && S.r) viewer.update(S.r); }
+// Selbstdrehung ein/aus; die Wahl bleibt im Browser gespeichert
+function rotOn() { try { return localStorage.getItem('ls_drehen') !== '0'; } catch (e) { return true; } }
+function wireRot() {
+  const b = $('#bRot'); if (!b) return;
+  const show = () => { const on = rotOn(); b.textContent = on ? '⟳ Drehen: an' : '⟳ Drehen: aus'; b.classList.toggle('on', on); if (viewer) viewer.setAutoRotate(on); };
+  b.onclick = () => { try { localStorage.setItem('ls_drehen', rotOn() ? '0' : '1'); } catch (e) {} show(); };
+  show();
+}
 
 /* ---------------- 7. Start ---------------- */
 showAuswahl();

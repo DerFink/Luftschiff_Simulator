@@ -1,3 +1,4 @@
+// 2026-10-13 23:20 · pruef02.js: Speicher-Code behält Heckmotor (NT) und Flächengewicht Leitwerk
 // 2026-10-13 20:15 · pruef02.js: Nasenlatten-Vorschlag LuffiHopper
 /* =================================================================================================
    Prüft das unveränderte Grundmodell (ohne Abgleich je Schiff) an den festen Modellen.
@@ -52,6 +53,11 @@ row('Norge', 'Leermasse', 12490, run('norge').mLeer, 'kg', 'de.wikipedia');
 // ---- Speicher-Code: jedes Modell speichern und wieder laden ⇒ gleiche Ergebnisse (Rundung < 0,2 %) ----
 for (const m of M) { const d = C.merge(C.DEFAULTS, m.d), r1 = C.compute(d), r2 = C.compute(C.decode(C.encode(d)));
   row(m.d.name, 'Speicher-Code: Abweichung freie Nutzlast (% vom Auftrieb)', null, Math.abs(r1.frei - r2.frei) / r1.lift0 * 100, '%', 'soll unter 0,2 %'); }
+
+// ---- Speicher-Code: Heckmotor (Zeppelin NT) und Flächengewicht Leitwerk bleiben erhalten ----
+{ const d = C.merge(C.DEFAULTS, get('nt07').d); d.ltw.gm2 = 1234; const e = C.decode(C.encode(d));
+  row('Zeppelin NT 07', 'Speicher-Code: Heckmotor erhalten (1 = ja)', null, e.antrieb.ungerade === 'H' ? 1 : 0, '', 'soll 1');
+  row('Zeppelin NT 07', 'Speicher-Code: Flächengewicht Leitwerk 1234 g/m²', 1234, e.ltw.gm2, 'g/m²', 'soll gleich'); }
 
 // ---- Ausgabe --------------------------------------------------------------------------------------
 const f = x => (x === null) ? '–' : (Math.abs(x) >= 1000 ? Math.round(x).toLocaleString('de-DE') : (+x.toFixed(1)).toLocaleString('de-DE'));

@@ -248,5 +248,25 @@
   "abw": null,
   "quelle": "soll unter 0,2 %",
   "rolle": "Prüfung"
+ },
+ {
+  "schiff": "Zeppelin NT 07",
+  "groesse": "Speicher-Code: Heckmotor erhalten (1 = ja)",
+  "soll": null,
+  "ist": 1,
+  "einheit": "",
+  "abw": null,
+  "quelle": "soll 1",
+  "rolle": "Prüfung"
+ },
+ {
+  "schiff": "Zeppelin NT 07",
+  "groesse": "Speicher-Code: Flächengewicht Leitwerk 1234 g/m²",
+  "soll": 1234,
+  "ist": 1234,
+  "einheit": "g/m²",
+  "abw": 0,
+  "quelle": "soll gleich",
+  "rolle": "Prüfung"
  }
 ]

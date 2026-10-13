@@ -1,3 +1,4 @@
+// 2026-10-13 23:20 · viewer.js 0.6: Motorpaar der Mittelgondel hintereinander mit einem Propeller (LZ 120), einzelner Motor am Heck (Zeppelin NT), 1 Flosse unten, Selbstdrehung schaltbar
 // 2026-10-13 22:15 · viewer.js 0.5: Motorgondeln am Rumpf als Körper mit Strebe; Paare seitlich auf gleicher x-Lage, Mittelgondel mittig unter der Hülle (1 Motor oder Motorpaar)
 // 2026-10-13 21:05 · viewer.js 0.4: Motorenpaare auf gleicher Lage in Längsrichtung, ungerade Motorgondel hinten mittig
 //                    Leitwerk 1–6 Flossen inkl. V/umgekehrtes V/Y, Gondelarten, Motoren, Appendix; Selbstdrehung, Touch)
@@ -36,7 +37,8 @@ export function createViewer(host) {
   controls.minDistance = 6; controls.maxDistance = 40;
   let resumeTimer = null;
   controls.addEventListener('start', () => { controls.autoRotate = false; clearTimeout(resumeTimer); });
-  controls.addEventListener('end', () => { resumeTimer = setTimeout(() => controls.autoRotate = true, 3000); });
+  let autoOn = true;   // Selbstdrehung ein/aus (Schalter in der App)
+  controls.addEventListener('end', () => { if (autoOn) resumeTimer = setTimeout(() => controls.autoRotate = true, 3000); });
 
   let ship = null;   // aktuelle Gruppe mit allen Teilen
 
@@ -88,7 +90,7 @@ export function createViewer(host) {
     // Leitwerk: Winkel der Flossen (0 = oben, gegen den Uhrzeigersinn von hinten gesehen)
     const n = d.ltw.n, an = d.ltw.anord;
     let angs;
-    if (n === 1) angs = [0];
+    if (n === 1) angs = an === 'u' ? [Math.PI] : [0];          // eine Flosse oben oder unten
     else if (n === 2) angs = an === 'V' ? [Math.PI / 4, -Math.PI / 4] : an === 'A' ? [3 * Math.PI / 4, -3 * Math.PI / 4] : [0, Math.PI];
     else if (n === 3) angs = an === 'L' ? [0, 2 * Math.PI / 3, -2 * Math.PI / 3] : [Math.PI, Math.PI / 3, -Math.PI / 3];
     else { const off = an === 'X' ? Math.PI / n : 0; angs = Array.from({ length: n }, (_, k) => off + k * 2 * Math.PI / n); }
@@ -140,7 +142,8 @@ export function createViewer(host) {
     // Lage jeder Motorgondel bzw. jedes Motors (Regel in LSCore.nacelles):
     //   am Rumpf: Motoren paarweise links/rechts auf derselben x-Lage, Paare gleichmäßig zwischen 0,35 L und 0,65 L;
     //             bei ungerader Zahl ein Motor in einer Gondel mittig unter der Hülle (0,72 L);
-    //             Sonderfall: ein Motorpaar gemeinsam in der Mittelgondel (z. B. LZ 120 hinten), Propeller links/rechts daran.
+    //             Sonderfall: ein Motorpaar gemeinsam in der Mittelgondel, hintereinander auf einen Druckpropeller (LZ 120);
+    //             ein einzelner Motor wahlweise ganz am Heck (Zeppelin NT).
     //   an der Gondel: Paare links/rechts, weitere Paare dahinter;  am Heck: nebeneinander.
     const podMat = new THREE.MeshStandardMaterial({ color: COL.gondel, roughness: 0.5 });   // Motorgondeln
     const spots = [];                 // [x, y, z, Richtung] je Motor mit Propeller
@@ -156,16 +159,12 @@ export function createViewer(host) {
           spots.push([X(x) + podL * 0.6, y, z, 1]);           // Druckpropeller am Gondelende (Heckseite)
         }
       }
-      if (N.mitte) {
+      if (N.heck) spots.push([X(0.995) + propD * 0.3, 0, 0]);   // einzelner Motor am Heck (Zugrichtung wie bei „Am Heck“)
+      else if (N.mitte) {
         const x = 0.72, rr = rad(x), y = -rr - propD * 0.75;
         pods.push([X(x), y, 0, podL * (N.mitte === 2 ? 1.5 : 1), podR * (N.mitte === 2 ? 1.4 : 1), -rr * 0.97]);
-        if (N.mitte === 1) spots.push([X(x) + podL * 0.6, y, 0, 1]);
-        else for (const side of [-1, 1]) {   // Motorpaar: Propeller links/rechts auf Auslegern, gleiche x-Lage
-          const zm = side * (podR * 1.4 + propD * 0.55);
-          spots.push([X(x) + podL * 0.3, y, zm, 1]);
-          const arm = new THREE.Mesh(new THREE.CylinderGeometry(podR * 0.15, podR * 0.15, Math.abs(zm), 6), podMat);
-          arm.rotation.x = Math.PI / 2; arm.position.set(X(x) + podL * 0.3, y, zm / 2); g.add(arm);
-        }
+        // ein Motor oder ein Motorpaar hintereinander: in beiden Fällen ein Druckpropeller am Gondelende
+        spots.push([X(x) + podL * (N.mitte === 2 ? 0.85 : 0.6), y, 0, 1]);
       }
     } else if (a.lage === 'H') {
       for (let k = 0; k < nM; k++) spots.push([X(0.995) + propD * 0.3, 0, nM > 1 ? (k - (nM - 1) / 2) * propD * 1.2 : 0]);
@@ -202,5 +201,7 @@ export function createViewer(host) {
       ship = build(result); scene.add(ship);
     },
     snapshot() { return renderer.domElement.toDataURL('image/png'); },
+    // Selbstdrehung ein- oder ausschalten; von Hand drehen und zoomen geht immer
+    setAutoRotate(on) { autoOn = !!on; controls.autoRotate = autoOn; clearTimeout(resumeTimer); },
   };
 }

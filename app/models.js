@@ -1,3 +1,4 @@
+// 2026-10-13 23:20 · models.js 0.7: Zeppelin NT dritter Motor am Heck
 // 2026-10-13 21:20 · models.js 0.6: LZ 120 nach Windkanalmodell 1:47,62 (Rumpf, Leitwerk, Gondel); Beladung LZ 120 für Fahrt FN–Berlin (Prallhöhe 500 m, Ballast 1 t, Kraftstoff 2 t)
 /* =================================================================================================
    FESTE AUSWAHL
@@ -93,7 +94,7 @@
         huelle_gm2: 350, ballonet: 25, prallhoehe: 2600,                                      // [A] Laminat
         ltw: { n: 3, anord: 'L', faktor: 1 },                                                 // NT: umgekehrtes Y (eine Flosse oben, zwei unten)
         gondel: 'F', gform: 'S', crew: 2, pax: 12, m_person: 80,                             // [W] 15 Sitze; [A] Auslastung
-        antrieb: { art: 'V', n: 3, kW: 147, lage: 'R', eta: 0.70, kraftstoff: 400, sfc: 0.30, kgkW: 2.5 }, // [W] Leistung; Rest [A]
+        antrieb: { art: 'V', n: 3, kW: 147, lage: 'R', ungerade: 'H', eta: 0.70, kraftstoff: 400, sfc: 0.30, kgkW: 2.5 }, // [W] Leistung; [N] zwei Motoren seitlich, der dritte ganz am Heck; Rest [A]
         v_reise: 70, ballast: 100,                                                           // [W] Reise
       },
     },

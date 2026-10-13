@@ -1,3 +1,4 @@
+// 2026-10-13 23:20 · core.js 0.10: Flächengewicht Leitwerk als Parameter (ltw.gm2), ungerader Motor wahlweise am Heck (antrieb.ungerade = 'H', Zeppelin NT), 1 Flosse unten
 // 2026-10-13 22:15 · core.js 0.9: Motorgondeln nach fester Regel (Paare seitlich, ungerade Zahl ⇒ Mittelgondel, Sonderfall Motorpaar in Mittelgondel)
 // 2026-10-13 21:00 · core.js 0.8: Gasraum-Anteil überschreibbar (LZ 120 aus Windkanalmodell)
 //                    Widerstand, Leistung nach Burgess, Gipfelhöhe, Leitwerk im Überschlag, Speicher-Code)
@@ -338,7 +339,11 @@
        – Bei ungerader Motorzahl sitzt ein Motor in einer Gondel mittig unter der Hülle.
        – Sonderfall: ein Motorpaar gemeinsam in einer Gondel mittig unter der Hülle (z. B. LZ 120 hinten).
          Gespeichert wird das als gondeln = n − 1 bei gerader Motorzahl n.
-     Rückgabe: g = Zahl der Gondeln, paare = Zahl der seitlichen Paare, mitte = Motoren in der Mittelgondel (0, 1 oder 2).
+       – Ein einzelner ungerader Motor kann statt unter der Hülle auch ganz am Heck sitzen (antrieb.ungerade = 'H',
+         z. B. Zeppelin NT: zwei seitlich, einer am Heck). Für den Widerstand zählt er wie eine Gondel.
+       – Das Motorpaar in der Mittelgondel sitzt hintereinander und treibt gemeinsam einen Propeller (LZ 120).
+     Rückgabe: g = Zahl der Gondeln, paare = Zahl der seitlichen Paare, mitte = Motoren in der Mittelgondel (0, 1 oder 2),
+               heck = true, wenn der einzelne Motor am Heck sitzt.
      Für Motoren an der Gondel oder am Heck bleibt es wie bisher (eine Widerstandsfläche je Motor). */
   function nacelles(a) {
     const n = Math.max(1, a.n | 0);
@@ -346,7 +351,7 @@
     const mpaar = n >= 2 && n % 2 === 0 && a.gondeln === n - 1;   // Sonderfall Motorpaar in der Mittelgondel
     const mitte = mpaar ? 2 : n % 2;
     const paare = (n - mitte) / 2;
-    return { g: 2 * paare + (mitte ? 1 : 0), paare, mitte };
+    return { g: 2 * paare + (mitte ? 1 : 0), paare, mitte, heck: mitte === 1 && a.ungerade === 'H' };
   }
   function dragCoeff(d, geo, tl, v, rho) {
     const Re = Math.max(v, 0.5) * geo.L / NU0 * (rho / 1.225);
@@ -463,6 +468,10 @@
     // --- Massen ---
     const pr = propulsion(d, geo);
     const struct = d.bauweise === 'S' ? massRigid(d, geo, vmax, tl) : massPressure(d, geo, vmax, tl, lift0);
+    // Leitwerk: Flächengewicht aus der Abschätzung (Vorschlag) oder vom Nutzer vorgegeben (ltw.gm2 in g/m² Flossenfläche,
+    // einschließlich Gerüst, Bespannung und Ruder)
+    const ltw_gm2_calc = tl.Atot > 0 ? struct.leitwerk / tl.Atot * 1000 : 0;
+    if (d.ltw.gm2) struct.leitwerk = tl.Atot * d.ltw.gm2 / 1000;
     const gon = gondola(d, geo, d._hang, 25);
     const leer = Object.assign({}, struct, { gondel: gon.m, seile: gon.ropes ? gon.ropes.m : 0, antrieb: pr.mMotor, avionik: d.avionik || 0 });
     const mLeer = sum(leer);
@@ -527,7 +536,7 @@
       leer, mLeer, zuladung, mGesamt, frei,
       vmax, vmax_kmh: vmax * 3.6, v_reise_kmh: vr * 3.6, Preise, dauer_h, reichweite_km, gipfel,
       drag: dragCoeff(d, geo, tl, vmax, 1.225), gondel: gondola(d, geo, d._hang, vmax), K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
-      P_burgess, v_beulen, latten, huelleAuslastung, propulsion: pr, warn, vorschlaege,
+      P_burgess, v_beulen, latten, huelleAuslastung, propulsion: pr, warn, vorschlaege, ltw_gm2_calc,
     };
   }
 
@@ -576,12 +585,12 @@
       Z.push(['Gerüst: Ringe, Drähte, Netze', 'W · 5.511 kg · (L/196) · (D/23,98)³  (L-49)', m(e.ringe)]);
       Z.push(['Armaturen, Ballastanlage', '0,0708 kg/m³ · V · (W + 1)/2  (L-49)', m(e.armaturen)]);
       Z.push(['Elektrik, Ausrüstung', '0,71 kg/m² · V^(2/3)  (L-49)', m(e.elektrik)]);
-      Z.push(['Leitwerk', 'Flossenfläche ' + nn(t.Atot) + ' m² · max(2,03 kg/m² · L/196 · v/26,8; 2 · Hüllengewicht)', m(e.leitwerk)]);
+      Z.push(['Leitwerk', d.ltw.gm2 ? 'Flossenfläche ' + nn(t.Atot) + ' m² · gewähltes Flächengewicht ' + nn(d.ltw.gm2) + ' g/m² (Abschätzung wäre ' + nn(r.ltw_gm2_calc) + ' g/m²)' : 'Flossenfläche ' + nn(t.Atot) + ' m² · max(2,03 kg/m² · L/196 · v/26,8; 2 · Hüllengewicht)', m(e.leitwerk)]);
     } else {
       Z.push(['Hülle', 'S · Flächengewicht · 1,25 (Nähte, Gurte) = ' + nn(g.S) + ' m² · ' + n(d.huelle_gm2) + ' g/m² · 1,25', m(e.huelle)]);
       if (e.ballonet) Z.push(['Ballonets', '2 · 2,2 · (Ballonet · V)^(2/3) · 0,6 · Flächengewicht, Ballonet ' + n(d.ballonet) + ' %', m(e.ballonet)]);
       if (e.geblaese) Z.push(['Gebläse', '0,002 kg/m³ · V + 2 kg', m(e.geblaese)]);
-      Z.push(['Leitwerk', 'Flossenfläche ' + nn(t.Atot) + ' m² · (3 · Hüllengewicht + 0,012 · √V · v/20)', m(e.leitwerk)]);
+      Z.push(['Leitwerk', d.ltw.gm2 ? 'Flossenfläche ' + nn(t.Atot) + ' m² · gewähltes Flächengewicht ' + nn(d.ltw.gm2) + ' g/m² (Abschätzung wäre ' + nn(r.ltw_gm2_calc) + ' g/m²)' : 'Flossenfläche ' + nn(t.Atot) + ' m² · (3 · Hüllengewicht + 0,012 · √V · v/20)', m(e.leitwerk)]);
       Z.push(['Aufhängung, Seile', '4 % des Bruttoauftriebs', m(e.aufhaengung)]);
       Z.push(['Armaturen, Ventile', g.V > 50 ? '0,01 kg/m³ · V + 15 kg' : '0,004 kg/m³ · V + 10 g', m(e.armaturen)]);
       if (e.kiel) Z.push(['Kiel / Innengerüst', '4,5 % des Bruttoauftriebs · √(L/60)', m(e.kiel)]);
@@ -691,11 +700,11 @@
     if (d.bauweise === 'S') p.push('Z:' + num(d.zellen_gm2), 'W:' + num(d.werkstoff));
     if (d.bauweise !== 'O') p.push('HP:' + num(d.prallhoehe));          // Prallhöhe für Starr, Prall und Halbstarr
     if (d.bauweise === 'P' || d.bauweise === 'H') p.push('BO:' + num(d.ballonet));
-    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : ''].join(',').replace(/,+$/, ''));
+    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : '', d.ltw.gm2 ? num(d.ltw.gm2) : ''].join(',').replace(/,+$/, ''));
     p.push('K:' + d.gondel + (d.gform ? ',' + d.gform : '') + (d.gabstand != null ? ',' + num(d.gabstand) : '') + (d.gseile ? ',' + d.gseile : ''), 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
     // Antrieb: Art, Zahl, kW je Motor, Lage, η, Energie (kWh, Wh/kg bzw. kg Kraftstoff, sfc), Motorgondeln, kg/kW
-    p.push('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (nacelles(a).g !== a.n ? nacelles(a).g : '') + ',' + (a.kgkW ? num(a.kgkW) : '') + ',' + (a.mg === 'O' ? 'O' : ''));
+    p.push(('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (nacelles(a).g !== a.n ? nacelles(a).g : '') + ',' + (a.kgkW ? num(a.kgkW) : '') + ',' + (a.mg === 'O' ? 'O' : '') + ',' + (a.ungerade === 'H' ? 'H' : '')).replace(/,+$/, ''));
     if (d.latten && d.latten.len) p.push('LA:' + d.latten.n + ',' + num(d.latten.len));
     p.push('S:' + num(d.v_reise), 'BL:' + num(d.ballast));
     if (d.nutzlast) p.push('NL:' + num(d.nutzlast));
@@ -726,7 +735,7 @@
         case 'W': d.werkstoff = +v; break;
         case 'HP': d.prallhoehe = +v; break;
         case 'BO': d.ballonet = +v; break;
-        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; break;
+        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; if (n[7]) d.ltw.gm2 = +n[7]; break;
         case 'K': d.gondel = n[0]; if (n[1]) d.gform = n[1]; if (n[2] !== undefined && n[2] !== '') d.gabstand = +n[2]; if (n[3]) d.gseile = +n[3]; break;
         case 'C': d.crew = +v; break;
         case 'P': d.pax = +v; break;
@@ -734,7 +743,7 @@
           const art = n[0];
           d.antrieb = Object.assign({}, DEFAULTS.antrieb, { art, n: +n[1], kW: +n[2], lage: n[3], eta: +n[4] });
           if (n[7]) d.antrieb.gondeln = +n[7];
-          d.antrieb.kgkW = n[8] ? +n[8] : null; d.antrieb.mg = n[9] === 'O' ? 'O' : 'V';
+          d.antrieb.kgkW = n[8] ? +n[8] : null; d.antrieb.mg = n[9] === 'O' ? 'O' : 'V'; if (n[10] === 'H') d.antrieb.ungerade = 'H';
           if (art === 'E' || art === 'S') { d.antrieb.kWh = +n[5]; d.antrieb.whkg = +n[6]; }
           else { d.antrieb.kraftstoff = +n[5]; d.antrieb.sfc = +n[6]; d.antrieb.kWh = 0; }
           break;
@@ -775,7 +784,7 @@
   }
 
   const LSCore = {
-    VERSION: '0.9', G0, LB, FT, HP,
+    VERSION: '0.10', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nacelles, nose, noseNeed,
     dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };

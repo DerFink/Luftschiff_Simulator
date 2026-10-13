@@ -1,4 +1,4 @@
-// 2026-10-13 18:50 · models.js 0.2: Leitwerksflächen von LZ 126 und C-7 fest aus Burgess Tab. 4, übrige nach Jones
+// 2026-10-13 19:30 · models.js 0.3: Gondelform und -abstand, Seile C-7, LZ 120 mit 3 Motorgondeln (Nutzer)
 /* =================================================================================================
    FESTE AUSWAHL
    -------------------------------------------------------------------------------------------------
@@ -28,7 +28,7 @@
         form: { LD: 200 / 27.64, m: 0.42, Cp: cp(78155, 200, 27.64), r0: 0.5, r1: 0.10 },   // [W] Maße, m/r0/r1 [A]
         huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 1500,                   // [A] Bauweise wie L-49 (Stand 1917)
         ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (2335 + 2870) / 2 * 0.0929 },               // [B] Tab. 4: Mittel senkrecht/waagerecht je Ebene
-        gondel: 'F', crew: 30, pax: 0, m_person: 80,                                         // [W]
+        gondel: 'F', gform: 'S', crew: 30, pax: 0, m_person: 80,                             // [W] stromlinienförmige Führergondel
         antrieb: { art: 'V', n: 5, kW: 298, lage: 'R', eta: 0.72, kraftstoff: 15000, sfc: 0.33, kgkW: 3.5 }, // [G] Leistung; Rest [A]
         v_reise: 100, ballast: 3000,                                                         // [A]
       },
@@ -42,8 +42,8 @@
         form: { LD: 120.8 / 18.71, m: 0.45, Cp: cp(20000 / 0.95, 120.8, 18.71), r0: 0.6, r1: 0.06 }, // [W]/[A]
         huelle_gm2: 150, zellen_gm2: 170, werkstoff: 1.0, prallhoehe: 1000,                   // [A] Stand wie L-49
         ltw: { n: 4, anord: '+', faktor: 1 },
-        gondel: 'F', crew: 12, pax: 20, m_person: 80,                                        // [W]
-        antrieb: { art: 'V', n: 4, kW: 176, lage: 'R', eta: 0.72, kraftstoff: 3000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; Rest [A]
+        gondel: 'F', gform: 'S', crew: 12, pax: 20, m_person: 80,                            // [W] schlanke Fahrgastgondel
+        antrieb: { art: 'V', n: 4, kW: 176, gondeln: 3, lage: 'R', eta: 0.72, kraftstoff: 3000, sfc: 0.36, kgkW: 5.0 }, // [W] Leistung; [N] 3 Motorgondeln (hinten 2 Motoren); Rest [A]
         v_reise: 110, ballast: 1500,                                                         // [A]
       },
     },
@@ -86,7 +86,7 @@
         form: { LD: 75 / 14.3, m: 0.42, Cp: cp(8425, 75, 14.3), r0: 0.6, r1: 0.10 },
         huelle_gm2: 350, ballonet: 25, prallhoehe: 2600,                                      // [A] Laminat
         ltw: { n: 3, anord: 'L', faktor: 1 },                                                 // NT: umgekehrtes Y (eine Flosse oben, zwei unten)
-        gondel: 'F', crew: 2, pax: 12, m_person: 80,                                         // [W] 15 Sitze; [A] Auslastung
+        gondel: 'F', gform: 'S', crew: 2, pax: 12, m_person: 80,                             // [W] 15 Sitze; [A] Auslastung
         antrieb: { art: 'V', n: 3, kW: 147, lage: 'R', eta: 0.70, kraftstoff: 400, sfc: 0.30, kgkW: 2.5 }, // [W] Leistung; Rest [A]
         v_reise: 70, ballast: 100,                                                           // [W] Reise
       },
@@ -102,7 +102,7 @@
         form: { LD: 59.76 / 12.8, m: 0.42, Cp: cp(5125, 59.76, 12.8), r0: 0.5, r1: 0.10 },
         huelle_gm2: 475, ballonet: 25, prallhoehe: 1219,                                      // [B] 14 oz/yd²; 4.000 ft
         ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (424 + 536) / 2 * 0.0929 },                 // [B] Tab. 4: Mittel senkrecht/waagerecht je Ebene
-        gondel: 'F', crew: 4, pax: 0, m_person: 80,
+        gondel: 'F', gform: 'E', gabstand: 4, gseile: 24, crew: 4, pax: 0, m_person: 80,     // [A] offene Gondel an rund 24 Seilen, ca. 4 m unter der Hülle
         antrieb: { art: 'V', n: 2, kW: 112, lage: 'G', eta: 0.65, kraftstoff: 800, sfc: 0.365, kgkW: 3.65 }, // [W]/[B]
         v_reise: 70, ballast: 200,
       },
@@ -116,7 +116,7 @@
         form: { LD: 61 / Math.sqrt(7200 / (0.65 * Math.PI / 4 * 61)), m: 0.42, Cp: 0.65, r0: 0.55, r1: 0.12 },
         huelle_gm2: 400, ballonet: 25, prallhoehe: 1500,                                      // [A] PU-beschichtetes Polyester
         ltw: { n: 4, anord: 'X', faktor: 1 },
-        gondel: 'F', crew: 2, pax: 13, m_person: 80,                                         // [W]
+        gondel: 'F', gform: 'E', gabstand: 0, crew: 2, pax: 13, m_person: 80,                // [W]; Gondel direkt an der Hülle, innen aufgehängt
         antrieb: { art: 'V', n: 2, kW: 188, lage: 'G', eta: 0.70, kraftstoff: 400, sfc: 0.30, kgkW: 3.0 }, // [W] Leistung; Rest [A]
         v_reise: 72, ballast: 100,                                                           // [W] Reise
       },

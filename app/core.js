@@ -1,4 +1,4 @@
-// 2026-10-13 18:45 · core.js 0.4: Leitwerk nach Jones (Munk-Moment, Helmbold, Neutralpunkt 25 % MAC, Hebel ab C.B.), Rechenweg
+// 2026-10-13 19:40 · core.js 0.5: Gondel nach Stirnfläche/Form/Abstand, Seile, Zahl der Motorgondeln, Leitwerk bis 8 Flossen
 //                    Widerstand, Leistung nach Burgess, Gipfelhöhe, Leitwerk im Überschlag, Speicher-Code)
 /* =================================================================================================
    LUFTSCHIFF-SIMULATOR · RECHENKERN
@@ -259,16 +259,39 @@
     return m;
   }
 
-  // Gondel: Masse und Stirnwiderstand je Art; Personen = Besatzung + Pax
-  function gondola(d, geo) {
-    const n = (d.crew || 0) + (d.pax || 0);
-    switch (d.gondel) {
-      case 'K': return { m: 25 + 22 * n, CdA: 1.0 * (0.9 + 0.35 * n) };              // offener (länglicher) Korb
-      case 'F': return { m: 150 + 60 * n, CdA: 0.3 * (1.0 + 0.5 * n) };              // Gondel fest am Rumpf
-      case 'I': return { m: 100 + 45 * n, CdA: 0.05 * (1.0 + 0.5 * n) };             // im Rumpf (Starrschiff)
-      case 'R': return { m: 0, CdA: 0.004 };                                         // RC: kleine Elektronik-Kapsel (Masse unter Avionik)
-      default:  return { m: 0, CdA: 0 };                                             // keine Gondel (autonom)
+  /* Gondel: Maße, Masse und Widerstand nach Stirnfläche und Form (statt nach Personenzahl)
+     Arten:  K = offener Korb, F = Kabine fest/hängend, I = Räume im Rumpf + kleine Führergondel,
+             R = RC-Kapsel, N = keine.   Form der Kabine (gform): E = eckig, S = Stromlinie.
+     Maße aus der Personenzahl (änderbar über gl/gb/gh in m):
+       Korb:   Breite 1,2 m, Höhe 1,15 m, Länge 0,6 m je Person + 0,6 m (mind. 1,2 m)
+       Kabine: Breite 1,4 m + 2 cm je Person (höchstens 3 m), Höhe 1,4 m (bis 2 P.) sonst 1,9 m,
+               Länge 2 m + 0,75 m je Person
+       Führergondel im Rumpf (I): 2,0 × 1,8 m Stirnfläche, Länge 5 % der Schiffslänge (2–15 m)
+     Widerstand: C_D · Stirnfläche + Reibung 0,004 · benetzte Fläche;
+       C_D: Korb 1,0 · Kabine eckig 0,8 · Stromlinie 0,25; direkt an der Hülle (Abstand 0) × 0,8.
+     Seile (nur bei Abstand > 0 m, Prall/offen/halbstarr): Zahl nS, Länge je Seil ≈ 1,3 · Abstand,
+       Ø aus der hängenden Last: 2-fache Last / nS bei 60 N/mm² ⇒ Ø = √(4A/π), mindestens 3 mm;
+       Widerstand 1,2 · Ø · Länge je Seil, Masse 0,002 kg/m je mm² Ø².                                 */
+  function gondola(d, geo, hangLast) {
+    const n = (d.crew || 0) + (d.pax || 0), t = d.gondel, f = d.gform || 'E';
+    let l = 0, b = 0, h = 0, m = 0, cd = 0;
+    if (t === 'K') { b = 1.2; h = 1.15; l = Math.max(1.2, 0.6 * n + 0.6); m = 25 + 22 * n; cd = 1.0; }
+    else if (t === 'F') { b = Math.min(3, 1.4 + 0.02 * n); h = n <= 2 ? 1.4 : 1.9; l = 2 + 0.75 * n; m = 150 + 60 * n; cd = f === 'S' ? 0.25 : 0.8; }
+    else if (t === 'I') { b = 2.0; h = 1.8; l = Math.min(15, Math.max(2, 0.05 * geo.L)); m = 100 + 45 * n; cd = 0.25; }
+    else if (t === 'R') { return { m: 0, CdA: 0.004, l: 0.1, b: 0.05, h: 0.04, ropes: null }; }
+    else return { m: 0, CdA: 0, l: 0, b: 0, h: 0, ropes: null };
+    if (d.gl) l = d.gl; if (d.gb) b = d.gb; if (d.gh) h = d.gh;
+    const ga = (d.bauweise === 'S' || t === 'I') ? 0 : (d.gabstand ?? (t === 'K' ? 2.5 : 0));
+    const anliegend = ga <= 0;
+    const CdA = cd * (anliegend ? 0.8 : 1) * b * h + 0.004 * 2 * (b + h) * l;
+    let ropes = null;
+    if (!anliegend) {
+      const nS = d.gseile || (t === 'K' ? 4 : Math.max(4, 2 * Math.round(Math.sqrt(hangLast || 100) / 6)));
+      const len = 1.3 * ga, A_mm2 = 2 * (hangLast || 100) * 9.81 / nS / 60;
+      const dmm = Math.max(3, Math.sqrt(4 * A_mm2 / Math.PI));
+      ropes = { n: nS, len, dmm, CdA: 1.2 * nS * len * dmm / 1000, m: nS * len * 0.002 * dmm * dmm };
     }
+    return { m, CdA, l, b, h, cd, ga, ropes };
   }
 
   /* -----------------------------------------------------------------------------------------------
@@ -287,10 +310,12 @@
     const cf = cfOf(Re), LD = geo.L / geo.D;
     const hull = cf * (4 * Math.cbrt(LD) + 6 * Math.pow(LD, -7 / 6) + 24 * Math.pow(LD, -8 / 3));
     const fins = 2 * tl.Atot * cfOf(Re * 0.15) * 1.25 / geo.Vs;                 // beidseitig benetzt, Profildicke
-    const gon = gondola(d, geo).CdA / geo.Vs;
-    const ant = d.antrieb;
-    const engines = ant.n * (ant.lage === 'I' ? 0.01 : 0.036) * Math.pow(Math.max(ant.kW, 0.01), 2 / 3) / geo.Vs;
-    const seile = (d.bauweise === 'P' || d.bauweise === 'O') && d.gondel !== 'N' ? 0.0025 : 0;
+    const g = gondola(d, geo, d._hang);
+    const gon = g.CdA / geo.Vs;
+    // Motorgondeln: Zahl der Gondeln (z. B. LZ 120: 4 Motoren in 3 Gondeln), Widerstand ~ (Leistung je Gondel)^(2/3)
+    const ant = d.antrieb, ng = Math.max(1, ant.gondeln || ant.n), Pg = ant.n * Math.max(ant.kW, 0.01) / ng;
+    const engines = ng * (ant.lage === 'I' ? 0.01 : 0.036) * Math.pow(Pg, 2 / 3) / geo.Vs;
+    const seile = g.ropes ? g.ropes.CdA / geo.Vs : 0;
     const extra = (d.anbauten || 0) / geo.Vs;
     return { Re, cf, hull, fins, gon, engines, seile, extra, total: hull + fins + gon + engines + seile + extra };
   }
@@ -351,6 +376,10 @@
     const lpm = liftPerM3(d.gas, d.reinheit, 0);
     const lift0 = geo.V * gasShare * fill * lpm;                    // [kg] Bruttoauftrieb am Boden
 
+    // --- Hängende Last für die Seile der Gondel (Gondel, Personen, Energie, Nutzlast, Ballast, Motoren an der Gondel) ---
+    const pr0 = propulsion(d, geo), g0 = gondola(d, geo, 0);
+    d._hang = g0.m + ((d.crew || 0) + (d.pax || 0)) * d.m_person + pr0.mEnergie + (d.nutzlast || 0) + (d.ballast || 0) + (d.antrieb.lage === 'G' ? pr0.mMotor : 0);
+
     // --- Höchstgeschwindigkeit zuerst grob (für last- und geschwindigkeitsabhängige Massen) ---
     let vmax = 20, tl = tail(d.ltw, geo, vmax);
     for (let it = 0; it < 3; it++) { vmax = solveV(d, geo, tl, d.antrieb.n * d.antrieb.kW * 1000, 0); tl = tail(d.ltw, geo, vmax); }
@@ -358,8 +387,8 @@
     // --- Massen ---
     const pr = propulsion(d, geo);
     const struct = d.bauweise === 'S' ? massRigid(d, geo, vmax, tl) : massPressure(d, geo, vmax, tl, lift0);
-    const gon = gondola(d, geo);
-    const leer = Object.assign({}, struct, { gondel: gon.m, antrieb: pr.mMotor, avionik: d.avionik || 0 });
+    const gon = gondola(d, geo, d._hang);
+    const leer = Object.assign({}, struct, { gondel: gon.m, seile: gon.ropes ? gon.ropes.m : 0, antrieb: pr.mMotor, avionik: d.avionik || 0 });
     const mLeer = sum(leer);
     const personen = ((d.crew || 0) + (d.pax || 0)) * d.m_person;
     const zuladung = { energie: pr.mEnergie, personen, nutzlast: d.nutzlast || 0, ballast: d.ballast || 0, schlepptau: d.schlepptau || 0 };
@@ -415,7 +444,7 @@
       d, geo, tail: tl, lift0, lpm, fill, prallhoehe, gasShare,
       leer, mLeer, zuladung, mGesamt, frei,
       vmax, vmax_kmh: vmax * 3.6, v_reise_kmh: vr * 3.6, Preise, dauer_h, reichweite_km, gipfel,
-      drag: dragCoeff(d, geo, tl, vmax, 1.225), K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
+      drag: dragCoeff(d, geo, tl, vmax, 1.225), gondel: gon, K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
       P_burgess, v_beulen, huelleAuslastung, propulsion: pr, warn,
     };
   }
@@ -477,7 +506,8 @@
       if (e.nasenlatten) Z.push(['Nasenlatten', '0,004 kg/m³ · V', m(e.nasenlatten)]);
     }
     const pers = (d.crew || 0) + (d.pax || 0);
-    Z.push(['Gondel', { K: 'Korb: 25 kg + 22 kg je Person', F: 'Gondel: 150 kg + 60 kg je Person', I: 'Führergondel/Räume: 100 kg + 45 kg je Person', R: 'RC-Kapsel (unter Avionik)', N: 'keine' }[d.gondel] + ' · ' + pers + ' Personen', m(e.gondel)]);
+    Z.push(['Gondel', { K: 'Korb: 25 kg + 22 kg je Person', F: 'Kabine: 150 kg + 60 kg je Person', I: 'Führergondel/Räume: 100 kg + 45 kg je Person', R: 'RC-Kapsel (unter Avionik)', N: 'keine' }[d.gondel] + ' · ' + pers + ' Personen', m(e.gondel)]);
+    if (e.seile) { const ro = r.gondel.ropes; Z.push(['Seile der Gondel', ro.n + ' Seile · ' + nn(ro.len) + ' m · Ø ' + nn(ro.dmm) + ' mm · 0,002 kg/(m·mm²)', m(e.seile)]); }
     Z.push(['Antrieb', (a.art === 'V' ? a.n + ' · ' + nn(a.kW) + ' kW · ' + nn(a.kgkW || 1.3) + ' kg/kW' : a.n + ' · ' + nn(a.kW) + ' kW · ' + nn(a.kgkW || 0.45) + ' kg/kW + Propeller 0,15 kg · n · P^0,6'), m(e.antrieb)]);
     if (e.avionik) Z.push(['Avionik', 'Eingabe', m(e.avionik)]);
     Z.push(['Leermasse', 'Summe', m(r.mLeer)]);
@@ -506,9 +536,10 @@
       ['Reibungsbeiwert (turbulent)', 'C_f = 0,455 / (log₁₀ Re)^2,58', n(dr.cf, 5)],
       ['Rumpf (Hoerner)', 'C_D = C_f · [4·(L/D)^(1/3) + 6·(L/D)^(−7/6) + 24·(L/D)^(−8/3)], L/D ' + nn(g.L / g.D), n(dr.hull, 4)],
       ['Leitwerk', '2 · Flossenfläche · C_f(Flosse) · 1,25 / V^(2/3)', n(dr.fins, 4)],
-      ['Gondel', 'C_D·A der Gondel / V^(2/3)', n(dr.gon, 4)],
-      ['Motoren', 'n · ' + (a.lage === 'I' ? '0,01' : '0,036') + ' · P_kW^(2/3) / V^(2/3)', n(dr.engines, 4)],
-      ['Seile, Zusatz', 'Prallschiff mit Gondel 0,0025; Zusatzfläche ' + nn(d.anbauten || 0) + ' m²', n(dr.seile + dr.extra, 4)],
+      ['Gondel', (() => { const G = r.gondel; return G.l ? 'Maße ' + nn(G.l) + ' × ' + nn(G.b) + ' × ' + nn(G.h) + ' m; C_D ' + n(G.cd || 0, 2) + (G.ga > 0 ? '' : ' · 0,8 (an der Hülle)') + ' · ' + nn(G.b * G.h) + ' m² + 0,004 · benetzte Fläche = ' + nn(G.CdA) + ' m², / V^(2/3)' : 'keine'; })(), n(dr.gon, 4)],
+      ['Motorgondeln', Math.max(1, a.gondeln || a.n) + ' Gondel(n) · ' + (a.lage === 'I' ? '0,01' : '0,036') + ' · (P je Gondel ' + nn(a.n * a.kW / Math.max(1, a.gondeln || a.n)) + ' kW)^(2/3) / V^(2/3)', n(dr.engines, 4)],
+      ['Seile', r.gondel.ropes ? r.gondel.ropes.n + ' · 1,2 · Ø ' + nn(r.gondel.ropes.dmm) + ' mm · ' + nn(r.gondel.ropes.len) + ' m (Ø aus 2-facher Last ' + m(d._hang) + ' bei 60 N/mm²) / V^(2/3)' : 'keine außen (Gondel an der Hülle)', n(dr.seile, 4)],
+      ['Zusatzfläche', nn(d.anbauten || 0) + ' m² / V^(2/3)', n(dr.extra, 4)],
       ['Summe', 'C_D bezogen auf V^(2/3)', n(dr.total, 4)],
     ] });
     const Pin = a.n * a.kW * 1000;
@@ -543,17 +574,22 @@
     p.push('LS1', 'N:' + (d.name || '').replace(/[|:]/g, ' '), 'B:' + d.bauweise, 'G:' + d.gas, 'R:' + num(d.reinheit), 'V:' + num(d.V));
     p.push('F:' + [f.LD, f.m, f.Cp, f.r0, f.r1].map(num).join(','));
     p.push('H:' + num(d.huelle_gm2));
-    if (d.bauweise === 'S') p.push('Z:' + num(d.zellen_gm2), 'W:' + num(d.werkstoff), 'HP:' + num(d.prallhoehe));
+    if (d.bauweise === 'S') p.push('Z:' + num(d.zellen_gm2), 'W:' + num(d.werkstoff));
+    if (d.bauweise !== 'O') p.push('HP:' + num(d.prallhoehe));          // Prallhöhe für Starr, Prall und Halbstarr
     if (d.bauweise === 'P' || d.bauweise === 'H') p.push('BO:' + num(d.ballonet));
     p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : ''].join(',').replace(/,+$/, ''));
-    p.push('K:' + d.gondel, 'C:' + d.crew, 'P:' + d.pax);
+    p.push('K:' + d.gondel + (d.gform ? ',' + d.gform : '') + (d.gabstand != null ? ',' + num(d.gabstand) : '') + (d.gseile ? ',' + d.gseile : ''), 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
-    p.push('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en);
+    // Antrieb: Art, Zahl, kW je Motor, Lage, η, Energie (kWh, Wh/kg bzw. kg Kraftstoff, sfc), Motorgondeln, kg/kW
+    p.push('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (a.gondeln && a.gondeln !== a.n ? a.gondeln : '') + ',' + (a.kgkW ? num(a.kgkW) : ''));
     p.push('S:' + num(d.v_reise), 'BL:' + num(d.ballast));
     if (d.nutzlast) p.push('NL:' + num(d.nutzlast));
     if (d.avionik) p.push('AV:' + num(d.avionik));
     if (d.anbauten) p.push('X:' + num(d.anbauten));
-    return p.join('|');
+    if (d.schlepptau) p.push('ST:' + num(d.schlepptau));
+    if (d.m_person && d.m_person !== 80) p.push('MP:' + num(d.m_person));
+    if (d.gl || d.gb || d.gh) p.push('GD:' + [d.gl ? num(d.gl) : '', d.gb ? num(d.gb) : '', d.gh ? num(d.gh) : ''].join(','));
+    return p.join('|').replace(/,+(?=\||$)/g, '');
   }
   function decode(s) {
     const parts = String(s).trim().split('|');
@@ -575,12 +611,14 @@
         case 'HP': d.prallhoehe = +v; break;
         case 'BO': d.ballonet = +v; break;
         case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; break;
-        case 'K': d.gondel = v; break;
+        case 'K': d.gondel = n[0]; if (n[1]) d.gform = n[1]; if (n[2] !== undefined && n[2] !== '') d.gabstand = +n[2]; if (n[3]) d.gseile = +n[3]; break;
         case 'C': d.crew = +v; break;
         case 'P': d.pax = +v; break;
         case 'A': {
           const art = n[0];
           d.antrieb = Object.assign({}, DEFAULTS.antrieb, { art, n: +n[1], kW: +n[2], lage: n[3], eta: +n[4] });
+          if (n[7]) d.antrieb.gondeln = +n[7];
+          d.antrieb.kgkW = n[8] ? +n[8] : null;
           if (art === 'E' || art === 'S') { d.antrieb.kWh = +n[5]; d.antrieb.whkg = +n[6]; }
           else { d.antrieb.kraftstoff = +n[5]; d.antrieb.sfc = +n[6]; d.antrieb.kWh = 0; }
           break;
@@ -590,6 +628,9 @@
         case 'NL': d.nutzlast = +v; break;
         case 'AV': d.avionik = +v; break;
         case 'X': d.anbauten = +v; break;
+        case 'ST': d.schlepptau = +v; break;
+        case 'MP': d.m_person = +v; break;
+        case 'GD': if (n[0]) d.gl = +n[0]; if (n[1]) d.gb = +n[1]; if (n[2]) d.gh = +n[2]; break;
       }
     }
     return d;
@@ -616,7 +657,7 @@
   }
 
   const LSCore = {
-    VERSION: '0.4', G0, LB, FT, HP,
+    VERSION: '0.5', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN,
     dragCoeff, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };

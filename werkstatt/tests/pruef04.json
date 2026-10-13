@@ -1,0 +1,218 @@
+[
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Höchstfahrt nach 15 min Vollgas (km/h)",
+  131.96964617867485,
+  132.18266014629648,
+  "km/h",
+  "soll wie Auslegung in dieser Höhe"
+ ],
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Höhe nach 5 min ohne Schub, abgewogen (m)",
+  300,
+  300,
+  "m",
+  "soll ±2 m"
+ ],
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Nicken ohne Höhensteuerer: Zeit bis 0,5° → 1° (s)",
+  null,
+  4.6000000000000005,
+  "s",
+  "Flossen 0.71 × Jones"
+ ],
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Nicken mit Höhensteuerer: Rest 1 min nach 5° Anstoß (°)",
+  0,
+  0.038971785454515115,
+  "°",
+  "größter Ausschlag 5.0°"
+ ],
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Gipfel nach Abwurf allen Ballasts: höchster Punkt (m)",
+  1813.5171156914112,
+  1847.3954849986335,
+  "m",
+  "Überschwingen erlaubt; Gas abgeblasen 2371 m³"
+ ],
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Kraftstoff in 1 h Reise (kg)",
+  156.21495781951472,
+  148.88846526506563,
+  "kg",
+  "Auslegung: Leistung Reise"
+ ],
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Wendekreis bei vollem Ruder (Vielfaches der Länge)",
+  null,
+  8.319229653344685,
+  "L",
+  "Erfahrung: 6–10 L"
+ ],
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Höhe halten 400 m (nach 10 min)",
+  400,
+  401.5008173624364,
+  "m",
+  "leicht 0,3 %, Nickwinkel -0.2°"
+ ],
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Position halten bei 5 m/s Wind: Abstand nach 30 min (m)",
+  0,
+  0.1487713773177822,
+  "m",
+  "Schub 0 %"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Höchstfahrt nach 15 min Vollgas (km/h)",
+  128.52742210447502,
+  128.71730317908023,
+  "km/h",
+  "soll wie Auslegung in dieser Höhe"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Höhe nach 5 min ohne Schub, abgewogen (m)",
+  300,
+  300,
+  "m",
+  "soll ±2 m"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Nicken ohne Höhensteuerer: Zeit bis 0,5° → 1° (s)",
+  null,
+  "stabil",
+  "s",
+  "Flossen 1.00 × Jones"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Nicken mit Höhensteuerer: Rest 1 min nach 5° Anstoß (°)",
+  0,
+  -0.0006823749377471859,
+  "°",
+  "größter Ausschlag 5.0°"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Gipfel nach Abwurf allen Ballasts: höchster Punkt (m)",
+  3297.5267702254314,
+  3324.617839747999,
+  "m",
+  "Überschwingen erlaubt; Gas abgeblasen 463 m³"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Kraftstoff in 1 h Reise (kg)",
+  23.698173715637783,
+  22.583214898366123,
+  "kg",
+  "Auslegung: Leistung Reise"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Wendekreis bei vollem Ruder (Vielfaches der Länge)",
+  null,
+  6.999972269886921,
+  "L",
+  "Erfahrung: 6–10 L"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Höhe halten 400 m (nach 10 min)",
+  400,
+  402.361304229633,
+  "m",
+  "leicht 0,3 %, Nickwinkel -0.4°"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Position halten bei 5 m/s Wind: Abstand nach 30 min (m)",
+  0,
+  0.0001722804566681992,
+  "m",
+  "Schub 0 %"
+ ],
+ [
+  "US Navy C-7",
+  "Höchstfahrt nach 15 min Vollgas (km/h)",
+  99.27701421498682,
+  99.38094662739752,
+  "km/h",
+  "soll wie Auslegung in dieser Höhe"
+ ],
+ [
+  "US Navy C-7",
+  "Höhe nach 5 min ohne Schub, abgewogen (m)",
+  300,
+  300,
+  "m",
+  "soll ±2 m"
+ ],
+ [
+  "US Navy C-7",
+  "Nicken ohne Höhensteuerer: Zeit bis 0,5° → 1° (s)",
+  null,
+  4.800000000000001,
+  "s",
+  "Flossen 0.67 × Jones"
+ ],
+ [
+  "US Navy C-7",
+  "Nicken mit Höhensteuerer: Rest 1 min nach 5° Anstoß (°)",
+  0,
+  -0.002900292421496287,
+  "°",
+  "größter Ausschlag 5.0°"
+ ],
+ [
+  "US Navy C-7",
+  "Gipfel nach Abwurf allen Ballasts: höchster Punkt (m)",
+  3034.9152480007433,
+  3059.5773447955967,
+  "m",
+  "Überschwingen erlaubt; Gas abgeblasen 764 m³"
+ ],
+ [
+  "US Navy C-7",
+  "Kraftstoff in 1 h Reise (kg)",
+  30.741350336439307,
+  29.280617439531397,
+  "kg",
+  "Auslegung: Leistung Reise"
+ ],
+ [
+  "US Navy C-7",
+  "Wendekreis bei vollem Ruder (Vielfaches der Länge)",
+  null,
+  8.541977188080125,
+  "L",
+  "Erfahrung: 6–10 L"
+ ],
+ [
+  "US Navy C-7",
+  "Höhe halten 400 m (nach 10 min)",
+  400,
+  410.07397343184215,
+  "m",
+  "leicht 0,3 %, Nickwinkel -1.3°"
+ ],
+ [
+  "US Navy C-7",
+  "Position halten bei 5 m/s Wind: Abstand nach 30 min (m)",
+  0,
+  0.0011220135423360299,
+  "m",
+  "Schub 1 %"
+ ]
+]

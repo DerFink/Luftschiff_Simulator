@@ -1,0 +1,262 @@
+// 2026-10-14 04:10 · flug.js 0.2: Hülle als Streifenrechnung (Potential bis zur Ablösung + Querströmung, nach Jones & DeLaurier) statt festem Munk-Moment
+// 2026-10-14 03:30 · flug.js 0.1: erstes Flugmodell (Längsbewegung mit Nicken, Kurs, Gas, Ballast, Verbrauch, Assistenten)
+/* =================================================================================================
+   FLUGMODELL DES LUFTSCHIFF-SIMULATORS
+   -------------------------------------------------------------------------------------------------
+   Rechnet aus einem ausgelegten Luftschiff (Ergebnis von LSCore.compute) die Bewegung in der Luft.
+   Läuft im Browser (Objekt LSFlug) und in Node (require('./flug.js')) für die Prüfungen.
+
+   Umfang (vereinbart 13.10.2026):
+     – Längsbewegung: Fahrt U, Steigen w, Nickwinkel θ mit Nickgeschwindigkeit q
+       Kräfte: Schub, Widerstand (aus dem Rechenkern), statischer Auftrieb, Gewicht, dynamischer Auftrieb
+       aus dem Anstellwinkel (Flossen und Querströmung der Hülle), Höhenruder.
+       Momente: Hülle in Streifen (Munk-Anteil bis zur Ablösung, Querströmung; instabil, aber dämpfend), Flossen (stabil, dämpfend), Pendel aus dem
+       tief liegenden Schwerpunkt, Trimm (Schwerpunkt vor/hinter der Auftriebsmitte), Schublinie unter der Achse.
+     – Kurs: Seitenruder ⇒ Drehgeschwindigkeit mit Verzögerung; Wenderadius nach Leitwerksgröße.
+     – Gas: ein einziger Gassack zum Ablassen (Vereinfachung des Nutzers); über der Prallhöhe bläst Gas
+       von selbst ab (Überdruckventile bzw. offener Appendix). Ballonets (Prall, Halbstarr) halten die Form.
+     – Ballast: Abwurf schrittweise oder fortlaufend; Kraftstoff bzw. Akku wird verbraucht.
+     – Wind: waagerecht, aus dem Wetter (Vorgabe von außen je Zeitschritt).
+     – Assistenten: Höhe halten, Kurs halten, Fahrt halten (Tempomat), Position halten.
+   Einheiten: SI (m, s, kg, N, W), Winkel im Bogenmaß; Kurs ψ ab Nord im Uhrzeigersinn.
+   ================================================================================================= */
+(function (root) {
+  'use strict';
+  const C = (typeof module !== 'undefined' && module.exports) ? require('./core.js') : root.LSCore;
+  const G = 9.80665;
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const wrapPi = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+
+  /* -----------------------------------------------------------------------------------------------
+     1. KENNWERTE DES SCHIFFS AUS DER AUSLEGUNG
+     Alles, was sich während der Fahrt nicht ändert, wird einmal vorab ausgerechnet.
+     ----------------------------------------------------------------------------------------------- */
+  function kennwerte(r) {
+    const d = r.d, geo = r.geo, tl = r.tail, a = d.antrieb;
+    const L = geo.L, D = geo.D, Vol = geo.V, Vs = geo.Vs;
+    // Widerstandsbeiwert (bezogen auf V^(2/3)) als Tabelle über der Fahrt, damit nicht jeder Schritt neu rechnet
+    const vTab = [], cdTab = [], vTop = Math.max(2, r.vmax * 1.4);
+    for (let i = 0; i <= 30; i++) { const v = 0.3 + vTop * i / 30; vTab.push(v); cdTab.push(C.dragCoeff(d, geo, tl, v, 1.225).total); }
+    // Flossen in der waagerechten Ebene (nur wenn ein Höhenleitwerk da ist): wirksame Fläche und Auftriebsanstieg
+    const Ah = tl.elevator ? tl.Aplane : 0;
+    // Senkrechte Flossen (für den Wenderadius); bei 1 oder 2 senkrechten Flossen ist alles senkrecht
+    const Av = tl.planes === 2 ? tl.Aplane : tl.Atot;
+    // Querströmung der Hülle: Beiwert eines umströmten Zylinders, abgemindert für den Rotationskörper (Hoerner Kap. 3)
+    const Cdc = 0.6, Aseit = 0.7 * L * D;
+    // Propeller: Standschub begrenzt die Kraft bei kleiner Fahrt (Strahltheorie, 80 % Gütegrad)
+    const propD = Math.max(0.25, 0.55 * Math.pow(Math.max(a.kW, 0.005), 0.33));
+    const Aprop = a.n * Math.PI * propD * propD / 4;
+    // Schublinie: Motoren am Rumpf etwa 0,6 R unter der Achse, an der Gondel unter der Hülle, am Heck in der Achse
+    const zT = a.lage === 'H' ? 0 : a.lage === 'G' ? geo.R + (r.gondel.ga || 0) + (r.gondel.h || 0) / 2 : 0.6 * geo.R;
+    // Masse ohne Traggas beim Start (Leermasse + Zuladung); Traggas kommt als eigene Größe dazu
+    const z = r.zuladung;
+    // Hülle in Streifen (Jones & DeLaurier 1983, nach Munk und Allen-Perkins):
+    //   Potentialanteil je Streifen  dN = ρ · (k2 − k1) · va · (−v_n(x)) · dA/dx · dx, nur bis zur Ablösestelle x0
+    //   (dort fällt der Querschnitt am stärksten ab); dahinter ist die Strömung abgelöst.
+    //   Querströmung je Streifen     dN = −½ ρ · Cdc · 2r(x) · v_n(x)·|v_n(x)| · dx,  Cdc = 0,6
+    //   v_n(x) = v_n + q · (x_B − x): Nicken dreht die Hülle durch die Luft ⇒ Dämpfung entsteht von selbst.
+    const NS = 40, st = [];
+    let dAmin = 0, x0 = L;
+    for (let i = 0; i < NS; i++) {
+      const xf = (i + 0.5) / NS, h = 1e-3, rr = q => geo.R * Math.sqrt(Math.max(0, C.y2(geo.a, Math.min(1, Math.max(0, q)))));
+      const r0 = rr(xf), dA = Math.PI * (rr(xf + h) ** 2 - rr(xf - h) ** 2) / (2 * h * L);
+      st.push({ x: xf * L, r: r0, dA, dx: L / NS });
+      if (dA < dAmin) { dAmin = dA; x0 = xf * L; }
+    }
+    // Wenderadius bei vollem Seitenruder: Erfahrungswert 3,5 L, größer bei kleinem Seitenleitwerk
+    const Rturn = 3.5 * L * Math.sqrt(clamp(tl.A_jones / Math.max(Av, 1e-6), 0.5, 4));
+    return {
+      d, L, D, Vol, Vs, R: geo.R, st, x0, xB: geo.xB * L, vTab, cdTab, Ah, Av, aeff: tl.aeff, lt: tl.lt, k1: tl.k1, k2: tl.k2, Cdc, Aseit, Aprop, zT, Rturn,
+      P: a.n * a.kW * 1000, eta: a.eta || 0.7, verbrenner: a.art === 'V', sfc: a.sfc || 0.3, solarW: r.propulsion.solarW || 0,
+      mLeer: r.mLeer, mPers: z.personen + z.nutzlast + z.schlepptau, ballast0: z.ballast, energie0: r.propulsion.mEnergie, E0: r.propulsion.E_J,
+      Vgas: r.Vgas, lpm0: r.lpm, dx: r.trim.dx, BG: r.trim.BG, vmax: r.vmax,
+      prall: d.bauweise === 'P' || d.bauweise === 'H', ballonet: (d.ballonet ?? 25) / 100, offen: d.bauweise === 'O',
+    };
+  }
+  function cdAt(K, v) {                         // lineare Auswertung der Widerstandstabelle
+    const t = K.vTab; if (v <= t[0]) return K.cdTab[0];
+    for (let i = 1; i < t.length; i++) if (v <= t[i]) { const f = (v - t[i - 1]) / (t[i] - t[i - 1]); return K.cdTab[i - 1] + f * (K.cdTab[i] - K.cdTab[i - 1]); }
+    return K.cdTab[t.length - 1];
+  }
+
+  /* -----------------------------------------------------------------------------------------------
+     2. START: Zustand am Boden nach dem Abwiegen
+     Die Haltemannschaft wiegt das Schiff so ab, dass es mit „leicht“ (Standard 0,5 % des Auftriebs)
+     startet: überzähliger freier Auftrieb wird als zusätzlicher Ballast an Bord genommen.
+     Gas wird als Normvolumen (Volumen bei Bodendruck und 15 °C) geführt: das bleibt beim Steigen gleich,
+     bis die Hülle voll ist (Prallhöhe); darüber bläst Gas ab.
+     ----------------------------------------------------------------------------------------------- */
+  function start(r, opt) {
+    opt = opt || {};
+    const K = kennwerte(r);
+    const VnStart = r.Vgas * r.fill;                      // Normvolumen Gas beim Start (Füllung am Boden)
+    const lift = VnStart * K.lpm0;                        // Bruttoauftrieb am Boden [kg]
+    const leicht = (opt.leicht ?? 0.005) * lift;          // Startüberschuss
+    const ohneBallast = K.mLeer + K.mPers + K.energie0;
+    const ballast = lift - leicht - ohneBallast;          // Ballast an Bord nach dem Abwiegen
+    const s = {
+      t: 0, x: 0, y: 0, h: opt.h0 || 0, hGrund: opt.hGrund || 0,
+      U: 0, w: 0, th: 0, q: 0, psi: opt.kurs || 0, r: 0,
+      Vn: VnStart, ballast: Math.max(0, ballast), energie: K.energie0, E: K.E0, dT: 0,
+      schub: 0, hr: 0, sr: 0, trimm: 0, ventil: 0, ballastAb: 0,   // Bedienung: Schub 0…1, Ruder −1…+1, Trimm −1…+1, Ventil 0…1, Ballast kg/s
+      amBoden: true, landung: null, meldungen: [], gasAb: 0, ballastAbGesamt: 0,
+      zuSchwer: ballast < 0 ? -ballast : 0,
+      ap: { hoehe: null, kurs: null, fahrt: null, pos: null, nick: opt.hoehensteuerer === false ? null : 0 },
+    };
+    return { K, s };
+  }
+
+  /* -----------------------------------------------------------------------------------------------
+     3. EIN ZEITSCHRITT
+     wind: { e, n } in m/s (nach Osten, nach Norden) in der aktuellen Höhe; dT: Temperaturabweichung zur ISA
+     ----------------------------------------------------------------------------------------------- */
+  function schritt(F, dt, wind) {
+    const K = F.K, s = F.s; wind = wind || { e: 0, n: 0 };
+    assistenten(F, dt, wind);
+    const atm = C.atmos(s.h, wind.dT || 0), rho = atm.rho, rho0 = 1.225;
+
+    // --- Gas: Volumen in der Höhe; über der Prallhöhe bläst ab, Ventil lässt Gas ab ---
+    const Vmax = K.Vgas;
+    let Vh = s.Vn * rho0 / rho * (1 + s.dT / atm.T);       // Volumen bei Außendruck (Überhitzung dT)
+    if (Vh > Vmax) { const ab = (Vh - Vmax) / Vh * s.Vn; s.Vn -= ab; s.gasAb += ab; Vh = Vmax; }
+    if (s.ventil > 0) { const ab = Math.min(s.Vn, s.ventil * 0.001 * Vmax * dt); s.Vn -= ab; s.gasAb += ab; Vh = s.Vn * rho0 / rho * (1 + s.dT / atm.T); }
+    // statischer Auftrieb: Luft verdrängt minus Gas (Gasdichte folgt der Luftdichte)
+    // Normvolumen · Auftrieb je m³ (am Boden) bleibt unterhalb der Prallhöhe gleich; Überhitzung dT erhöht den Auftrieb
+    // um Luftdichte · Volumen · dT/T
+    const B = (s.Vn * K.lpm0 + s.Vn * rho0 * s.dT / atm.T) * G;        // [N]
+    const schlaff = K.prall && Vh < Vmax * (1 - K.ballonet) - 1e-6;   // Ballonet leer ⇒ Hülle verliert Form
+
+    // --- Ballast ---
+    if (s.ballastAb > 0 && s.ballast > 0) { const m = Math.min(s.ballast, s.ballastAb * dt); s.ballast -= m; s.ballastAbGesamt += m; }
+
+    // --- Massen ---
+    const mGas = s.Vn * (rho0 - K.lpm0);                       // Gasmasse = Normvolumen · (Luftdichte − Auftrieb je m³)
+    const M = K.mLeer + K.mPers + s.energie + s.ballast;       // ohne Gas
+    const Mi = M + mGas;                                       // träge Masse
+    const Mx = Mi + K.k1 * rho * K.Vol, Mz = Mi + K.k2 * rho * K.Vol;   // mit mitbewegter Luft (Lamb)
+    const I = (Mi + K.k2 * rho * K.Vol) * (K.L * K.L + K.D * K.D) / 20; // Trägheitsmoment Nicken
+
+    // --- Geschwindigkeiten relativ zur Luft im Schiffssystem (x nach vorn, z nach oben) ---
+    const c = Math.cos(s.th), sn = Math.sin(s.th);
+    const va = s.U * c + s.w * sn, vn = -s.U * sn + s.w * c;
+    const vnt = vn - s.q * K.lt;                               // Normalgeschwindigkeit am Leitwerk (dreht mit)
+
+    // --- Schub: Leistung · η / Fahrt, höchstens Standschub ---
+    const leer = K.verbrenner ? s.energie <= 0 : s.E <= 0;
+    const P = leer ? 0 : s.schub * K.P;
+    const Tstand = 0.8 * Math.cbrt(2 * rho * K.Aprop) * Math.pow(P * K.eta, 2 / 3);
+    const T = Math.min(P * K.eta / Math.max(Math.abs(va), 0.1), Tstand);
+
+    // --- Luftkräfte ---
+    const cd = cdAt(K, Math.abs(va)) * (schlaff ? 1.3 : 1);
+    const X = T - 0.5 * rho * K.Vs * cd * va * Math.abs(va);                       // längs
+    // Flossen: Anstellwinkel am Leitwerk −vnt/va; Höhenruder: + = Kraft nach oben am Heck ⇒ Bug tief,
+    // Ruderwirkung 45 % der Flossenwirkung je Einheit Ausschlag (Ruder etwa ein Drittel der Flossentiefe)
+    const Zf = -0.5 * rho * K.aeff * K.Ah * va * vnt + 0.5 * rho * K.aeff * K.Ah * 0.45 * s.hr * va * Math.abs(va);
+    // Hülle in Streifen: Normalkraft und Moment um die Auftriebsmitte
+    let Zh = 0, Mh = 0;
+    for (const e of K.st) {
+      const vl = vn + s.q * (K.xB - e.x);                                          // örtliche Normalgeschwindigkeit
+      let f = -0.5 * rho * K.Cdc * 2 * e.r * vl * Math.abs(vl);                    // Querströmung
+      if (e.x < K.x0) f += rho * (K.k2 - K.k1) * va * (-vl) * e.dA;                // Potentialanteil bis zur Ablösung
+      Zh += f * e.dx; Mh += f * e.dx * (K.xB - e.x);
+    }
+    const Z = Zf + Zh;
+
+    // --- Momente um die Auftriebsmitte (Bug hoch = positiv) ---
+    const Mfl = -Zf * K.lt;                                                        // Flossenkraft am Hebelarm hinten
+    const Mst = M * G * ((K.dx + s.trimm * 0.01 * K.L) * c - K.BG * sn);          // Pendel und Trimm (Trimm verschiebt Ballast ±1 % L)
+    const Mschub = K.zT * T;                                                       // Schub unter der Achse hebt den Bug
+    const Msum = Mh + Mfl + Mst + Mschub;
+
+    // --- Bewegung (Erde: vorwärts entlang Kurs, aufwärts) ---
+    const Ffwd = X * c - Z * sn, Fup = X * sn + Z * c + B - M * G;   // B ist schon netto (Gasgewicht abgezogen)
+    if (s.amBoden) {
+      // am Boden: hält die Mannschaft bzw. das Fahrwerk; abheben, sobald die Kräfte nach oben zeigen
+      s.U = 0; s.w = 0; s.q = 0; s.th *= 0.9;
+      if (Fup > 0) { s.amBoden = false; s.landung = null; }
+    } else {
+      s.U += Ffwd / Mx * dt; s.w += Fup / Mz * dt;
+      s.q += Msum / I * dt; s.th = clamp(s.th + s.q * dt, -0.6, 0.6);
+    }
+
+    // --- Kurs: Seitenruder ⇒ Drehgeschwindigkeit mit Verzögerung (Wenderadius K.Rturn bei vollem Ruder) ---
+    const rSoll = s.sr * Math.abs(s.U) / K.Rturn, tau = 1.5 * K.L / Math.max(Math.abs(s.U), 1);
+    s.r += (rSoll - s.r) * Math.min(1, dt / tau);
+    s.psi = (s.psi + s.r * dt + 2 * Math.PI) % (2 * Math.PI);
+
+    // --- Ort: Fahrt durch die Luft plus Wind ---
+    s.x += (s.U * Math.sin(s.psi) + wind.e) * dt * (s.amBoden ? 0 : 1);
+    s.y += (s.U * Math.cos(s.psi) + wind.n) * dt * (s.amBoden ? 0 : 1);
+    s.h += s.w * dt;
+
+    // --- Verbrauch ---
+    if (K.verbrenner) s.energie = Math.max(0, s.energie - K.sfc * P / 3.6e6 * dt);
+    else { s.E = Math.max(0, s.E - Math.max(0, P - K.solarW) * dt); s.energie = K.energie0; }   // Akku: Masse bleibt
+
+    // --- Boden ---
+    if (!s.amBoden && s.h <= s.hGrund) {
+      const vg = Math.hypot(s.U * Math.sin(s.psi) + wind.e, s.U * Math.cos(s.psi) + wind.n);
+      s.landung = { sinken: -s.w, ueberGrund: vg, gut: -s.w <= 1.0 && vg <= 2.0, t: s.t };
+      s.h = s.hGrund; s.amBoden = true;
+    }
+    s.t += dt;
+    // Anzeigewerte für die Oberfläche
+    s.anz = { B: B / G, M, frei: B / G - M, Vh, Vmax, fuell: Vh / Vmax, schlaff, P, T, va, alpha: Math.atan2(-vn, Math.max(Math.abs(va), 0.01)), rho };
+    return s;
+  }
+
+  /* -----------------------------------------------------------------------------------------------
+     4. ASSISTENTEN
+     Greifen nur auf die Bedienelemente zu, wie ein Mensch am Steuer. Bei kleiner Fahrt wirkt das
+     Höhenruder kaum: dann hält „Höhe halten“ die Höhe nicht (Gas und Ballast bleiben beim Fahrer).
+     ----------------------------------------------------------------------------------------------- */
+  function assistenten(F, dt, wind) {
+    const s = F.s, ap = s.ap, K = F.K;
+    // Position halten: Sollkurs und Sollfahrt so, dass die Fahrt über Grund zum Ziel zeigt
+    //   weit weg (über 3 Wenderadien): direkt hinfahren, Fahrt über Grund zum Ziel;
+    //   nah dran: Bug in den Wind, Fahrt = Windgeschwindigkeit ± Abstand in Windrichtung, kleine Kurskorrektur
+    //   für den seitlichen Versatz (große Schiffe können nicht auf der Stelle kreisen).
+    if (ap.pos) {
+      const ex = ap.pos.x - s.x, ny = ap.pos.y - s.y, dist = Math.hypot(ex, ny), W = Math.hypot(wind.e, wind.n);
+      if (dist > 3 * K.Rturn || W < 0.5) {
+        const vZiel = Math.min(0.03 * dist, 0.5 * K.vmax);        // langsam annähern
+        const ge = dist > 0.1 ? ex / dist * vZiel : 0, gn = dist > 0.1 ? ny / dist * vZiel : 0;
+        const le = ge - wind.e, ln = gn - wind.n;                 // nötige Fahrt durch die Luft
+        if (Math.hypot(le, ln) > 0.3) ap.kurs = Math.atan2(le, ln);
+        ap.fahrt = Math.hypot(le, ln);
+      } else {
+        const pw = Math.atan2(-wind.e, -wind.n);                  // Kurs gegen den Wind
+        const fe = Math.sin(pw), fn = Math.cos(pw);               // Einheitsvektor nach vorn (gegen den Wind)
+        const vor = ex * fe + ny * fn, quer = ex * fn - ny * fe;  // Ziel vor uns (+) und rechts von uns (+)
+        ap.kurs = pw + clamp(0.004 * quer, -0.5, 0.5);
+        ap.fahrt = clamp(W + 0.01 * vor, 0, K.vmax);
+      }
+    }
+    if (ap.kurs != null) s.sr = clamp(2.5 * wrapPi(ap.kurs - s.psi) - 8 * s.r * K.L / Math.max(K.vmax, 1), -1, 1);
+    if (ap.fahrt != null) {                                           // Tempomat: PI-Regler auf die Fahrt
+      const e = ap.fahrt - s.U; ap._i = clamp((ap._i || 0) + e * dt * 0.02, -1, 1);
+      s.schub = clamp(Math.pow(clamp(ap.fahrt / K.vmax, 0, 1), 3) + 0.15 * e + ap._i, 0, 1);
+    }
+    // Höhe halten: gibt dem Höhensteuerer einen Nickwinkel vor (Steigen über dynamischen Auftrieb)
+    if (ap.hoehe != null) ap.nick = clamp(0.004 * (ap.hoehe - s.h) - 0.05 * s.w, -0.15, 0.15);
+    // Höhensteuerer (wie der Mann am Höhenruder der Zeppeline): hält den vorgegebenen Nickwinkel ap.nick.
+    // Luftschiffe mit Flossen unter dem Jones-Kriterium sind im Nicken leicht instabil; ohne ihn muss man
+    // selbst dauernd nachsteuern. Bei kleiner Fahrt wirkt das Ruder kaum.
+    if (ap.nick != null) s.hr = clamp(-4 * (ap.nick - s.th) + 12 * s.q, -1, 1);   // Ruder + = Bug tief
+  }
+
+  /* -----------------------------------------------------------------------------------------------
+     5. MEHRERE SCHRITTE (Zeitraffer): feste Schrittweite 0,1 s, Wind über eine Funktion der Höhe
+     ----------------------------------------------------------------------------------------------- */
+  function lauf(F, sekunden, windFn, dt) {
+    dt = dt || 0.1;
+    const n = Math.max(1, Math.round(sekunden / dt));
+    for (let i = 0; i < n; i++) schritt(F, dt, windFn ? windFn(F.s) : null);
+    return F.s;
+  }
+
+  const LSFlug = { VERSION: '0.2', kennwerte, start, schritt, lauf };
+  if (typeof module !== 'undefined' && module.exports) module.exports = LSFlug;
+  else root.LSFlug = LSFlug;
+})(typeof window !== 'undefined' ? window : globalThis);

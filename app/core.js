@@ -1,4 +1,4 @@
-// 2026-10-13 14:30 · core.js 0.1: erster Rechenkern (Atmosphäre, Traggas, Gertler-Rumpf, Massen nach Bauteilen,
+// 2026-10-13 18:30 · core.js 0.3: Reise höchstens mit vmax (Warnung bei zu kleinem Antrieb); V-Leitwerk; Formen Albacore/Zeppelin/Blimp
 //                    Widerstand, Leistung nach Burgess, Gipfelhöhe, Leitwerk im Überschlag, Speicher-Code)
 /* =================================================================================================
    LUFTSCHIFF-SIMULATOR · RECHENKERN
@@ -157,16 +157,21 @@
   /* -----------------------------------------------------------------------------------------------
      5. LEITWERK IM ÜBERSCHLAG (Burgess Kap. III und V)
      Fläche je Ebene (senkrecht oder waagerecht): A = 0,13 · V^(2/3)  (Burgess S. 57).
-     Zahl der Flossen n: 1 oder 2 Flossen = nur senkrechte Ebene (kein Höhenruder);
-     ab 3 Flossen beide Ebenen, aufgeteilt auf n Flossen. „faktor“ skaliert die Größe frei.
+     Zahl der Flossen n und Anordnung:
+       1 Flosse (oben) oder 2 Flossen senkrecht oben/unten („|“) = nur senkrechte Ebene, kein Höhenruder;
+       2 Flossen als V („V“) oder umgekehrtes V („A“) = Ruderflächen wirken für Seite und Höhe
+         (Höhenruder vorhanden, Entscheidung Nutzer 13.10.2026);
+       ab 3 Flossen (+, X, Y …) beide Ebenen, aufgeteilt auf n Flossen.
+     „faktor“ skaliert die Größe frei.
      Flossenlast nach Burgess S. 110: P = 0,026 · V^(2/3) · ρ · v² je Ebene.
      ----------------------------------------------------------------------------------------------- */
   function tail(ltw, geo, vmax) {
     const n = ltw.n, f = ltw.faktor || 1;
     const Aplane = 0.13 * geo.Vs * f;
-    const planes = n <= 2 ? 1 : 2;
+    const vee = n === 2 && (ltw.anord === 'V' || ltw.anord === 'A');
+    const planes = (n <= 2 && !vee) ? 1 : 2;
     const Atot = Aplane * planes;
-    const elevator = n >= 3;
+    const elevator = n >= 3 || vee;
     const load = 0.026 * geo.Vs * f * 1.225 * vmax * vmax;   // [N] je Ebene bei vmax am Boden
     return { n, Aplane, Atot, Afin: Atot / n, elevator, load };
   }
@@ -321,7 +326,9 @@
     const frei = lift0 - mGesamt;                                    // > 0: noch tragbar; < 0: zu schwer
 
     // --- Reise: Leistung, Fahrdauer, Reichweite (Windstille, Boden) ---
-    const vr = d.v_reise / 3.6;
+    // Reisegeschwindigkeit kann nicht über der Höchstgeschwindigkeit liegen (z. B. viel zu kleiner Antrieb)
+    const vr = Math.min(d.v_reise / 3.6, vmax);
+    if (d.v_reise / 3.6 > vmax * 1.001) warn.push(`Reisegeschwindigkeit ${Math.round(d.v_reise)} km/h nicht erreichbar: Der Antrieb schafft höchstens ${Math.round(vmax * 3.6)} km/h. Fahrdauer und Reichweite gelten für ${Math.round(vmax * 3.6)} km/h mit voller Leistung.`);
     const Preise = powerAt(d, geo, tl, vr, 0);
     const Pnetto = Math.max(Preise - pr.solarW, 1);
     const dauer_h = pr.E_J / Pnetto / 3600;
@@ -366,7 +373,7 @@
     return {
       d, geo, tail: tl, lift0, lpm, fill, prallhoehe, gasShare,
       leer, mLeer, zuladung, mGesamt, frei,
-      vmax, vmax_kmh: vmax * 3.6, Preise, dauer_h, reichweite_km, gipfel,
+      vmax, vmax_kmh: vmax * 3.6, v_reise_kmh: vr * 3.6, Preise, dauer_h, reichweite_km, gipfel,
       drag: dragCoeff(d, geo, tl, vmax, 1.225), K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
       P_burgess, v_beulen, huelleAuslastung, propulsion: pr, warn,
     };
@@ -466,7 +473,7 @@
   }
 
   const LSCore = {
-    VERSION: '0.1', G0, LB, FT, HP,
+    VERSION: '0.3', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail,
     dragCoeff, powerAt, solveV, propulsion, compute, encode, decode, DEFAULTS, merge, fmtMass,
   };

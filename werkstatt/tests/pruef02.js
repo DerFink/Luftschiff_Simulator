@@ -1,4 +1,4 @@
-// 2026-10-13 16:30 · pruef02.js: Prüfung aller 9 festen Modelle gegen Wikipedia, Burgess und GlobalSecurity
+// 2026-10-13 17:05 · pruef02.js: Norge 85 km/h als Reisefahrt gewertet (Hinweis Nutzer): Leistungsbedarf statt Höchstgeschwindigkeit
 /* =================================================================================================
    Prüft das unveränderte Grundmodell (ohne Abgleich je Schiff) an den festen Modellen.
    Widerstand: Bezugsschiffe LZ 126 (groß) und Zeppelin NT (klein), Entscheidung Nutzer 13.10.2026.
@@ -24,7 +24,10 @@ row('LZ 120', 'Höchstgeschwindigkeit', 132.5, run('lz120').vmax_kmh, 'km/h', 'd
 }
 row('Skyship 600', 'Höchstgeschwindigkeit', 105, run('sky600').vmax_kmh, 'km/h', 'de.wikipedia');
 row('US Navy C-7', 'Höchstgeschwindigkeit', 97, run('c7').vmax_kmh, 'km/h', 'en.wikipedia C-class');
-row('Norge', 'Höchstgeschwindigkeit', 85, run('norge').vmax_kmh, 'km/h', 'de.wikipedia (Wert fraglich)');
+{ // 85 km/h laut Wikipedia; vermutlich Reisefahrt (Hinweis Nutzer) ⇒ Anteil der eingebauten Leistung bei 85 km/h
+  const r = run('norge'), P = C.powerAt(r.d, r.geo, r.tail, 85 / 3.6, 0), Pin = 3 * 180e3;
+  row('Norge', 'Leistungsbedarf bei 85 km/h (Reise?) in % der 3 × 180 kW', null, P / Pin * 100, '%', 'de.wikipedia 85 km/h; übliche Reise 40–60 % Leistung');
+}
 
 // ---- Massen ---------------------------------------------------------------------------------------
 row('LZ 120', 'Leermasse', 13646, run('lz120').mLeer, 'kg', 'de.wikipedia');

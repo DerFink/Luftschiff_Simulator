@@ -85,7 +85,7 @@
         V: 8425,                                                                             // [W]
         form: { LD: 75 / 14.3, m: 0.42, Cp: cp(8425, 75, 14.3), r0: 0.6, r1: 0.10 },
         huelle_gm2: 350, ballonet: 25, prallhoehe: 2600,                                      // [A] Laminat
-        ltw: { n: 3, anord: 'Y', faktor: 1 },                                                 // NT: umgekehrtes Y-Leitwerk
+        ltw: { n: 3, anord: 'L', faktor: 1 },                                                 // NT: umgekehrtes Y (eine Flosse oben, zwei unten)
         gondel: 'F', crew: 2, pax: 12, m_person: 80,                                         // [W] 15 Sitze; [A] Auslastung
         antrieb: { art: 'V', n: 3, kW: 147, lage: 'R', eta: 0.70, kraftstoff: 400, sfc: 0.30, kgkW: 2.5 }, // [W] Leistung; Rest [A]
         v_reise: 70, ballast: 100,                                                           // [W] Reise

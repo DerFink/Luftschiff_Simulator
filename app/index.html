@@ -1,0 +1,477 @@
+<!-- 2026-10-13 18:00 · Build 2026-10-13.1 · Version 1: Auswahl (9 Modelle + eigene), Baukasten in 12 Schritten mit Vorschlägen,
+     Eckdaten-Leiste mit Änderungsanzeige, 3D-Vorschau, Ergebnis mit Massenliste, Speicher-Code laden/kopieren/teilen, lokal speichern -->
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f6fd1">
+<title>Luftschiff-Simulator</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+/* ================================================================================================
+   GESTALTUNG
+   Farben als Variablen; helles Schema wie im Gasballon-Simulator. Hochformat am Handy, auf dem
+   Rechner mittig mit Handybreite.
+   ================================================================================================ */
+:root{--bg:#e9eef3;--card:#fff;--ink:#1d2733;--mut:#6b7886;--line:#dde3ea;--acc:#1f6fd1;--acc-soft:#e3eefb;
+  --ok:#1e9e5a;--bad:#d2462f;--warn:#e08a00;--warn-soft:#fff3dd;--sky1:#cfe6fb;--sky2:#f4f9fe}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);display:flex;justify-content:center}
+#app{width:100%;max-width:480px;height:100%;background:var(--card);display:flex;flex-direction:column;overflow:hidden;position:relative}
+button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
+.top{flex:none;height:50px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 14px;font-weight:700;font-size:16px;border-bottom:1px solid var(--line)}
+.top .t{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.top small{font-weight:600;color:var(--mut);font-size:12.5px;white-space:nowrap}
+.top .lnk{color:var(--acc);font-weight:700;font-size:14px;white-space:nowrap}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.btns{flex:none;padding:10px 14px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px;border-top:1px solid var(--line);background:#fff}
+.btn{flex:1;text-align:center;padding:12px 4px;border-radius:13px;font-weight:700;font-size:14px;white-space:nowrap}
+.btn.p{background:var(--acc);color:#fff}.btn.s{background:var(--acc-soft);color:var(--acc)}
+.btn:disabled{opacity:.45}
+/* Auswahl */
+.grp{padding:10px 16px 2px;font-size:11.5px;font-weight:700;color:var(--mut);letter-spacing:.06em;text-transform:uppercase}
+.card{margin:5px 14px;border:1px solid var(--line);border-radius:13px;padding:7px 10px;display:flex;align-items:center;gap:10px;width:calc(100% - 28px);text-align:left}
+.card b{font-size:14.5px;display:block}.card span{font-size:12px;color:var(--mut)}
+.card.sel{border-color:var(--acc);background:var(--acc-soft)}
+.card canvas{flex:none}
+.foot{padding:14px 16px 20px;font-size:11.5px;color:var(--mut);line-height:1.45}
+/* Vorschau und Eckdaten */
+.view{flex:none;height:30vh;min-height:180px;max-height:260px;background:linear-gradient(var(--sky1),var(--sky2));position:relative;overflow:hidden}
+.view.klein{height:22vh;min-height:140px}
+.pill{position:absolute;font-size:11px;color:#4b6077;background:rgba(255,255,255,.82);padding:3px 8px;border-radius:9px;pointer-events:none}
+.kpis{flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line);background:#fbfcfd}
+.k{padding:5px 2px 4px;text-align:center;border-right:1px solid var(--line);transition:background .6s}
+.k:nth-child(4n){border-right:none}.k:nth-child(-n+4){border-bottom:1px solid var(--line)}
+.k i{display:block;font-style:normal;font-size:10.5px;color:var(--mut)}.k b{font-size:14px;white-space:nowrap}
+.k em{display:block;font-style:normal;font-size:10.5px;font-weight:700;min-height:13px}
+.k.hl{background:#fff2d9}.up{color:var(--ok)}.dn{color:var(--bad)}
+/* Schritte */
+.steps{flex:none;display:flex;gap:6px;padding:8px 12px;overflow-x:auto;white-space:nowrap;border-bottom:1px solid var(--line);scrollbar-width:none}
+.steps::-webkit-scrollbar{display:none}
+.chip{font-size:12px;padding:5px 10px;border-radius:12px;background:#eef2f6;color:#4a5866;flex:none}
+.chip.done{background:#e3f4ea;color:#1b7a47}.chip.cur{background:var(--acc);color:#fff;font-weight:700}
+.body{padding:10px 16px 16px;display:flex;flex-direction:column;gap:9px}
+.q{font-size:15.5px;font-weight:700}
+.lab{font-size:12.5px;color:var(--mut);font-weight:600}
+.seg{display:flex;background:#eef2f6;border-radius:11px;padding:3px;gap:2px}
+.seg button{flex:1;text-align:center;font-size:13px;padding:7px 2px;border-radius:9px;color:#4a5866}
+.seg button.on{background:#fff;color:var(--acc);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.seg button:disabled{opacity:.4}
+.desc{font-size:12.3px;color:#4a5866;line-height:1.35}
+.sug{background:var(--acc-soft);border-radius:12px;padding:8px 11px;font-size:12.8px;line-height:1.38}.sug b{color:var(--acc)}
+.info{background:#f3f5f8;border-radius:10px;padding:8px 10px;font-size:12.3px;line-height:1.38;color:#3a4a5c}
+.warn{background:var(--warn-soft);border-left:4px solid var(--warn);border-radius:8px;padding:7px 10px;font-size:12.3px;line-height:1.35}
+.num{display:flex;flex-direction:column;gap:3px}
+.num .hd{display:flex;justify-content:space-between;align-items:center;font-size:13.5px}
+.num .hd input{width:96px;text-align:right;font:inherit;font-weight:700;border:1px solid var(--line);border-radius:8px;padding:3px 6px}
+.num .hd .u{color:var(--mut);font-size:12px;margin-left:4px}
+.num .rg{position:relative;height:26px}
+.num input[type=range]{width:100%;accent-color:var(--acc);height:26px}
+.num .mark{position:absolute;top:2px;width:3px;height:22px;background:#7aa7de;border-radius:2px;pointer-events:none;transform:translateX(-1px)}
+.num .sl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{font-size:12px;padding:5px 10px;border-radius:12px;background:#eef2f6;color:#4a5866}
+/* Ergebnis */
+.sec{font-size:11.5px;font-weight:700;color:var(--mut);letter-spacing:.06em;text-transform:uppercase;padding:10px 16px 3px}
+.mg{margin:0 14px}
+.mrow{display:flex;justify-content:space-between;align-items:center;font-size:12.8px;padding:3px 0;gap:6px}
+.mrow.h{font-weight:700;font-size:13.2px;padding-top:7px}
+.mrow .bar{flex:1;height:7px;border-radius:4px;background:#eef2f6;position:relative;overflow:hidden;min-width:30px}
+.mrow .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+.mrow .n{min-width:70px;text-align:right}.mrow .p{min-width:48px;text-align:right;color:var(--mut)}
+.mrow.sum{border-top:1px solid #c9d3dd;margin-top:3px;font-weight:700}
+.tbl{margin:0 16px}.tr{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line);gap:10px}.tr span{color:var(--mut)}.tr b{text-align:right}
+.code{margin:6px 14px;background:#1d2733;color:#d8f0ff;font-family:Consolas,Menlo,monospace;font-size:11px;border-radius:10px;padding:9px 10px;line-height:1.42;word-break:break-all;user-select:all}
+/* Dialog */
+.modal{position:absolute;inset:0;background:rgba(20,30,45,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:5}
+.modal .box{background:#fff;border-radius:16px;padding:16px;width:100%;display:flex;flex-direction:column;gap:10px}
+.modal textarea{width:100%;height:110px;font-family:Consolas,Menlo,monospace;font-size:12px;border:1px solid var(--line);border-radius:10px;padding:8px}
+.toast{position:absolute;left:50%;bottom:86px;transform:translateX(-50%);background:#1d2733;color:#fff;font-size:13px;padding:8px 14px;border-radius:10px;z-index:6;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.on{opacity:.95}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+
+<!-- Rechenkern und feste Modelle (klassische Skripte, globale Objekte LSCore und LSModels) -->
+<script src="core.js"></script>
+<script src="models.js"></script>
+
+<script>
+/* ================================================================================================
+   APP-LOGIK
+   Aufbau:  1. Zustand und Hilfsfunktionen   2. Auswahl   3. Baukasten (Schritte, Felder, Vorschläge)
+            4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
+   Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
+   ================================================================================================ */
+const BUILD = '2026-10-13.1';
+const C = LSCore, MODELS = LSModels.MODELS;
+
+/* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
+const S = {
+  screen: 'auswahl',     // 'auswahl' | 'bau' | 'ergebnis'
+  d: null,               // aktueller Entwurf
+  r: null,               // aktuelles Rechenergebnis
+  prev: null,            // Ergebnis vor der letzten Änderung (für die Änderungsanzeige)
+  step: 0,               // aktueller Schritt im Baukasten
+  sel: 'luffihopper',    // markiertes Modell in der Auswahl
+  origin: null,          // Modell-ID oder 'eigen', aus dem der Entwurf stammt
+};
+const $ = s => document.querySelector(s);
+const clone = o => JSON.parse(JSON.stringify(o));
+const de = (x, k = 0) => (+x).toLocaleString('de-DE', { minimumFractionDigits: k, maximumFractionDigits: k });
+// Werte mit passender Genauigkeit und Einheit (g/kg/t, W/kW/MW, m³) – je nach Größe des Schiffs
+const fm = kg => C.fmtMass(kg);
+const fp = W => W < 1000 ? de(W) + ' W' : W < 1e6 ? de(W / 1000, W < 1e4 ? 1 : 0) + ' kW' : de(W / 1e6, 2) + ' MW';
+const fv = V => V < 10 ? de(V, 2) + ' m³' : de(V) + ' m³';
+const fh = h => h >= 100 ? de(h) + ' h' : de(h, 1) + ' h';
+const fkm = k => k < 10 ? de(k, 1) + ' km' : de(k) + ' km';
+function toast(t) { const e = $('#toast'); e.textContent = t; e.classList.add('on'); setTimeout(() => e.classList.remove('on'), 1800); }
+function setByPath(o, p, v) { const k = p.split('.'); let x = o; for (let i = 0; i < k.length - 1; i++) x = x[k[i]]; x[k[k.length - 1]] = v; }
+function getByPath(o, p) { return p.split('.').reduce((x, k) => x == null ? x : x[k], o); }
+function recompute(keepPrev) { if (!keepPrev) S.prev = S.r; S.r = C.compute(S.d); }
+
+/* ---------------- 2. Auswahl ---------------- */
+function loadMine() { try { return JSON.parse(localStorage.getItem('ls_meine') || '[]'); } catch (e) { return []; } }
+function saveMine(list) { try { localStorage.setItem('ls_meine', JSON.stringify(list)); return true; } catch (e) { return false; } }
+
+function showAuswahl() {
+  S.screen = 'auswahl';
+  const mine = loadMine();
+  let h = `<div class="top"><span class="t">Luftschiff wählen</span><small>${MODELS.length} Modelle</small></div><div class="scroll">`;
+  let last = '';
+  for (const m of MODELS) {
+    if (m.gruppe !== last) { h += `<div class="grp">${m.gruppe}</div>`; last = m.gruppe; }
+    const r = C.compute(m.d);
+    h += `<button class="card${S.sel === m.id ? ' sel' : ''}" data-id="${m.id}"><canvas width="70" height="30" data-sil="${m.id}"></canvas><div><b>${m.d.name}</b><span>${fv(r.geo.V)} · ${m.d.gas === 'H2' ? 'H₂' : 'He'} · ${m.jahr} · ${de(r.vmax_kmh)} km/h</span></div></button>`;
+  }
+  if (mine.length) {
+    h += `<div class="grp">Meine Luftschiffe</div>`;
+    mine.forEach((x, i) => { h += `<button class="card${S.sel === 'm' + i ? ' sel' : ''}" data-id="m${i}"><canvas width="70" height="30" data-sil="m${i}"></canvas><div><b>${x.name}</b><span>gespeichert ${x.datum}</span></div></button>`; });
+  }
+  h += `<div class="foot">Luftschiff-Simulator · Version 1 (Build ${BUILD}) · Auslegen und Speichern; Fliegen folgt.<br>Rechnung nach Burgess, Airship Design (1927), Rumpfformen nach Gertler (Series 58). Abschätzung, kein Nachweis.</div></div>
+  <div class="btns"><button class="btn s" id="bCode">Code laden</button><button class="btn s" id="bNeu">Selbst bauen</button><button class="btn p" id="bOpen">Öffnen</button></div>`;
+  $('#app').innerHTML = h;
+  // Umrisse aus der echten Gertler-Kontur zeichnen
+  document.querySelectorAll('canvas[data-sil]').forEach(cv => {
+    const id = cv.dataset.sil, d = id[0] === 'm' && id !== 'luffihopper' && !MODELS.find(m => m.id === id) ? safeDecode(mine[+id.slice(1)].code) : MODELS.find(m => m.id === id).d;
+    if (d) drawSil(cv, C.compute(d));
+  });
+  document.querySelectorAll('.card').forEach(b => {
+    b.onclick = () => { S.sel = b.dataset.id; document.querySelectorAll('.card').forEach(c => c.classList.toggle('sel', c === b)); };
+    b.ondblclick = () => openSel();
+  });
+  $('#bOpen').onclick = openSel;
+  $('#bNeu').onclick = () => startDesign(clone(C.DEFAULTS), 'eigen', true);
+  $('#bCode').onclick = codeDialog;
+}
+function safeDecode(code) { try { return C.decode(code); } catch (e) { return null; } }
+function drawSil(cv, r) {
+  const g = cv.getContext('2d'), W = 62, Rr = W / (2 * r.geo.L / r.geo.D), y0 = 14, d = r.d;
+  g.fillStyle = { S: '#9aa9b9', H: '#8fb0d6', P: '#9ec3e6', O: '#e2c38c' }[d.bauweise] || '#9ec3e6';
+  g.beginPath(); r.geo.profile.forEach(([x, y]) => g.lineTo(4 + x * W, y0 - Rr * y)); r.geo.profile.slice().reverse().forEach(([x, y]) => g.lineTo(4 + x * W, y0 + Rr * y)); g.fill();
+  if (d.bauweise === 'S') { g.strokeStyle = 'rgba(60,70,85,.35)'; g.lineWidth = .7; for (const f of [-.5, 0, .5]) { g.beginPath(); r.geo.profile.forEach(([x, y], i) => i ? g.lineTo(4 + x * W, y0 + f * Rr * y) : g.moveTo(4 + x * W, y0)); g.stroke(); } }
+  g.fillStyle = '#d65a3c'; g.beginPath(); g.moveTo(4 + W * .82, y0 - Rr * .4); g.lineTo(4 + W * .99, y0); g.lineTo(4 + W * .99, y0 - Rr - 4); g.fill();
+  g.fillStyle = '#6b5a46'; if (d.gondel !== 'I' && d.gondel !== 'N') g.fillRect(4 + W * .33, y0 + Rr + (d.gondel === 'K' ? 2 : -1), W * .15, 3);
+}
+function openSel() {
+  if (S.sel[0] === 'm' && !MODELS.find(m => m.id === S.sel)) {
+    const x = loadMine()[+S.sel.slice(1)], d = x && safeDecode(x.code);
+    if (d) startDesign(d, 'eigen'); else toast('Gespeicherter Code ist ungültig');
+  } else startDesign(clone(MODELS.find(m => m.id === S.sel).d), S.sel);
+}
+function startDesign(d, origin, bau) { S.d = C.merge(C.DEFAULTS, d); S.origin = origin; S.r = null; recompute(); S.prev = null; S.step = 0; bau ? showBau() : showErgebnis(); }
+
+/* ---------------- 3. Baukasten ----------------
+   Jeder Schritt hat eine Frage, Felder und optional einen Text. Feldarten:
+     seg  – Auswahl aus Knöpfen      num – Zahl mit Regler (optional logarithmisch)
+   „vorschlag(d, r)“ liefert den empfohlenen Wert; er wird auf dem Regler markiert und mit
+   „Vorschlag“ übernommen. Die Reihenfolge folgt den Stichpunkten des Nutzers.               */
+const lift0 = () => S.r ? S.r.lift0 : 1000;
+const STEPS = [
+  { id: 'form', titel: 'Form', frage: 'Welche Rumpfform nach Gertler?', fields: [
+      { typ: 'seg', key: '_form', label: 'Grundform', opts: [['albacore', 'Albacore'], ['zeppelin', 'Zeppelin'], ['blimp', 'Blimp'], ['eigen', 'Eigene']] },
+      { typ: 'num', key: 'form.LD', label: 'Schlankheit L/D', min: 2, max: 10, step: 0.1, k: 1 },
+      { typ: 'num', key: 'form.m', label: 'Lage größter Ø (m, ab Nase)', min: 0.3, max: 0.6, step: 0.01, k: 2 },
+      { typ: 'num', key: 'form.Cp', label: 'Völligkeitsgrad Cp', min: 0.5, max: 0.78, step: 0.01, k: 2 },
+      { typ: 'num', key: 'form.r0', label: 'Nasenradius r₀', min: 0.1, max: 1.2, step: 0.01, k: 2 },
+      { typ: 'num', key: 'form.r1', label: 'Heckradius r₁ (0 = spitzes Heck)', min: 0, max: 0.6, step: 0.01, k: 2 },
+    ], text: () => 'Die Kontur folgt dem Polynom 6. Grades nach Gertler (Series 58). Die Albacore-Form hat die Schlankheit des U-Boots USS Albacore (7,5).' },
+  { id: 'bauweise', titel: 'Bauweise', frage: 'Welche Bauweise?', fields: [
+      { typ: 'seg', key: 'bauweise', label: '', opts: [['S', 'Starr'], ['H', 'Halbstarr'], ['P', 'Prall (Blimp)'], ['O', 'Offen']] },
+    ], text: d => ({ S: 'Gerüst aus Ringen und Längsträgern, Gas in Zellen; Form unabhängig vom Gasdruck. Burgess: erst ab rund 28.000 m³ sinnvoll.', H: 'Prallhülle mit tragendem Kiel bzw. Innengerüst (Norge, Zeppelin NT). Ballonets halten den Überdruck.', P: 'Die Form hält allein der Überdruck; Ballonets mit Gebläse gleichen Höhenänderungen aus.', O: 'Unten offen mit kurzem Appendix wie ein Gasballon: kein Ballonet, Innendruck nur aus der Gassäule. Steigt das Schiff, entweicht Gas.' })[d.bauweise] },
+  { id: 'ltw', titel: 'Leitwerk', frage: 'Wie viele Flossen bekommt das Leitwerk?', fields: [
+      { typ: 'seg', key: 'ltw.n', label: '', opts: [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']], num: true },
+      { typ: 'seg', key: 'ltw.anord', label: 'Anordnung', opts: d => ({ 1: [['|', 'oben']], 2: [['|', 'oben/unten'], ['V', 'V'], ['A', 'umgek. V']], 3: [['Y', 'Y'], ['L', 'umgek. Y']] }[d.ltw.n] || [['+', '+ Kreuz'], ['X', 'X']]) },
+      { typ: 'num', key: 'ltw.faktor', label: 'Größe gegenüber Burgess', min: 0.3, max: 2, step: 0.05, k: 0, pct: true, vorschlag: () => 1 },
+    ], text: (d, r) => `<b>Burgess:</b> je Ebene 0,13 · V<sup>2/3</sup> = ${de(r.tail.Aplane / (d.ltw.faktor || 1), 1)} m². Mit dieser Wahl ${de(r.tail.Atot, 1)} m² gesamt, ${de(r.tail.Afin, 1)} m² je Flosse, Masse ${fm(r.leer.leitwerk)}.` + (r.tail.elevator ? '' : '<br>Ohne Höhenruder: Die Höhe wird nur über Schub, Ballast und Gas geregelt.') },
+  { id: 'gas', titel: 'Traggas', frage: 'Mit welchem Gas wird gefüllt?', fields: [
+      { typ: 'seg', key: 'gas', label: '', opts: [['He', 'Helium'], ['H2', 'Wasserstoff']] },
+      { typ: 'num', key: 'reinheit', label: 'Reinheit', min: 0.85, max: 1, step: 0.005, k: 1, pct: true, vorschlag: () => 0.98 },
+    ], text: (d, r) => `Auftrieb am Boden: ${de(r.lpm, 3)} kg je m³. Wasserstoff trägt rund 8 % mehr, ist aber brennbar.` },
+  { id: 'volumen', titel: 'Volumen', frage: 'Wie groß wird das Luftschiff?', fields: [
+      { typ: 'num', key: 'V', label: 'Volumen', unit: 'm³', min: 0.25, max: 250000, log: true, k: 0 },
+      { typ: 'num', key: 'prallhoehe', label: 'Prallhöhe (Gas füllt die Hülle ganz)', unit: 'm', min: 0, max: 4000, step: 50, k: 0, when: d => d.bauweise !== 'O', vorschlag: d => d.V < 50 ? 0 : 1000 },
+      { typ: 'num', key: 'ballonet', label: 'Ballonet', unit: '%', min: 0, max: 50, step: 1, k: 0, when: d => d.bauweise === 'P' || d.bauweise === 'H', vorschlag: (d, r) => Math.ceil((1 - r.fill) * 100 + 5) },
+    ], text: (d, r) => `Länge ${de(r.geo.L, r.geo.L < 10 ? 2 : 1)} m, Durchmesser ${de(r.geo.D, r.geo.D < 10 ? 2 : 1)} m, Oberfläche ${de(r.geo.S, r.geo.S < 10 ? 1 : 0)} m². Füllung am Boden ${de(r.fill * 100)} %, Bruttoauftrieb ${fm(r.lift0)}.` },
+  { id: 'huelle', titel: 'Hülle', frage: 'Wie schwer ist der Hüllenstoff?', fields: [
+      { typ: 'chips', key: 'huelle_gm2', label: 'Beispiele', opts: [[27, 'Tritax 27'], [150, 'Starr-Außenhülle 150'], [200, 'Laminat 200'], [300, 'Ballonstoff 300'], [475, 'Stoff 1927 475']] },
+      { typ: 'num', key: 'huelle_gm2', label: 'Flächengewicht Hülle', unit: 'g/m²', min: 10, max: 1000, log: true, k: 0, vorschlag: d => d.V < 50 ? 27 : d.bauweise === 'S' ? 150 : 300 },
+      { typ: 'num', key: 'zellen_gm2', label: 'Gaszellen', unit: 'g/m²', min: 50, max: 400, step: 5, k: 0, when: d => d.bauweise === 'S', vorschlag: () => 170 },
+      { typ: 'num', key: 'werkstoff', label: 'Gerüst gegenüber Stand 1917', min: 0.4, max: 1.3, step: 0.05, k: 0, pct: true, when: d => d.bauweise === 'S', vorschlag: () => 1 },
+    ], text: (d, r) => `Hülle ${fm(r.leer.huelle)}` + (r.leer.zellen ? `, Gaszellen ${fm(r.leer.zellen)}` : '') + (r.leer.laengstraeger ? `, Gerüst ${fm(r.leer.laengstraeger + r.leer.ringe)}` : '') + '.' },
+  { id: 'gondel', titel: 'Gondel', frage: 'Welche Gondel?', fields: [
+      { typ: 'seg', key: 'gondel', label: '', opts: [['K', 'Korb'], ['F', 'Fest am Rumpf'], ['I', 'Im Rumpf'], ['R', 'RC-Kapsel'], ['N', 'Keine']] },
+    ], text: (d, r) => `Masse der Gondel: ${fm(r.leer.gondel)}. ` + ({ K: 'Offener Korb an Seilen, wie beim Gasballon; großer Luftwiderstand.', F: 'Geschlossene Gondel direkt unter dem Rumpf.', I: 'Räume im Rumpf, außen nur eine kleine Führergondel (Starrschiffe).', R: 'Kleine Kapsel für Empfänger und Regler (RC-Blimp).', N: 'Keine Gondel, z. B. für autonome Schiffe.' })[d.gondel] },
+  { id: 'pax', titel: 'Personen', frage: 'Wer und was fährt mit?', fields: [
+      { typ: 'num', key: 'crew', label: 'Besatzung (0 = autonom)', min: 0, max: 80, step: 1, k: 0 },
+      { typ: 'num', key: 'pax', label: 'Fahrgäste', min: 0, max: 80, step: 1, k: 0 },
+      { typ: 'num', key: 'm_person', label: 'Masse je Person', unit: 'kg', min: 50, max: 120, step: 1, k: 0, vorschlag: () => 80 },
+      { typ: 'num', key: 'nutzlast', label: 'Nutzlast (z. B. Kamera)', unit: 'kg', min: 0, max: 20000, log0: true, k: 1 },
+      { typ: 'num', key: 'avionik', label: 'Avionik / Steuerung', unit: 'kg', min: 0, max: 500, log0: true, k: 2 },
+    ] },
+  { id: 'antrieb', titel: 'Antrieb', frage: 'Wie wird das Luftschiff angetrieben?', fields: [
+      { typ: 'seg', key: 'antrieb.art', label: '', opts: [['E', 'Elektro'], ['V', 'Verbrenner'], ['S', 'Solar + Akku'], ['H', 'Hybrid', true]] },
+      { typ: 'num', key: 'antrieb.n', label: 'Zahl der Motoren', min: 1, max: 8, step: 1, k: 0, vorschlag: d => d.antrieb.n },
+      { typ: 'num', key: 'antrieb.kW', label: 'Leistung je Motor', unit: 'kW', min: 0.002, max: 1500, log: true, k: 3, vorschlag: (d, r) => r.P_burgess / 1000 / d.antrieb.n },
+      { typ: 'seg', key: 'antrieb.lage', label: 'Lage', opts: [['G', 'An der Gondel'], ['R', 'Am Rumpf'], ['H', 'Am Heck']] },
+      { typ: 'num', key: 'antrieb.kWh', label: 'Akku', unit: 'kWh', min: 0.001, max: 5000, log: true, k: 3, when: d => d.antrieb.art !== 'V', vorschlag: (d, r) => r.Preise * 8 / 3.6e6 / 0.85 * 3.6 },
+      { typ: 'num', key: 'antrieb.whkg', label: 'Energiedichte Akku', unit: 'Wh/kg', min: 80, max: 400, step: 5, k: 0, when: d => d.antrieb.art !== 'V', vorschlag: () => 180 },
+      { typ: 'num', key: 'antrieb.kraftstoff', label: 'Kraftstoff', unit: 'kg', min: 0, max: 100000, log0: true, k: 0, when: d => d.antrieb.art === 'V', vorschlag: (d, r) => r.Preise * 24 / 3.6e6 * (d.antrieb.sfc || 0.3) },
+      { typ: 'num', key: 'antrieb.eta', label: 'Propellerwirkungsgrad', min: 0.3, max: 0.9, step: 0.01, k: 0, pct: true, vorschlag: d => d.V < 50 ? 0.5 : 0.7 },
+    ], text: (d, r) => `<b>Vorschlag nach Burgess:</b> P = ρ·v³·V<sup>2/3</sup>/K mit K = ${d.bauweise === 'S' ? '63,5' : '40'} für ${de((d.v_ziel || d.v_reise * 1.3))} km/h ⇒ ${fp(r.P_burgess)} gesamt. Antrieb ${fm(r.leer.antrieb)}, Energie ${fm(r.propulsion.mEnergie)}.` },
+  { id: 'v', titel: 'Geschwindigkeit', frage: 'Mit welcher Reisegeschwindigkeit fährt es?', fields: [
+      { typ: 'num', key: 'v_reise', label: 'Reisegeschwindigkeit', unit: 'km/h', min: 1, max: 160, step: 1, k: 0, vorschlag: (d, r) => Math.round(r.vmax_kmh * 0.7) },
+    ], text: (d, r) => `Höchstgeschwindigkeit mit voller Leistung: ${de(r.vmax_kmh)} km/h. Bei ${de(d.v_reise)} km/h braucht es ${fp(r.Preise)} an der Welle.` },
+  { id: 'ballast', titel: 'Ballast', frage: 'Wie viel Ballast kommt mit?', fields: [
+      { typ: 'num', key: 'ballast', label: 'Ballast', unit: 'kg', min: 0, max: 50000, log0: true, k: 1, vorschlag: () => Math.round(lift0() * 0.05 * 10) / 10 },
+    ], text: (d, r) => `Statische Gipfelhöhe nach Abwurf: ${de(Math.min(r.gipfel, 9999))} m. Vorschlag: rund 5 % des Bruttoauftriebs.` },
+  { id: 'tau', titel: 'Schlepptau', frage: 'Kommt ein Schlepptau mit?', fields: [
+      { typ: 'num', key: 'schlepptau', label: 'Masse Schlepptau', unit: 'kg', min: 0, max: 500, log0: true, k: 1, vorschlag: d => d.V < 50 ? 0 : Math.min(15, Math.round(d.V / 100)) },
+    ], text: () => 'Das Schlepptau bremst am Boden und macht das Schiff leichter, je mehr davon aufliegt (Wirkung im Fliegen, folgt).' },
+];
+
+// Werte der Grundform setzen bzw. erkennen
+function formKey(f) { for (const k in C.FORMS) { const F = C.FORMS[k]; if (['LD', 'm', 'Cp', 'r0', 'r1'].every(p => Math.abs(F[p] - f[p]) < 1e-6)) return k; } return 'eigen'; }
+
+function showBau() {
+  S.screen = 'bau';
+  const st = STEPS[S.step], d = S.d;
+  $('#app').innerHTML = `<div class="top"><button class="lnk" id="bBack">‹ Auswahl</button><span class="t">${escapeHtml(d.name)}</span><button class="lnk" id="bErg">Ergebnis ›</button></div>
+    <div class="view" id="view"><div class="pill" style="left:8px;bottom:7px">⟳ 1 Finger drehen · 2 Finger zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="steps" id="steps">${STEPS.map((s, i) => `<button class="chip ${i === S.step ? 'cur' : i < S.step ? 'done' : ''}" data-i="${i}">${i < S.step ? '✓ ' : ''}${s.titel}</button>`).join('')}</div>
+    <div class="scroll"><div class="body" id="body"></div></div>
+    <div class="btns"><button class="btn s" id="bPrev"${S.step === 0 ? ' disabled' : ''}>‹ Zurück</button><button class="btn s" id="bSug">Vorschlag</button><button class="btn p" id="bNext">${S.step === STEPS.length - 1 ? 'Fertig ✓' : 'Weiter ›'}</button></div>`;
+  $('#bBack').onclick = showAuswahl;
+  $('#bErg').onclick = showErgebnis;
+  $('#bPrev').onclick = () => { S.step--; showBau(); };
+  $('#bNext').onclick = () => { if (S.step < STEPS.length - 1) { S.step++; showBau(); } else showErgebnis(); };
+  $('#bSug').onclick = applySuggestions;
+  document.querySelectorAll('#steps .chip').forEach(b => b.onclick = () => { S.step = +b.dataset.i; showBau(); });
+  $('#steps .cur').scrollIntoView({ inline: 'center', block: 'nearest' });
+  mountView($('#view'));
+  renderBody(); renderKpis(true);
+}
+
+function renderBody() {
+  const st = STEPS[S.step], d = S.d, r = S.r;
+  let h = `<div class="q">${st.frage}</div>`;
+  st.fields.forEach((f, i) => {
+    if (f.when && !f.when(d)) return;
+    if (f.label) h += `<div class="lab">${f.label}</div>`;
+    if (f.typ === 'seg' || f.typ === 'chips') {
+      const opts = typeof f.opts === 'function' ? f.opts(d) : f.opts;
+      const cur = f.key === '_form' ? formKey(d.form) : getByPath(d, f.key);
+      h += `<div class="${f.typ === 'seg' ? 'seg' : 'chips'}">` + opts.map(([v, t, dis]) => `<button data-f="${i}" data-v="${v}"${(f.typ === 'seg' && String(cur) === String(v)) ? ' class="on"' : ''}${dis ? ' disabled title="folgt"' : ''}>${t}</button>`).join('') + '</div>';
+    } else if (f.typ === 'num') {
+      const v = getByPath(d, f.key) ?? 0, sv = f.vorschlag ? f.vorschlag(d, r) : null;
+      const show = f.pct ? de(v * 100, f.k) : fmtNum(v, f);
+      h += `<div class="num"><div class="hd"><span></span><span><input type="text" inputmode="decimal" data-f="${i}" value="${show}"><span class="u">${f.pct ? '%' : (f.unit || '')}</span></span></div>
+        <div class="rg"><input type="range" min="0" max="1000" step="1" data-f="${i}" value="${toSlider(v, f)}">${sv != null && isFinite(sv) ? `<div class="mark" style="left:${toSlider(sv, f) / 10}%" title="Vorschlag"></div>` : ''}</div>
+        <div class="sl"><span>${f.pct ? de(f.min * 100) + ' %' : fmtNum(f.min, f)}</span><span>${sv != null && isFinite(sv) ? '▲ Vorschlag ' + (f.pct ? de(sv * 100, f.k) + ' %' : fmtNum(sv, f) + ' ' + (f.unit || '')) : ''}</span><span>${f.pct ? de(f.max * 100) + ' %' : fmtNum(f.max, f)}</span></div></div>`;
+    }
+  });
+  if (st.text) h += `<div class="${st.id === 'antrieb' || st.id === 'ltw' ? 'sug' : 'info'}">${st.text(d, r)}</div>`;
+  for (const w of r.warn) h += `<div class="warn">⚠ ${w}</div>`;
+  $('#body').innerHTML = h;
+  // Ereignisse der Felder
+  $('#body').querySelectorAll('button[data-f]').forEach(b => b.onclick = () => {
+    const f = st.fields[+b.dataset.f]; let v = b.dataset.v;
+    if (f.key === '_form') { if (v !== 'eigen') Object.assign(d.form, clone(C.FORMS[v]), { name: undefined }); change(); return; }
+    if (f.num || f.typ === 'chips') v = +v;
+    setByPath(d, f.key, v);
+    if (f.key === 'ltw.n') d.ltw.anord = ({ 1: '|', 2: '|', 3: 'Y' })[v] || '+';
+    change();
+  });
+  $('#body').querySelectorAll('input[type=range]').forEach(inp => {
+    inp.oninput = () => { const f = st.fields[+inp.dataset.f]; setByPath(d, f.key, roundTo(fromSlider(+inp.value, f), f)); change(true); };
+    inp.onchange = () => renderBody();
+  });
+  $('#body').querySelectorAll('input[type=text]').forEach(inp => inp.onchange = () => {
+    const f = st.fields[+inp.dataset.f]; let v = parseFloat(inp.value.replace(/\./g, '').replace(',', '.'));
+    if (!isFinite(v)) return renderBody();
+    if (f.pct) v /= 100;
+    setByPath(d, f.key, Math.max(f.min, Math.min(f.max, v))); change();
+  });
+}
+// Regler: linear, logarithmisch (log) oder logarithmisch mit Null (log0)
+function toSlider(v, f) {
+  if (f.log) return Math.round(1000 * Math.log(Math.max(v, f.min) / f.min) / Math.log(f.max / f.min));
+  if (f.log0) { if (v <= 0) return 0; const lo = Math.max(f.max / 1e5, 0.01); return Math.round(50 + 950 * Math.log(Math.max(v, lo) / lo) / Math.log(f.max / lo)); }
+  return Math.round(1000 * (v - f.min) / (f.max - f.min));
+}
+function fromSlider(s, f) {
+  if (f.log) return f.min * Math.pow(f.max / f.min, s / 1000);
+  if (f.log0) { if (s < 50) return 0; const lo = Math.max(f.max / 1e5, 0.01); return lo * Math.pow(f.max / lo, (s - 50) / 950); }
+  return f.min + (f.max - f.min) * s / 1000;
+}
+function roundTo(v, f) { if (f.step) return Math.round(v / f.step) * f.step; const p = Math.pow(10, Math.floor(Math.log10(Math.max(Math.abs(v), 1e-9))) - 2); return Math.round(v / p) * p; }
+function fmtNum(v, f) { if (f.step && f.step >= 1) return de(v); const a = Math.abs(v); return de(v, a >= 100 ? 0 : a >= 10 ? 1 : a >= 1 ? 2 : 3); }
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
+
+// Nach jeder Änderung: neu rechnen, Vorschau und Eckdaten erneuern; Feldbereich nur beim Loslassen neu zeichnen
+function change(live) {
+  recompute();
+  updateView();
+  renderKpis();
+  if (!live) renderBody();
+  else { const t = document.querySelector('#body .sug, #body .info'), st = STEPS[S.step]; if (t && st.text) t.innerHTML = st.text(S.d, S.r); }
+}
+// „Vorschlag“: alle Felder des Schritts mit Vorschlag auf diesen Wert setzen
+function applySuggestions() {
+  const st = STEPS[S.step]; let n = 0;
+  for (const f of st.fields) if (f.typ === 'num' && f.vorschlag && (!f.when || f.when(S.d))) { const v = f.vorschlag(S.d, S.r); if (isFinite(v)) { setByPath(S.d, f.key, roundTo(v, f)); n++; } }
+  if (st.id === 'form' && formKey(S.d.form) === 'eigen') { Object.assign(S.d.form, clone(C.FORMS[S.d.bauweise === 'S' ? 'zeppelin' : 'blimp'])); n++; }
+  change(); toast(n ? 'Vorschlag übernommen' : 'Kein Vorschlag in diesem Schritt');
+}
+
+/* ---------------- 4. Eckdaten-Leiste ---------------- */
+function renderKpis(noDelta) {
+  const r = S.r, p = noDelta ? null : S.prev;
+  const items = [
+    ['Volumen', fv(r.geo.V), null],
+    ['Leermasse', fm(r.mLeer), p && [r.mLeer - p.mLeer, false, fm]],
+    ['Nutzlast frei', fm(r.frei), p && [r.frei - p.frei, true, fm]],
+    ['Gipfelhöhe', (r.gipfel > 6000 ? '6.000+' : de(r.gipfel)) + ' m', p && [Math.min(r.gipfel, 6000) - Math.min(p.gipfel, 6000), true, x => de(x) + ' m']],
+    ['v max', de(r.vmax_kmh) + ' km/h', p && [r.vmax_kmh - p.vmax_kmh, true, x => de(x, 1) + ' km/h']],
+    ['Reise', de(r.v_reise_kmh) + ' km/h', p && [r.v_reise_kmh - p.v_reise_kmh, true, x => de(x) + ' km/h']],
+    ['Fahrdauer', fh(r.dauer_h), p && [r.dauer_h - p.dauer_h, true, x => de(x, 1) + ' h']],
+    ['Reichweite', fkm(r.reichweite_km), p && [r.reichweite_km - p.reichweite_km, true, fkm]],
+  ];
+  // Änderung zur letzten Entscheidung: grün = besser, rot = schlechter; nur deutliche Änderungen zeigen
+  $('#kpis').innerHTML = items.map(([t, v, dl]) => {
+    let em = '<em></em>', hl = false;
+    if (dl && isFinite(dl[0]) && Math.abs(dl[0]) > 1e-6) {
+      const txt = dl[2](Math.abs(dl[0]));
+      if (!/^0([,.]0+)? /.test(txt) && !/^0 /.test(txt)) { hl = true; em = `<em class="${(dl[0] > 0) === dl[1] ? 'up' : 'dn'}">${dl[0] > 0 ? '+' : '−'}${txt}</em>`; }
+    }
+    return `<div class="k${hl ? ' hl' : ''}"><i>${t}</i><b>${v}</b>${em}</div>`;
+  }).join('');
+  const r0 = S.r.geo; const dim = $('#dim'); if (dim) dim.textContent = `L ${de(r0.L, r0.L < 10 ? 2 : 1)} m · D ${de(r0.D, r0.D < 10 ? 2 : 1)} m`;
+}
+
+/* ---------------- 5. Ergebnis ---------------- */
+function showErgebnis() {
+  S.screen = 'ergebnis';
+  const r = S.r, d = S.d, e = r.leer, z = r.zuladung, L0 = r.lift0;
+  const G = [];   // Gruppen der Massenliste je nach Bauweise
+  if (e.laengstraeger) G.push(['Struktur', '#5b6f8a', [['Gerüst: Längsträger, Laufgang', e.laengstraeger], ['Gerüst: Ringe, Drähte, Netze', e.ringe]]]);
+  if (e.kiel) G.push(['Struktur', '#5b6f8a', [['Kiel / Innengerüst', e.kiel], ['Nasenlatten', e.nasenlatten || 0]]]);
+  else if (e.nasenlatten) G.push(['Struktur', '#5b6f8a', [['Nasenlatten', e.nasenlatten]]]);
+  G.push(['Hülle und Gas', '#5b8fd6', [['Hülle außen', e.huelle], ['Gaszellen', e.zellen || 0], ['Ballonets', e.ballonet || 0], ['Gebläse', e.geblaese || 0]]]);
+  G.push(['Leitwerk', '#d65a3c', [[`Flossen und Ruder (${d.ltw.n})`, e.leitwerk]]]);
+  G.push(['Gondel', '#7d6bd1', [[{ K: 'Korb', F: 'Gondel', I: 'Führergondel, Räume im Rumpf', R: 'RC-Kapsel', N: 'keine' }[d.gondel], e.gondel], ['Aufhängung, Seile', e.aufhaengung || 0]]]);
+  G.push(['Antrieb', '#c55d9d', [['Motoren, Propeller', e.antrieb]]]);
+  G.push(['Ausrüstung', '#8a96a3', [['Armaturen, Ventile, Ballastanlage', e.armaturen || 0], ['Elektrik', e.elektrik || 0], ['Avionik', e.avionik || 0]]]);
+  const ZG = [['Zuladung', '#3fa37a', [[d.antrieb.art === 'V' ? 'Kraftstoff' : 'Akku', z.energie], ['Personen', z.personen], ['Nutzlast', z.nutzlast], ['Ballast', z.ballast], ['Schlepptau', z.schlepptau]]]];
+  const line = (n, v, c) => `<div class="mrow"><span>${n}</span><span class="bar"><i style="width:${Math.min(100, v / L0 * 250)}%;background:${c}"></i></span><span class="n">${fm(v)}</span><span class="p">${de(v / L0 * 100, 1)} %</span></div>`;
+  const block = gs => gs.map(([g, c, it]) => { it = it.filter(x => x[1] > 0); if (!it.length) return ''; return `<div class="mrow h"><span>${g}</span><span>${fm(it.reduce((s, x) => s + x[1], 0))}</span></div>` + it.map(([n, v]) => line(n, v, c)).join(''); }).join('');
+  const code = C.encode(d);
+  $('#app').innerHTML = `<div class="top"><button class="lnk" id="bBack">‹ Auswahl</button><span class="t">${escapeHtml(d.name)}</span><button class="lnk" id="bEdit">Bearbeiten</button></div>
+    <div class="view klein" id="view"><div class="pill" style="left:8px;bottom:7px">⟳ drehen · zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="scroll">
+      ${r.warn.map(w => `<div class="warn" style="margin:8px 14px 0">⚠ ${w}</div>`).join('')}
+      <div class="sec">Massen · Bruttoauftrieb ${fm(L0)}</div>
+      <div class="mg">${block(G)}<div class="mrow sum"><span>Leermasse</span><span>${fm(r.mLeer)} · ${de(r.mLeer / L0 * 100, 1)} %</span></div>${block(ZG)}<div class="mrow sum"><span>${r.frei >= 0 ? 'Noch frei' : 'Fehlt'}</span><span style="color:${r.frei >= 0 ? 'var(--ok)' : 'var(--bad)'}">${fm(Math.abs(r.frei))}</span></div></div>
+      <div class="sec">Eckdaten</div>
+      <div class="tbl">
+        <div class="tr"><span>Bauweise · Gas</span><b>${{ S: 'Starr', H: 'Halbstarr', P: 'Prall', O: 'Prall, Appendix offen' }[d.bauweise]} · ${d.gas === 'H2' ? 'H₂' : 'He'} ${de(d.reinheit * 100, 1)} %</b></div>
+        <div class="tr"><span>Form</span><b>${{ albacore: 'Albacore', zeppelin: 'Zeppelin', blimp: 'Blimp', eigen: 'Eigene' }[formKey(d.form)]} · L/D ${de(d.form.LD, 2)} · Cp ${de(d.form.Cp, 2)}</b></div>
+        <div class="tr"><span>Länge × Durchmesser</span><b>${de(r.geo.L, r.geo.L < 10 ? 2 : 1)} m × ${de(r.geo.D, r.geo.D < 10 ? 2 : 1)} m</b></div>
+        <div class="tr"><span>Oberfläche · Hüllenstoff</span><b>${de(r.geo.S, r.geo.S < 10 ? 1 : 0)} m² · ${de(d.huelle_gm2)} g/m²</b></div>
+        <div class="tr"><span>Prallhöhe · Füllung am Boden</span><b>${de(r.prallhoehe)} m · ${de(r.fill * 100)} %</b></div>
+        <div class="tr"><span>Antrieb</span><b>${d.antrieb.n} × ${fp(d.antrieb.kW * 1000)} ${{ E: 'elektrisch', V: 'Verbrenner', S: 'Solar + Akku', H: 'Hybrid' }[d.antrieb.art]}</b></div>
+        <div class="tr"><span>v max · Reise · Leistung Reise</span><b>${de(r.vmax_kmh)} · ${de(r.v_reise_kmh)} km/h · ${fp(r.Preise)}</b></div>
+        <div class="tr"><span>Fahrdauer · Reichweite (Windstille)</span><b>${fh(r.dauer_h)} · ${fkm(r.reichweite_km)}</b></div>
+        <div class="tr"><span>Statische Gipfelhöhe</span><b>${de(Math.min(r.gipfel, 9999))} m</b></div>
+        <div class="tr"><span>Leitwerk (Burgess)</span><b>${d.ltw.n} Flossen · ${de(r.tail.Atot, r.tail.Atot < 10 ? 2 : 1)} m²${r.tail.elevator ? '' : ' · ohne Höhenruder'}</b></div>
+        <div class="tr"><span>Widerstandsbeiwert C<sub>D</sub> (V<sup>2/3</sup>)</span><b>${de(r.drag.total, 4)} (Rumpf ${de(r.drag.hull, 4)})</b></div>
+      </div>
+      <div class="sec">Speicher-Code</div>
+      <div class="code" id="code">${escapeHtml(code)}</div>
+      <div class="foot">Abschätzung nach Burgess (1927) und Gertler (Series 58), kein Festigkeits- oder Zulassungsnachweis.</div>
+    </div>
+    <div class="btns"><button class="btn s" id="bCopy">Kopieren</button><button class="btn s" id="bSave">Speichern</button><button class="btn s" id="bShare">Teilen</button><button class="btn p" id="bFly" disabled title="folgt in Phase 4">Fliegen</button></div>`;
+  $('#bBack').onclick = showAuswahl;
+  $('#bEdit').onclick = () => { S.prev = null; showBau(); };
+  $('#bCopy').onclick = () => copy(code);
+  $('#bShare').onclick = () => { if (navigator.share) navigator.share({ title: d.name, text: code }).catch(() => {}); else copy(code); };
+  $('#bSave').onclick = saveDialog;
+  mountView($('#view'));
+  renderKpis(true);
+}
+function copy(t) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Code kopiert'), () => toast('Kopieren nicht möglich – Code markieren')); }
+
+/* ---------------- 6. Speichern und Laden ---------------- */
+function saveDialog() {
+  modal(`<b>Unter welchem Namen speichern?</b><input id="mName" style="font:inherit;padding:8px;border:1px solid var(--line);border-radius:10px" value="${escapeHtml(S.d.name)}">`, () => {
+    const name = $('#mName').value.trim() || 'Ohne Namen'; S.d.name = name;
+    const list = loadMine().filter(x => x.name !== name);
+    list.unshift({ name, code: C.encode(S.d), datum: new Date().toLocaleDateString('de-DE') });
+    toast(saveMine(list) ? 'Gespeichert unter „Meine Luftschiffe“' : 'Speichern auf diesem Gerät nicht möglich');
+    showErgebnis();
+  });
+}
+function codeDialog() {
+  modal(`<b>Speicher-Code einfügen</b><textarea id="mCode" placeholder="LS1|N:…"></textarea>`, () => {
+    try { startDesign(C.decode($('#mCode').value), 'eigen'); } catch (e) { toast('Code nicht lesbar: ' + e.message); }
+  });
+}
+function modal(inner, ok) {
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="box">${inner}<div style="display:flex;gap:10px"><button class="btn s" id="mNo">Abbrechen</button><button class="btn p" id="mOk">OK</button></div></div>`;
+  $('#app').appendChild(m);
+  m.querySelector('#mNo').onclick = () => m.remove();
+  m.querySelector('#mOk').onclick = () => { ok(); m.remove(); };   // erst Eingaben lesen, dann schließen
+}
+
+/* ---------------- 3D-Vorschau einhängen ----------------
+   Die Vorschau bleibt erhalten und wird nur in den jeweiligen Rahmen umgehängt. */
+let viewer = null, viewerHost = null;
+function mountView(el) {
+  if (!window.LSView) { el.insertAdjacentHTML('afterbegin', '<div class="pill" style="left:8px;top:8px">3D wird geladen …</div>'); window.addEventListener('lsview', () => mountView(el), { once: true }); return; }
+  if (!viewerHost) { viewerHost = document.createElement('div'); viewerHost.style.cssText = 'position:absolute;inset:0'; viewer = window.LSView.createViewer(viewerHost); }
+  el.insertBefore(viewerHost, el.firstChild);
+  updateView();
+}
+function updateView() { if (viewer && S.r) viewer.update(S.r); }
+
+/* ---------------- 7. Start ---------------- */
+showAuswahl();
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+<script type="module">
+  // 3D-Vorschau als Modul laden und der App bekannt machen
+  import { createViewer } from './viewer.js';
+  window.LSView = { createViewer };
+  window.dispatchEvent(new Event('lsview'));
+</script>
+</body>
+</html>

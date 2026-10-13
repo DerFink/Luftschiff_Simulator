@@ -61,12 +61,12 @@
  },
  {
   "schiff": "Norge",
-  "groesse": "Höchstgeschwindigkeit",
-  "soll": 85,
-  "ist": 116.42131673855675,
-  "einheit": "km/h",
-  "abw": 0.36966254986537356,
-  "quelle": "de.wikipedia (Wert fraglich)",
+  "groesse": "Leistungsbedarf bei 85 km/h (Reise?) in % der 3 × 180 kW",
+  "soll": null,
+  "ist": 40.05036094913954,
+  "einheit": "%",
+  "abw": null,
+  "quelle": "de.wikipedia 85 km/h; übliche Reise 40–60 % Leistung",
   "rolle": "Prüfung"
  },
  {

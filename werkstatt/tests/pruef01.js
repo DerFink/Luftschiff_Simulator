@@ -1,4 +1,4 @@
-// 2026-10-13 19:10 · pruef01.js: Leitwerksflächen aus Burgess Tab. 4 als feste Fläche (A_ebene), Jones-Vergleich C-7
+// 2026-10-13 20:40 · pruef01.js: C-7 mit Seilen und offenen Motorgondeln wie das feste Modell
 /* =================================================================================================
    Prüfung des Rechenkerns gegen geschlossene Formeln und gegen Werte aus Burgess (1927).
    Aufruf:  node werkstatt/tests/pruef01.js        (gibt eine Tabelle aus und schreibt pruef01.json)
@@ -90,8 +90,8 @@ const ft3 = Math.pow(C.FT, 3);
     form: { LD: L / D, m: 0.42, Cp, r0: 0.5, r1: 0.1 },
     huelle_gm2: 475, ballonet: 25, prallhoehe: 4000 * C.FT,
     ltw: { n: 4, anord: '+', faktor: 1, A_ebene: (424 + 536) / 2 * 0.0929 },     // Burgess Tab. 4
-    gondel: 'F', crew: 4, pax: 0, m_person: 80,
-    antrieb: { art: 'V', n: 2, kW: 150 * C.HP / 1000, lage: 'G', eta: 0.65, kraftstoff: 1000, sfc: 0.365, kgkW: 6 * C.LB / (C.HP / 1000) },
+    gondel: 'F', gform: 'E', gabstand: 4, gseile: 24, crew: 4, pax: 0, m_person: 80,     // wie festes Modell C-7
+    antrieb: { art: 'V', n: 2, kW: 150 * C.HP / 1000, lage: 'G', mg: 'O', eta: 0.65, kraftstoff: 1000, sfc: 0.365, kgkW: 6 * C.LB / (C.HP / 1000) },
     v_reise: 70, ballast: 200,
   };
   const r = C.compute(d);

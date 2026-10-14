@@ -610,10 +610,10 @@
     box.querySelector('#eBe').onclick = () => { box.remove(); beenden(); };
   }
 
-  // ---------- Bericht als Bild teilen: oben das Luftschiff schräg von vorn unten, darunter der Text in Schreibmaschinenschrift ----------
+  // ---------- Bericht als Bild teilen: oben das Luftschiff schräg von vorn unten als Schnittansicht (Wunsch Nutzer), darunter der Text in Schreibmaschinenschrift ----------
   async function berichtTeilen(txt, code) {
     const d = safeDecode(code); let schiff = null;
-    if (d && viewerBereit()) { try { const b = viewer.schraegbild(C.compute(d), 1080); schiff = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = b.url; }); } catch (e) { schiff = null; } }
+    if (d && viewerBereit()) { try { const b = viewer.schraegbild(C.compute(d), 1080, true); /* Schnittansicht: Gerüst, Zellen, Ballonets sichtbar */ schiff = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = b.url; }); } catch (e) { schiff = null; } }
     const zeilen = []; const umbruch = 58;                      // Zeichen je Zeile (Schreibmaschine)
     for (const z of txt.split('\n')) { if (z.length <= umbruch) { zeilen.push(z); continue; } let r = z; while (r.length > umbruch) { zeilen.push(r.slice(0, umbruch)); r = '    ' + r.slice(umbruch); } zeilen.push(r); }
     const W = 1080, oben = schiff ? 540 : 120, zh = 30, H = oben + 60 + zeilen.length * zh + 60;

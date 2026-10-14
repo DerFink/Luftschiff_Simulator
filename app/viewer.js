@@ -1,3 +1,6 @@
+// 2026-10-14 12:05 · viewer.js 0.13: Gondelleinen (Blimp, z. B. C-7) paarweise an der Hülle von 25 % bis 75 % der Länge gespreizt;
+//                    Vorschau zeichnet nur, wenn sichtbar (behebt Hänger nach langer Fahrt)
+// 2026-10-14 17:00 · viewer.js 0.12: Teilbild wahlweise als Schnittansicht (Innenleben sichtbar)
 // 2026-10-14 15:30 · viewer.js 0.11: Cockpitfenster am Gondelbug, Bilder ohne sichtbare Ansicht (Seite, schräg von vorn unten) mit gemeinsamem Renderer
 // 2026-10-14 13:00 · viewer.js 0.10: Seitenbild für die Seitenansicht der Fahrt
 // 2026-10-14 12:00 · viewer.js 0.9: Ruder als Strich auf den Flossen (Klappe: Scharnierlinie, Pendelleitwerk: Drehachse und Wurzelspalt)
@@ -58,7 +61,14 @@ export function createViewer(host) {
   new ResizeObserver(resize).observe(host); resize();
 
   /* ---------- Zeichenschleife ---------- */
-  (function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+  // Nur zeichnen, wenn die Vorschau sichtbar ist: während der Fahrt ist sie ausgeblendet. Würde trotzdem
+  // gezeichnet, stauen sich die Befehle der Grafikkarte über die ganze Fahrt an und werden beim Zurückkehren
+  // auf einmal abgearbeitet (Seite hing danach bis zu 30 s). Spart außerdem Akku.
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (!host.isConnected || host.offsetParent === null || !host.clientWidth) return;   // ausgeblendet
+    controls.update(); renderer.render(scene, camera);
+  })();
 
   /* ---------- Gondelkörper nach Seitenriss ----------
      Lofting aus Querschnitten entlang der Länge (t = 0 Bug … 1 Heck):
@@ -265,9 +275,13 @@ export function createViewer(host) {
       gm.position.set(xc - len / 2, top - ga, 0); g.add(gm);
       if (ga > 0) {                     // Gondel hängt an Seilen unter der Hülle (Blimp)
         const sm = new THREE.LineBasicMaterial({ color: COL.seil }), nS = (G.ropes && G.ropes.n) || 4;
-        for (let k = 0; k < nS; k++) {
-          const t = nS > 1 ? k / (nS - 1) : 0.5, side = k % 2 ? 1 : -1, xs = xc - len * 0.4 + t * len * 0.8;
-          const xh = xc + (xs - xc) * 1.8, rh = rad(xh / Ls + 0.5);
+        // Leinen paarweise (links/rechts): Anschlag an der Gondel über 90 % ihrer Länge verteilt,
+        // Anschlag an der Hülle von 25 % bis 75 % der Schiffslänge (ab Bug) gespreizt
+        const paare = Math.max(2, Math.round(nS / 2));          // Anzahl Leinenpaare
+        for (let k = 0; k < 2 * paare; k++) {
+          const j = Math.floor(k / 2), t = paare > 1 ? j / (paare - 1) : 0.5, side = k % 2 ? 1 : -1;
+          const xs = xc - len * 0.45 + t * len * 0.9;               // Punkt an der Gondel
+          const xh = X(0.25 + 0.5 * t), rh = rad(0.25 + 0.5 * t);  // Punkt an der Hülle
           g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(xs, top - ga, side * w * 0.4), new THREE.Vector3(xh, -rh * 0.85, side * rh * 0.5)]), sm));
         }
@@ -345,9 +359,11 @@ export function createViewer(host) {
   /* Bilder aus dem 3D-Modell ohne sichtbare Ansicht: 'seite' (genau von der Seite, Bug rechts, ohne Perspektive;
      für Seitenansicht der Fahrt und die Auswahl) oder 'schraeg' (von vorn unten, für den geteilten Fahrtbericht).
      Ein gemeinsamer Renderer für alle Bilder, damit der Browser nicht zu viele 3D-Kontexte öffnet.            */
-  function bild(result, w, art) {
+  function bild(result, w, art, mitSchnitt) {
     w = w || 640;
-    const g = build(result), sc = new THREE.Scene();
+    // mitSchnitt: vordere Hälfte der Hülle weg, Innenleben sichtbar (Teilbild des Fahrtberichts)
+    const alt = schnitt; schnitt = !!mitSchnitt; const g = build(result); schnitt = alt;
+    const sc = new THREE.Scene();
     sc.add(new THREE.HemisphereLight(0xffffff, 0x9fb3c8, 1.7));
     const s2 = new THREE.DirectionalLight(0xffffff, 1.5); s2.position.set(-3, 10, -8); sc.add(s2); sc.add(g);
     if (art === 'schraeg') { const s3 = new THREE.DirectionalLight(0xffffff, 0.9); s3.position.set(-8, -6, 6); sc.add(s3); }
@@ -381,7 +397,7 @@ export function createViewer(host) {
        damit die Fahrt-Anzeige es maßstäblich und mit dem Nickwinkel gedreht zeichnen kann.                        */
     seitenbild(result, w) { return bild(result, w, 'seite'); },
     // Bild schräg von vorn unten (für den geteilten Fahrtbericht)
-    schraegbild(result, w) { return bild(result, w, 'schraeg'); },
+    schraegbild(result, w, mitSchnitt) { return bild(result, w, 'schraeg', mitSchnitt); },
     // Schnittansicht ein/aus: vordere Hälfte der Hülle weglassen und das Innere zeigen
     setCutaway(on) { schnitt = !!on; if (last) this.update(last); },
     setAutoRotate(on) { autoOn = !!on; controls.autoRotate = autoOn; clearTimeout(resumeTimer); },

@@ -1,3 +1,4 @@
+// 2026-10-14 15:10 · fahrt.js 1.0: Gelände am Startplatz an die Starthöhe angeglichen (kein Sprung beim Abheben)
 // 2026-10-14 15:05 · fahrt.js 0.9: Schubhebel mit weniger Expo (halber Weg ≈ 40 % Schub)
 // 2026-10-14 14:40 · fahrt.js 0.8: Windanzeige mit Bodengrenzschicht (am Boden kein Wind)
 // 2026-10-14 14:10 · fahrt.js 0.7: Gelände unter dem Schiff (gelaende.js), Boost nur beim Halten, Vorschau gedämpft (höchstens ±90°), Vergleich A400M und CH-47F je t·km statt A320
@@ -356,7 +357,12 @@
         // Gelände unter dem Schiff (gelaende.js) alle 10 Schritte nachführen: Ort aus dem Weg seit dem letzten Bild
         if (i % 10 === 0 && window.LSGelaende) {
           const la = Z.lat + (s.y - Z.ly) / 111320, lo = Z.lon + (s.x - Z.lx) / (111320 * Math.cos(Z.lat * RAD)), g = LSGelaende.hoehe(la, lo);
-          if (g != null) Z.grund = g;
+          // Startplatz: Höhe aus der Einzelabfrage beim Start (Z.elev) und aus dem Raster können um einige Meter abweichen.
+          // Damit das Schiff beim Abheben nicht plötzlich „über“ oder „unter“ dem Boden steht, wird der Unterschied am
+          // Startplatz ausgeglichen und läuft über 3 km Entfernung aus.
+          if (Z.startKorr == null) { const g0 = LSGelaende.hoehe(Z.track[0][0], Z.track[0][1]); if (g0 != null) Z.startKorr = Z.elev - g0; }
+          const ab = Math.hypot((la - Z.track[0][0]) * 111320, (lo - Z.track[0][1]) * 111320 * Math.cos(la * RAD));
+          if (g != null) Z.grund = g + (Z.startKorr || 0) * Math.max(0, 1 - ab / 3000);
           if (!s.amBoden) s.hGrund = Z.grund;                 // am Boden bleibt der Aufsetzpunkt
         }
         LSFlug.schritt(F, dt, w);

@@ -1,3 +1,4 @@
+// 2026-10-14 15:10 · flug.js 0.9: Landung erst 10 s nach dem Abheben möglich
 // 2026-10-14 14:40 · flug.js 0.8: kein Wind am Boden (Grenzschicht unter 10 m), Landung zählt erst nach 5 m Abheben
 // 2026-10-14 13:30 · flug.js 0.7: Höhe halten mit Gas und Ballast, Trimm über Ballonets (ab 2), Ruder bei kleiner Fahrt schwächer
 // 2026-10-14 13:00 · flug.js 0.6: Vertikalbeschleunigung für die Anzeige
@@ -201,7 +202,7 @@
     if (s.amBoden) {
       // am Boden: hält die Mannschaft bzw. das Fahrwerk; abheben, sobald die Kräfte nach oben zeigen
       s.U = 0; s.w = 0; s.q = 0; s.th *= 0.9;
-      if (Fup > 0) { s.amBoden = false; s.landung = null; }
+      if (Fup > 0) { s.amBoden = false; s.landung = null; s.tAb = s.t; }          // Zeitpunkt des Abhebens
     } else {
       s.U += Ffwd / Mx * dt; s.w += Fup / Mz * dt;
       s.acc = Fup / Mz;                                                            // Vertikalbeschleunigung (Anzeige am Vario)
@@ -226,8 +227,11 @@
     else { s.E = Math.max(0, s.E - Math.max(0, P - K.solarW) * dt); s.energie = K.energie0; }   // Akku: Masse bleibt
 
     // --- Boden ---
-    if (!s.amBoden && s.h > s.hGrund + 5) s.warOben = true;                    // erst nach dem Abheben (5 m frei) zählt ein Aufsetzen als Landung
-    if (!s.amBoden && s.h <= s.hGrund && s.w <= 0 && !s.warOben) { s.h = s.hGrund; s.w = Math.max(s.w, 0); }   // noch beim Abheben
+    // Landung zählt erst, wenn das Schiff nach dem Abheben 5 m frei war UND seit dem Abheben 10 s vergangen sind
+    // (Wunsch Nutzer 14.10.2026: beim Start wurde sonst „Gelandet“ gemeldet). Vorher bleibt es nur am Boden stehen.
+    if (!s.amBoden && s.h > s.hGrund + 5) s.warOben = true;
+    const startPhase = !s.warOben || s.t - (s.tAb ?? -1e9) < 10;
+    if (!s.amBoden && s.h <= s.hGrund && startPhase) { s.h = s.hGrund; s.w = Math.max(s.w, 0); }   // noch beim Abheben
     else if (!s.amBoden && s.h <= s.hGrund) {
       const vg = Math.hypot(s.U * Math.sin(s.psi) + wind.e, s.U * Math.cos(s.psi) + wind.n);
       s.landung = { sinken: -s.w, ueberGrund: vg, gut: -s.w <= 1.0 && vg <= 2.0, t: s.t };

@@ -1,3 +1,5 @@
+// 2026-10-14 13:00 · fahrt.js 0.4 (ENTWURF): Anzeige wie Gasballon (Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken) auf der Karte,
+//                    Leiste darunter; Seitenansicht mit dem 3D-Modell; Schiff auf der Karte mit echtem Umriss (L/D, Leitwerk) und Maßstab
 // 2026-10-14 12:30 · fahrt.js 0.3: Boost (24 h in etwa 3 s), Karte folgt gedämpft, Spur nach Weg, Fahrt speichern/fortsetzen, Landung: weiter oder beenden mit Bericht (.txt),
 //                    Seitenansicht vom Nutzer geschaltet (bei Landeanflug eingeblendet), Tasten bewegen Knüppel und Knöpfe, Knüppel vorn = sinken, Massen ab 100 kg in t, Kurs über Grund
 // 2026-10-14 07:00 · fahrt.js 0.2: Windanzeige neben den Zoomknöpfen, Uhr ohne Umbruch, Zeitraffer in einer Zeile
@@ -137,8 +139,9 @@
       <div class="top"><button class="lnk" id="fBack">‹ Auslegung</button><b class="t">${escapeHtml(S.d.name)}</b><span id="fUhr" style="white-space:nowrap"></span></div>
       <div class="zr"><span class="zrl">Zeitraffer</span>${zrB}<button data-z="0" id="fPause">❚❚</button></div>
       <div class="fmap"><div class="lmap" id="fMap"></div>
-        <div class="badge" id="fWind" style="left:52px;top:10px"></div>
-        <div class="aps" id="fAps"></div>
+        <div class="badge" id="fWind" style="display:none"></div>
+        <div class="aps" id="fAps" style="right:auto;left:52px;top:10px;align-items:flex-start"></div>
+        <div class="inst2" id="fInst2"></div>
         <div class="badge" id="fQuelle" style="left:8px;bottom:8px;max-width:70%"></div>
         <button class="cbtn" id="fFollow" style="display:none">⌖ Zum Schiff</button>
       </div>
@@ -165,7 +168,8 @@
       Z.map = L.map('fMap', { zoomControl: true }).setView([Z.lat, Z.lon], 12); osm().addTo(Z.map);
       L.circleMarker([Z.lat, Z.lon], { radius: 5, color: '#1b8a4c', fillColor: '#1b8a4c', fillOpacity: 1 }).addTo(Z.map);
       Z.poly = L.polyline(Z.track, { color: '#d65a3c', weight: 2, dashArray: '5 4' }).addTo(Z.map);
-      Z.ship = L.marker([Z.lat, Z.lon], { icon: L.divIcon({ className: 'ship-ico', html: schiffSvg(), iconSize: [60, 60], iconAnchor: [30, 30] }) }).addTo(Z.map);
+      Z.ship = L.marker([Z.lat, Z.lon], { icon: schiffIcon() }).addTo(Z.map);
+      Z.map.on('zoomend', () => Z.ship.setIcon(schiffIcon()));
       Z.map.on('dragstart', () => { Z.follow = false; $('#fFollow').style.display = 'block'; });
     } else $('#fMap').innerHTML = '<div class="desc" style="padding:40px 12px">Karte nicht geladen (offline?). Die Fahrt läuft trotzdem.</div>';
     $('#fFollow').onclick = () => { Z.follow = true; $('#fFollow').style.display = 'none'; };
@@ -182,10 +186,35 @@
     for (const id of ['fInst', 'fCtl', 'fApRow']) { const e = $('#' + id); if (breit) rp.insertBefore(e, sec); else fz.insertBefore(e, rp); }
     if (Z && Z.map) setTimeout(() => Z.map.invalidateSize(), 50);
   }
-  // Schiff von oben als SVG (Bug zeigt nach oben, wird mit dem Kurs gedreht)
-  function schiffSvg() {
-    return `<svg id="fShipSvg" width="60" height="60" viewBox="-30 -30 60 60" style="transform:rotate(0deg)"><ellipse cx="0" cy="0" rx="5" ry="22" fill="#cfd6de" stroke="#4f5a68" stroke-width="1.2"/>
-      <path d="M0 15 L-8 24 L-1 20 Z M0 15 L8 24 L1 20 Z" fill="#d65a3c"/><rect x="-2" y="-9" width="4" height="8" fill="#8a96a3"/></svg>`;
+  /* Schiff von oben aus dem echten Umriss (ENTWURF): Gertler-Kontur in Draufsicht, Flossen als Trapeze, projiziert
+     nach ihrer Lage um die Achse (waagerechte Flossen voll, senkrechte als Strich), Gondel. Größe maßstäblich zur
+     Karte (Meter je Bildpunkt aus dem Zoom), mindestens 44 Bildpunkte lang, damit man es immer sieht.         */
+  function schiffIcon() {
+    const r = Z.r, Lm = r.geo.L, T = r.tail, z = Z.map ? Z.map.getZoom() : 12;
+    const mpp = 40075016.7 * Math.cos(Z.lat * RAD) / Math.pow(2, z + 8);               // Meter je Bildpunkt
+    const lpx = Math.max(44, Lm / mpp), k = lpx / Lm;            // Bildpunkte je Meter
+    const ext = (r.geo.R + T.b) * k * 1.1, W = Math.ceil(Math.max(lpx, 2 * ext) + 8), H = W;
+    const rad = x => r.geo.R * Math.sqrt(Math.max(0, C.y2(r.geo.a, x))) * k;
+    // Rumpf: Bug oben (y negativ), Heck unten; Mitte des Bilds = Auftriebsmitte nicht nötig, Mitte = halbe Länge
+    const ys = x => (x - 0.5) * lpx;
+    let p = ''; for (let i = 0; i <= 40; i++) { const x = i / 40; p += (i ? 'L' : 'M') + rad(x).toFixed(1) + ' ' + ys(x).toFixed(1); }
+    for (let i = 40; i >= 0; i--) { const x = i / 40; p += 'L' + (-rad(x)).toFixed(1) + ' ' + ys(x).toFixed(1); }
+    // Flossen: Wurzel von xLEr bis Hinterkante, Spannweite b, Pfeilung; Projektion |sin θ|
+    const n = r.d.ltw.n, an = r.d.ltw.anord;
+    let angs = n === 1 ? [an === 'u' ? Math.PI : 0] : n === 2 ? (an === 'V' ? [Math.PI / 4, -Math.PI / 4] : an === 'A' ? [3 * Math.PI / 4, -3 * Math.PI / 4] : [0, Math.PI])
+      : n === 3 ? (an === 'L' ? [0, 2 * Math.PI / 3, -2 * Math.PI / 3] : [Math.PI, Math.PI / 3, -Math.PI / 3]) : Array.from({ length: n }, (_, i) => (an === 'X' ? Math.PI / n : 0) + i * 2 * Math.PI / n);
+    const xTE = T.o.xTE, xa = xTE - T.cr / Lm, xtLE = xa + T.b * T.tLE / Lm;
+    let fl = '';
+    for (const th of angs) {
+      const sn = Math.sin(th); if (Math.abs(sn) < 0.05) continue;
+      const sg = Math.sign(sn), f = Math.abs(sn), r0 = rad(xa) * f, r1 = rad(xTE) * f, sp = T.b * k * f;
+      fl += `<path d="M${(sg * r0).toFixed(1)} ${ys(xa).toFixed(1)}L${(sg * (r1 + sp)).toFixed(1)} ${ys(xtLE).toFixed(1)}L${(sg * (r1 + sp)).toFixed(1)} ${ys(xtLE + T.ct / Lm).toFixed(1)}L${(sg * r1).toFixed(1)} ${ys(xTE).toFixed(1)}Z" fill="#d65a3c"/>`;
+    }
+    const G = r.gondel, gx = r.trim.gx;
+    const gon = G.l ? `<rect x="${(-G.b * k / 2).toFixed(1)}" y="${ys(gx - G.l / Lm / 2).toFixed(1)}" width="${Math.max(1.5, G.b * k).toFixed(1)}" height="${(G.l * k).toFixed(1)}" rx="1" fill="#7f8896"/>` : '';
+    const svg = `<svg id="fShipSvg" width="${W}" height="${H}" viewBox="${-W / 2} ${-H / 2} ${W} ${H}" style="transform:rotate(0deg);overflow:visible">${fl}
+      <path d="${p}Z" fill="${r.d.bauweise === 'S' ? '#cfd6de' : '#efe9dc'}" stroke="#4f5a68" stroke-width="1"/>${gon}</svg>`;
+    return L.divIcon({ className: 'ship-ico', html: svg, iconSize: [W, H], iconAnchor: [W / 2, H / 2] });
   }
 
   // ---------- Bedienung: Tastatur, Schubregler, Knöpfe, Steuerknüppel, Assistenten ----------
@@ -341,19 +370,24 @@
     $('#fUhr').textContent = new Date(tMs).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + (window.innerWidth >= 900 ? ' Uhr' : '') + (Z.pause ? ' · Pause' : '');
     $('#fWind').innerHTML = `Wind <b>${de(wr.sp, wr.sp < 10 ? 1 : 0)} m/s</b> aus ${kompass(wr.d)} · ${de(s.h - Z.elev)} m über Grund`;
     $('#fQuelle').textContent = W.quelle;
-    const vg = Math.hypot(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n);
+    const vg = s.amBoden ? 0 : Math.hypot(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n);   // am Boden steht das Schiff
     const verbrauch = K.verbrenner ? K.sfc * (a.P || 0) / 3.6e6 : (a.P || 0);   // kg/s bzw. W
     const rest = K.verbrenner ? (verbrauch > 0 ? s.energie / verbrauch / 3600 : null) : (verbrauch > 0 ? s.E / verbrauch / 3600 : null);
     const frei = a.frei || 0, prall = C.hOfSigma(Math.min(1, s.Vn / K.Vgas));
     const kurs = String(Math.round(s.psi / RAD + 360) % 360).padStart(3, '0') + '°';
     const kgr = Math.atan2(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n), kog = vg > 1 ? String(Math.round(kgr / RAD + 360) % 360).padStart(3, '0') + '°' : '–';
+    // Anzeige auf der Karte (wie im Gasballon-Simulator): Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken
+    const agl = s.h - Z.elev, acc = s.acc || 0, accH = Math.min(14, Math.abs(acc) * 40);
+    $('#fInst2').innerHTML = `<div class="lbl">über Grund</div><div class="big">${de(agl)}<small>m</small></div><div class="nn">NN ${de(s.h)} m</div>
+      <div class="kv vario"><i class="${acc >= 0 ? 'up' : 'dn'}" style="height:${accH}px"></i><span>m/s</span><b class="${s.w > 0.2 ? 'up' : s.w < -0.2 ? 'dn' : ''}">${(s.w >= 0 ? '+' : '−') + de(Math.abs(s.w), 1)}</b></div>
+      <div class="kv"><span>Fahrt</span><b>${de(s.U * 3.6)}</b></div><div class="kv"><span>Grund</span><b>${de(vg * 3.6)}</b></div>
+      <div class="kv"><span>Kurs</span><b>${kurs}</b></div><div class="kv"><span>ü. Gr.</span><b>${kog}</b></div><div class="kv"><span>Nicken</span><b>${(s.th >= 0 ? '+' : '−') + de(Math.abs(s.th / RAD), 1)}°</b></div>
+      <div class="kv"><span>Wind</span><b>${de(wr.sp, wr.sp < 10 ? 1 : 0)} ${kompass(wr.d)}</b></div>`;
+    // Leiste unter der Karte: Last und Vorräte
     const z = [
-      ['Höhe NN', de(s.h) + ' m', ''], ['Steigen', (s.w >= 0 ? '+' : '−') + de(Math.abs(s.w), 1) + ' m/s', s.w > 0.2 ? 'up' : s.w < -0.2 ? 'dn' : ''],
-      ['Fahrt (Luft)', de(s.U * 3.6) + ' km/h', ''], ['über Grund', de(vg * 3.6) + ' km/h', ''],
-      ['Kurs (Bug · Grund)', kurs + ' · ' + kog, ''], ['Nicken', (s.th >= 0 ? '+' : '−') + de(Math.abs(s.th / RAD), 1) + '°', ''],
-      ['Auftrieb frei', (frei >= 0 ? '+' : '−') + fk(Math.abs(frei)), frei > 0 ? 'up' : frei < 0 ? 'dn' : ''], ['Gas (Füllung)', de(Math.min(100, (a.fuell || 0) * 100)) + ' %' + (a.schlaff ? ' schlaff' : ''), a.schlaff ? 'dn' : ''],
+      ['Auftrieb frei', (frei >= 0 ? '+' : '−') + fk(Math.abs(frei)), frei > 0 ? 'up' : frei < 0 ? 'dn' : ''], ['Gas', de(Math.min(100, (a.fuell || 0) * 100)) + ' %' + (a.schlaff ? ' schlaff' : ''), a.schlaff ? 'dn' : ''],
       ['Ballast', fk(s.ballast), ''], [K.verbrenner ? 'Kraftstoff' : 'Akku', K.verbrenner ? fk(s.energie) : de(s.E / Math.max(K.E0, 1) * 100) + ' %', ''],
-      ['Reicht noch', rest == null ? '–' : rest > 99 ? '> 99 h' : de(rest, 1) + ' h', ''], ['Prallhöhe', de(prall) + ' m', ''],
+      ['Reicht', rest == null ? '–' : rest > 99 ? '> 99 h' : de(rest, 1) + ' h', ''], ['Prallhöhe', de(prall) + ' m', ''],
     ];
     if (window.innerWidth >= 900) z.push(['Schub', de(s.schub * 100) + ' %', ''], ['Höhenruder', de(s.hr * 100) + ' %', ''], ['Seitenruder', de(s.sr * 100) + ' %', '']);
     $('#fInst').innerHTML = z.map(([t, v, c]) => `<div><i>${t}</i><b class="${c}">${v}</b></div>`).join('');
@@ -376,8 +410,21 @@
     g.strokeStyle = 'rgba(80,100,120,.25)'; g.fillStyle = '#6b7a8a'; g.font = '10px system-ui';
     const step = top > 600 ? 200 : top > 250 ? 100 : top > 120 ? 50 : 25;
     for (let hh = step; hh < top; hh += step) { const y = gy - hh * sc; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillText(hh + ' m', 4, y - 2); }
-    // Schiff im Profil aus der Gertler-Kontur, Nickwinkel, Gondel; Mitte der Hülle in Höhe über Grund + Radius
+    // Schiff im Profil: Bild aus dem 3D-Modell (wie die Vorschau), maßstäblich, mit dem Nickwinkel gedreht.
+    // Ohne 3D (noch nicht geladen) die einfache Kontur.
     const Lp = K.L * sc, yc = gy - (agl + K.R + (Z.r.gondel.h || 0) + (Z.r.gondel.ga || 0)) * sc, xc = W / 2;
+    if (!Z.seitenbild && typeof viewer !== 'undefined' && viewer && viewer.seitenbild) {
+      const b = viewer.seitenbild(Z.r, 720), im = new Image(); im.src = b.url; Z.seitenbild = Object.assign(b, { im });
+    }
+    const sb = Z.seitenbild;
+    if (sb && sb.im.complete && sb.im.naturalWidth) {
+      const pxProM = sc, mProEinheit = K.L / 10, f = sb.einheitenBreit * mProEinheit * pxProM / sb.w;   // Bildpunkte im Bild → Bildpunkte am Schirm
+      g.save(); g.translate(xc, yc); g.rotate(-s.th);
+      g.drawImage(sb.im, -sb.mitteX * f, -sb.achseY * f, sb.w * f, sb.h * f);
+      g.restore();
+      if (s.amBoden) { g.fillStyle = '#1d2733'; g.fillText('am Boden', xc - 20, gy + 10); }
+      return;
+    }
     g.save(); g.translate(xc, yc); g.rotate(-s.th);
     g.beginPath(); for (let i = 0; i <= 60; i++) { const x = i / 60, r = K.R * Math.sqrt(Math.max(0, C.y2(Z.r.geo.a, x))) * sc; g.lineTo(Lp / 2 - x * Lp, -r); }
     for (let i = 60; i >= 0; i--) { const x = i / 60, r = K.R * Math.sqrt(Math.max(0, C.y2(Z.r.geo.a, x))) * sc; g.lineTo(Lp / 2 - x * Lp, r); }

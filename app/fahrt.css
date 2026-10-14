@@ -1,4 +1,5 @@
-/* 2026-10-14 07:00 · fahrt.css 0.2: Zeitraffer am Handy ohne Beschriftung in einer Zeile
+/* 2026-10-14 13:00 · fahrt.css 0.3 (ENTWURF): Anzeige auf der Karte wie im Gasballon-Simulator, Leiste darunter
+   2026-10-14 07:00 · fahrt.css 0.2: Zeitraffer am Handy ohne Beschriftung in einer Zeile
    2026-10-14 06:30 · fahrt.css 0.1: Startdialog und Flugbildschirm (Handy hochkant, Computer breit) nach Entwurf vom 13.10.2026 */
 
 /* ---------- Startdialog: Startort und Wetter ---------- */
@@ -68,3 +69,20 @@
 }
 .ende{position:absolute;inset:0;z-index:900;background:rgba(20,30,40,.45);display:flex;align-items:center;justify-content:center;padding:20px}
 .ende .box{background:#fff;border-radius:9px;padding:16px;max-width:360px;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
+
+/* Anzeige auf der Karte oben rechts (wie Gasballon): Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken */
+.inst2{position:absolute;right:0;top:0;z-index:600;width:118px;background:rgba(255,255,255,.94);border-radius:0 0 0 9px;padding:6px 9px 7px 10px;box-shadow:0 1px 4px rgba(0,0,0,.15);pointer-events:none}
+.inst2 .lbl{font-size:11px;color:var(--mut)}
+.inst2 .big{font-size:30px;font-weight:700;line-height:1;white-space:nowrap}
+.inst2 .big small{font-size:13px;font-weight:600;color:var(--mut);margin-left:2px}
+.inst2 .nn{font-size:12px;color:var(--mut);margin:1px 0 3px;white-space:nowrap}
+.inst2 .kv{display:flex;justify-content:space-between;align-items:baseline;gap:4px;padding:.5px 0;position:relative}
+.inst2 .kv span{font-size:11px;color:var(--mut)}.inst2 .kv b{font-size:14px;font-variant-numeric:tabular-nums}
+.inst2 .vario b{font-size:17px}
+.inst2 .vario i{position:absolute;left:-6px;width:4px;border-radius:2px}
+.inst2 .vario i.up{bottom:50%;background:var(--ok)}.inst2 .vario i.dn{top:50%;background:var(--bad)}
+.inst2 .up{color:var(--ok)}.inst2 .dn{color:var(--bad)}
+.fz>.inst{grid-template-columns:repeat(6,1fr)}
+.fz>.inst div:nth-child(4n){border-right:1px solid var(--line)}.fz>.inst div:nth-child(6n){border-right:none}
+.fz>.inst i{font-size:9.5px}.fz>.inst b{font-size:12.5px}
+.cbtn{font-size:14px!important;padding:10px 14px!important;bottom:12px!important}

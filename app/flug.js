@@ -1,3 +1,4 @@
+// 2026-10-14 13:00 · flug.js 0.6: Vertikalbeschleunigung für die Anzeige
 // 2026-10-14 11:30 · flug.js 0.5: Ruder nach Größe bzw. Pendelleitwerk (τ, Ausschlag, Widerstand), Kurs halten = Kurs über Grund mit Vorhaltewinkel, Wenderadius nach Ruderwirkung
 // 2026-10-14 06:45 · flug.js 0.4: Landung erst nach dem Abheben (nicht schon beim Loslassen am Boden)
 // 2026-10-14 05:00 · flug.js 0.3: Höhenruder ±25°, Ruder- und induzierter Widerstand, Schublinie aus dem Rechenkern
@@ -189,6 +190,7 @@
       if (Fup > 0) { s.amBoden = false; s.landung = null; }
     } else {
       s.U += Ffwd / Mx * dt; s.w += Fup / Mz * dt;
+      s.acc = Fup / Mz;                                                            // Vertikalbeschleunigung (Anzeige am Vario)
       s.q += Msum / I * dt; s.th = clamp(s.th + s.q * dt, -0.6, 0.6);
     }
 

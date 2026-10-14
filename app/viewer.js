@@ -1,3 +1,4 @@
+// 2026-10-14 13:00 · viewer.js 0.10 (ENTWURF): Seitenbild für die Seitenansicht der Fahrt
 // 2026-10-14 12:00 · viewer.js 0.9: Ruder als Strich auf den Flossen (Klappe: Scharnierlinie, Pendelleitwerk: Drehachse und Wurzelspalt)
 // 2026-10-14 01:30 · viewer.js 0.8: Motorgondeln in Größe nach Leistung und an gewählter Längslage, Gondel an der Trimmlage, Gondelbug steil
 // 2026-10-14 00:30 · viewer.js 0.7: Gondel als Körper nach Seitenriss (Stromlinie/Tropfen/Kasten, Fenster, Abstand mit Seilen), Schnittansicht (Gerüst, Gaszellen, Ballonets, Kiel)
@@ -340,6 +341,25 @@ export function createViewer(host) {
     },
     snapshot() { return renderer.domElement.toDataURL('image/png'); },
     // Selbstdrehung ein- oder ausschalten; von Hand drehen und zoomen geht immer
+    /* Seitenbild für die Seitenansicht der Fahrt (ENTWURF): dasselbe 3D-Modell wie in der Vorschau, genau von der
+       Seite (Bug rechts), ohne Perspektive, auf durchsichtigem Grund. Rückgabe: Bild und Lage der Hüllenachse,
+       damit die Fahrt-Anzeige es maßstäblich und mit dem Nickwinkel gedreht zeichnen kann.                        */
+    seitenbild(result, w) {
+      w = w || 640;
+      const g = build(result), sc = new THREE.Scene();
+      sc.add(new THREE.HemisphereLight(0xffffff, 0x9fb3c8, 1.7));
+      const s2 = new THREE.DirectionalLight(0xffffff, 1.5); s2.position.set(-3, 10, -8); sc.add(s2); sc.add(g);
+      const box = new THREE.Box3().setFromObject(g), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+      const h = Math.max(8, Math.round(w * size.y / size.x));
+      const cam = new THREE.OrthographicCamera(-size.x / 2, size.x / 2, size.y / 2, -size.y / 2, 0.1, 100);
+      cam.position.set(c.x, c.y, -30); cam.lookAt(c.x, c.y, 0);              // von −z: Bug (x = −5) erscheint rechts
+      const rd = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+      rd.setSize(w, h, false); rd.render(sc, cam);
+      const url = rd.domElement.toDataURL('image/png');
+      rd.dispose(); g.traverse(o => { o.geometry && o.geometry.dispose(); });
+      // Einheiten: Rumpflänge = 10; Bildpunkte je Einheit = w / size.x; Achse (y = 0) und Mitte (x = 0) im Bild
+      return { url, w, h, einheitenBreit: size.x, achseY: box.max.y / size.y * h, mitteX: (box.max.x - 0) / size.x * w };
+    },
     // Schnittansicht ein/aus: vordere Hälfte der Hülle weglassen und das Innere zeigen
     setCutaway(on) { schnitt = !!on; if (last) this.update(last); },
     setAutoRotate(on) { autoOn = !!on; controls.autoRotate = autoOn; clearTimeout(resumeTimer); },

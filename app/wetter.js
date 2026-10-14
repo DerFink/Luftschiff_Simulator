@@ -1,3 +1,4 @@
+// 2026-10-14 12:30 · wetter.js 0.2: Zeitgrenze 15 s je Abfrage
 // 2026-10-14 06:00 · wetter.js 0.1: Wetter für den Flug (Open-Meteo: Vorhersage, Datum, ruhiger/mittlerer/extremer Tag am Ort; Ersatz ohne Netz)
 /* =================================================================================================
    WETTER FÜR DEN FLUG
@@ -49,7 +50,8 @@
     });
     return hours.length ? { hours, elev, lat: +j.latitude, lon: +j.longitude } : null;
   }
-  async function holen(u) { const r = await fetch(u); if (!r.ok) throw new Error('Wetterdienst ' + r.status); return r.json(); }
+  // Abfrage mit Zeitgrenze (15 s): antwortet der Dienst nicht, gibt es Ersatzwetter statt endlosem Warten
+  async function holen(u) { const r = await fetch(u, { signal: AbortSignal.timeout(15000) }); if (!r.ok) throw new Error('Wetterdienst ' + r.status); return r.json(); }
 
   /* Tag am Ort für ruhig / mittel / extrem: stärkster Bodenwind je Tag 2025 aus dem Archiv, sortiert */
   async function tagNachArt(lat, lon, art) {

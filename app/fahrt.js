@@ -1,3 +1,5 @@
+// 2026-10-14 12:30 · fahrt.js 0.3: Boost (24 h in etwa 3 s), Karte folgt gedämpft, Spur nach Weg, Fahrt speichern/fortsetzen, Landung: weiter oder beenden mit Bericht (.txt),
+//                    Seitenansicht vom Nutzer geschaltet (bei Landeanflug eingeblendet), Tasten bewegen Knüppel und Knöpfe, Knüppel vorn = sinken, Massen ab 100 kg in t, Kurs über Grund
 // 2026-10-14 07:00 · fahrt.js 0.2: Windanzeige neben den Zoomknöpfen, Uhr ohne Umbruch, Zeitraffer in einer Zeile
 // 2026-10-14 06:30 · fahrt.js 0.1: Startdialog (Startort, Wetter) und Flugbildschirm mit Karte, Seitenansicht, Anzeigen, Bedienung (Touch und Tastatur), Assistenten, Zeitraffer
 /* =================================================================================================
@@ -16,6 +18,7 @@
   'use strict';
   const FN = { lat: 47.6713, lon: 9.5115, name: 'Flughafen Friedrichshafen', elev: 417 };   // Standard-Startplatz
   const ZR = [1, 5, 10, 50, 100, 500, 1000];                                                 // Zeitraffer-Stufen
+  const BOOST = 28800;                                                                       // Boost: 24 h in etwa 3 s
   const RAD = Math.PI / 180;
   const KOMPASS = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
   const kompass = d => KOMPASS[Math.round(((d % 360) + 360) % 360 / 22.5) % 16];
@@ -36,6 +39,7 @@
     $('#app').innerHTML = `<div class="top"><button class="lnk" id="bBack">‹ Ergebnis</button><span class="t">Fahrt vorbereiten</span><span></span></div>
       <div class="scroll"><div class="vb">
         <div class="q">${escapeHtml(S.d.name)}</div>
+        ${gespeicherteFahrt() ? `<div class="sug" style="display:flex;gap:10px;align-items:center"><span style="flex:1">Es gibt eine gespeicherte Fahrt mit diesem Luftschiff (${new Date(gespeicherteFahrt().gespeichert).toLocaleString('de-DE')}).</span><button class="btn p" id="bWeiter" style="flex:none;padding:8px 12px">Fortsetzen</button></div>` : ''}
         <div class="lab">Startort</div>
         ${wahl('sOrt', [['fn', 'Friedrichshafen'], ['gps', 'Mein Standort'], ['karte', 'Auf der Karte']], VB.ort)}
         <div class="vbmap" id="vbMap"></div>
@@ -47,6 +51,7 @@
       </div></div>
       <div class="btns"><button class="btn s" id="bZur">Zurück</button><button class="btn p" id="bLos">Losfahren</button></div>`;
     $('#bBack').onclick = $('#bZur').onclick = () => showErgebnis();
+    if ($('#bWeiter')) $('#bWeiter').onclick = () => window.fahrtFortsetzen();
     // Datum: Vorgabe 10:00 Uhr heute bzw. zuletzt gewählt
     const dIn = $('#vbDatum'), d0 = VB.datum ? new Date(VB.datum) : new Date();
     if (!VB.datum) d0.setHours(10, 0, 0, 0);
@@ -84,7 +89,7 @@
     });
     ortText(); wetterText();
     $('#bLos').onclick = async () => {
-      $('#bLos').disabled = true; $('#bLos').textContent = 'Wetter wird geladen …';
+      $('#bLos').disabled = true; $('#bLos').textContent = 'Gelände und Wetter werden geladen …';
       const elev = await gelaende(VB.lat, VB.lon);
       const W = await LSWetter.laden(VB.lat, VB.lon, VB.wetter, VB.datum, elev ?? (VB.ort === 'fn' ? FN.elev : 0));
       startFahrt(W, elev != null ? elev : (W.model.elev || 0));
@@ -92,39 +97,42 @@
   };
   // Geländehöhe am Startort (Open-Meteo, Höhenmodell); ohne Netz null
   async function gelaende(lat, lon) {
-    try { const r = await fetch('https://api.open-meteo.com/v1/elevation?latitude=' + lat.toFixed(4) + '&longitude=' + lon.toFixed(4)); const j = await r.json(); return +j.elevation[0]; }
+    try { const r = await fetch('https://api.open-meteo.com/v1/elevation?latitude=' + lat.toFixed(4) + '&longitude=' + lon.toFixed(4), { signal: AbortSignal.timeout(8000) }); const j = await r.json(); return +j.elevation[0]; }
     catch (e) { return VB.ort === 'fn' ? FN.elev : null; }
   }
 
   /* ===============================================================================================
      2. FLUGBILDSCHIRM
      =============================================================================================== */
-  function startFahrt(W, elev) {
+  function startFahrt(W, elev, alt) {
     S.screen = 'fahrt';
     const r = S.r, F = LSFlug.start(r, { h0: elev, hGrund: elev });
+    if (alt) Object.assign(F.s, alt.s);                       // gespeicherte Fahrt: Zustand übernehmen
     const lift = F.K.Vgas * r.fill * F.K.lpm0;
     Z = {
       r, F, W, lat: VB.lat, lon: VB.lon, lx: 0, ly: 0, elev, zr: 5, pause: false, keys: {}, joy: { x: 0, y: 0, an: false },
-      seiteAn: null,                                 // null = automatisch (unter 100 m über Grund), true/false = vom Nutzer
+      seiteAn: true,                                 // vom Nutzer geschaltet; beim Landeanflug (unter 100 m, sinkend) wieder eingeblendet
+      stat: { weg: 0, hMax: elev, vMax: 0, landungen: [] },   // für den Fahrtbericht
       follow: true, track: [[VB.lat, VB.lon]], tTrack: 0, hs: true,     // Höhensteuerer an
       stoss: rund(0.0025 * lift), laden: false, ende: null, letzteLandung: null, uiT: 0, raf: 0, last: 0,
     };
-    if (F.s.zuSchwer > 0) setTimeout(() => toast('Zu schwer: Es fehlen ' + fm(F.s.zuSchwer) + ' – Auslegung prüfen'), 400);
+    if (alt) Object.assign(Z, { lat: alt.lat, lon: alt.lon, lx: alt.lx, ly: alt.ly, track: alt.track, zr: alt.zr, hs: alt.hs, seiteAn: alt.seiteAn, stat: alt.stat, letzteLandung: F.s.landung });
+    else if (F.s.zuSchwer > 0) setTimeout(() => toast('Zu schwer: Es fehlen ' + fm(F.s.zuSchwer) + ' – Auslegung prüfen'), 400);
     aufbauen();
     Z.last = performance.now(); Z.raf = requestAnimationFrame(loop);
   }
   // „runde“ Ballaststöße: 1, 2, 5 · 10^n kg
   function rund(x) { const p = Math.pow(10, Math.floor(Math.log10(Math.max(x, 1e-4)))), f = x / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
-  function stopFahrt() { if (Z) { cancelAnimationFrame(Z.raf); window.removeEventListener('keydown', Z.kd); window.removeEventListener('keyup', Z.ku); window.removeEventListener('resize', Z.rs); Z = null; } }
+  function stopFahrt() { if (Z) { cancelAnimationFrame(Z.raf); window.removeEventListener('keydown', Z.kd); window.removeEventListener('keyup', Z.ku); window.removeEventListener('resize', Z.rs); window.removeEventListener('pagehide', Z.ph); document.removeEventListener('visibilitychange', Z.ph); Z = null; } }
   window.stopFahrt = stopFahrt;
 
   // ---------- Aufbau der Oberfläche (einmal je Fahrt) ----------
   function aufbauen() {
     const app = $('#app'); app.classList.add('wide');
-    const zrB = ZR.map((z, i) => `<button data-z="${z}"${z === Z.zr ? ' class="on"' : ''}>×${z}</button>`).join('');
-    const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Nicklage hoch / tief (Höhensteuerer hält sie)'], ['W S', 'Schub + / −  ·  X Schub aus'],
+    const zrB = ZR.map((z, i) => `<button data-z="${z}"${z === Z.zr ? ' class="on"' : ''}>×${z}</button>`).join('') + `<button data-z="${BOOST}" title="24 h in etwa 3 s">⚡</button>`;
+    const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Knüppel vor = sinken, zurück = steigen (Höhensteuerer hält die Nicklage)'], ['W S', 'Schub + / −  ·  X Schub aus'],
       ['B', 'Ballast: tippen = ' + fm(Z.stoss) + ', halten = laufend'], ['G', 'Gas ablassen (solange gedrückt)'], ['Q E', 'Trimm Bug hoch / tief'],
-      ['H K F P', 'Höhe · Kurs · Fahrt · Position halten'], ['N', 'Höhensteuerer ein/aus (aus: Pfeile direkt aufs Höhenruder)'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus']];
+      ['H K F P', 'Höhe · Kurs · Fahrt · Position halten'], ['N', 'Höhensteuerer ein/aus (aus: Pfeile direkt aufs Höhenruder)'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus']];
     app.innerHTML = `<div class="fz">
       <div class="top"><button class="lnk" id="fBack">‹ Auslegung</button><b class="t">${escapeHtml(S.d.name)}</b><span id="fUhr" style="white-space:nowrap"></span></div>
       <div class="zr"><span class="zrl">Zeitraffer</span>${zrB}<button data-z="0" id="fPause">❚❚</button></div>
@@ -132,7 +140,7 @@
         <div class="badge" id="fWind" style="left:52px;top:10px"></div>
         <div class="aps" id="fAps"></div>
         <div class="badge" id="fQuelle" style="left:8px;bottom:8px;max-width:70%"></div>
-        <button class="cbtn" id="fFollow" style="display:none">⌖ Schiff</button>
+        <button class="cbtn" id="fFollow" style="display:none">⌖ Zum Schiff</button>
       </div>
       <div class="fside" id="fSide"><canvas id="fSideC"></canvas><button class="x" id="fSideX">Seitenansicht ✕</button></div>
       <div class="inst" id="fInst"></div>
@@ -144,7 +152,7 @@
           <button id="fTu">Trimm ▲<small>Bug hoch</small></button>
           <button id="fTd">Trimm ▼<small>Bug tief</small></button>
         </div>
-        <div class="joy" id="fJoy"><div class="stick"></div><span class="l" style="left:50%;top:1px;transform:translateX(-50%)">steigen</span><span class="l" style="left:50%;bottom:1px;transform:translateX(-50%)">sinken</span><span class="l" style="left:3px;top:50%;transform:translateY(-120%)">links</span><span class="l" style="right:3px;top:50%;transform:translateY(-120%)">rechts</span></div>
+        <div class="joy" id="fJoy"><div class="stick"></div><span class="l" style="left:50%;top:1px;transform:translateX(-50%)">sinken</span><span class="l" style="left:50%;bottom:1px;transform:translateX(-50%)">steigen</span><span class="l" style="left:3px;top:50%;transform:translateY(-120%)">links</span><span class="l" style="right:3px;top:50%;transform:translateY(-120%)">rechts</span></div>
       </div>
       <div class="apsrow" id="fApRow">
         <button data-a="hs">Höhensteuerer</button><button data-a="hoehe">Höhe halten</button><button data-a="kurs">Kurs halten</button><button data-a="fahrt">Fahrt halten</button><button data-a="pos">Position halten</button>
@@ -161,7 +169,8 @@
       Z.map.on('dragstart', () => { Z.follow = false; $('#fFollow').style.display = 'block'; });
     } else $('#fMap').innerHTML = '<div class="desc" style="padding:40px 12px">Karte nicht geladen (offline?). Die Fahrt läuft trotzdem.</div>';
     $('#fFollow').onclick = () => { Z.follow = true; $('#fFollow').style.display = 'none'; };
-    $('#fBack').onclick = () => { stopFahrt(); $('#app').classList.remove('wide'); showErgebnis(); };
+    $('#fBack').onclick = () => { speichern(); stopFahrt(); $('#app').classList.remove('wide'); showErgebnis(); toast('Fahrt gespeichert – „Fliegen“ setzt sie fort'); };
+    Z.ph = () => speichern(); window.addEventListener('pagehide', Z.ph); document.addEventListener('visibilitychange', Z.ph);
     document.querySelectorAll('.zr button').forEach(b => b.onclick = () => { const z = +b.dataset.z; if (z === 0) Z.pause = !Z.pause; else { Z.zr = z; Z.pause = false; } zrAnzeigen(); });
     $('#fSideX').onclick = () => { Z.seiteAn = !seiteSichtbar(); };
     bedienung();
@@ -196,6 +205,7 @@
       if (k === 'v') Z.seiteAn = !seiteSichtbar();
       if (k === ' ') { Z.pause = !Z.pause; zrAnzeigen(); }
       if (k >= '1' && k <= '7') { Z.zr = ZR[+k - 1]; Z.pause = false; zrAnzeigen(); }
+      if (k === '8') { Z.zr = BOOST; Z.pause = false; zrAnzeigen(); }
     };
     Z.ku = e => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; Z.keys[k] = false; };
     window.addEventListener('keydown', Z.kd); window.addEventListener('keyup', Z.ku);
@@ -219,8 +229,8 @@
   }
   function halten(el, tipp, dauer) {
     let t = null, lang = false;
-    el.onpointerdown = e => { e.preventDefault(); lang = false; t = setTimeout(() => { lang = true; dauer(true); el.classList.add('akt'); }, 350); if (!tipp) { clearTimeout(t); lang = true; dauer(true); el.classList.add('akt'); } };
-    el.onpointerup = el.onpointerleave = el.onpointercancel = () => { clearTimeout(t); if (lang) { dauer(false); el.classList.remove('akt'); } else if (tipp && t) tipp(); t = null; lang = false; };
+    el.onpointerdown = e => { e.preventDefault(); lang = false; el.dataset.halten = '1'; t = setTimeout(() => { lang = true; dauer(true); el.classList.add('akt'); }, 350); if (!tipp) { clearTimeout(t); lang = true; dauer(true); el.classList.add('akt'); } };
+    el.onpointerup = el.onpointerleave = el.onpointercancel = () => { delete el.dataset.halten; clearTimeout(t); if (lang) { dauer(false); el.classList.remove('akt'); } else if (tipp && t) tipp(); t = null; lang = false; };
   }
   function ballastStoss() { const s = Z.F.s; if (s.ballast <= 0) { toast('Kein Ballast mehr'); return; } const m = Math.min(s.ballast, Z.stoss); s.ballast -= m; s.ballastAbGesamt += m; }
   function manuellSchub() { const ap = Z.F.s.ap; if (ap.fahrt != null || ap.pos) { ap.fahrt = null; ap.pos = null; apAnzeigen(); } }
@@ -229,7 +239,8 @@
     const s = Z.F.s, ap = s.ap;
     if (a === 'hs') { Z.hs = !Z.hs; if (!Z.hs) { ap.nick = null; ap.hoehe = null; } else ap.nick = 0; }
     if (a === 'hoehe') { ap.hoehe = ap.hoehe == null ? Math.round(s.h) : null; if (ap.hoehe != null) Z.hs = true; if (ap.hoehe == null) ap.nick = Z.hs ? 0 : null; }
-    if (a === 'kurs') { ap.kurs = ap.kurs == null ? s.psi : null; ap.pos = null; }
+    if (a === 'kurs') { const w = Z.wJetzt || { e: 0, n: 0 }, ve = s.U * Math.sin(s.psi) + w.e, vn = s.U * Math.cos(s.psi) + w.n;
+      ap.kurs = ap.kurs == null ? (Math.hypot(ve, vn) > 1 ? (Math.atan2(ve, vn) + 2 * Math.PI) % (2 * Math.PI) : s.psi) : null; ap.pos = null; }
     if (a === 'fahrt') { ap.fahrt = ap.fahrt == null ? Math.max(s.U, 0.4 * Z.F.K.vmax) : null; ap.pos = null; }
     if (a === 'pos') { if (ap.pos) { ap.pos = null; ap.kurs = null; ap.fahrt = null; } else { ap.pos = { x: s.x, y: s.y }; } }
     apAnzeigen();
@@ -237,7 +248,7 @@
   function apAnzeigen() {
     const ap = Z.F.s.ap, on = { hs: Z.hs, hoehe: ap.hoehe != null, kurs: ap.kurs != null && !ap.pos, fahrt: ap.fahrt != null && !ap.pos, pos: !!ap.pos };
     document.querySelectorAll('#fApRow button').forEach(b => { b.classList.toggle('on', on[b.dataset.a]); b.textContent = (on[b.dataset.a] ? '✓ ' : '') + b.textContent.replace(/^✓ /, ''); });
-    const t = []; if (on.hoehe) t.push('Höhe ' + de(ap.hoehe) + ' m'); if (on.kurs) t.push('Kurs ' + String(Math.round(ap.kurs / RAD + 360) % 360).padStart(3, '0') + '°'); if (on.fahrt) t.push('Fahrt ' + de(ap.fahrt * 3.6) + ' km/h'); if (on.pos) t.push('Position halten');
+    const t = []; if (on.hoehe) t.push('Höhe ' + de(ap.hoehe) + ' m'); if (on.kurs) t.push('Kurs über Grund ' + String(Math.round(ap.kurs / RAD + 360) % 360).padStart(3, '0') + '°'); if (on.fahrt) t.push('Fahrt ' + de(ap.fahrt * 3.6) + ' km/h'); if (on.pos) t.push('Position halten');
     $('#fAps').innerHTML = t.map(x => `<div class="badge">${x}</div>`).join('');
   }
   function zrAnzeigen() { document.querySelectorAll('.zr button').forEach(b => b.classList.toggle('on', +b.dataset.z === Z.zr && !Z.pause || (b.dataset.z === '0' && Z.pause))); }
@@ -250,7 +261,12 @@
     if (Math.abs(sr) > 0.05 && (ap.kurs != null || ap.pos)) { if (ap.pos) ap.fahrt = null; ap.kurs = null; ap.pos = null; apAnzeigen(); }
     if (ap.kurs == null && !ap.pos) s.sr = Math.max(-1, Math.min(1, sr));
     // Nicken: mit Höhensteuerer gibt man die Nicklage vor (±8°), sonst direkt das Höhenruder (↑ = Bug hoch)
-    const ny = (k.ArrowUp ? 1 : 0) - (k.ArrowDown ? 1 : 0) + (j.an ? j.y : 0);
+    // Knüppel vor (↑) = Bug tief = sinken, zurück (↓) = Bug hoch = steigen (wie im Flugzeug)
+    const ny = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0) - (j.an ? j.y : 0);
+    // Rückmeldung: Tasten bewegen den Knüppel und markieren die Knöpfe
+    if (!j.an) { const st = document.querySelector('#fJoy .stick'), R = 38, kx = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), ky = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0);
+      if (st) st.style.transform = (kx || ky) ? `translate(${kx * R}px,${ky * R}px)` : ''; }
+    for (const [id, an] of [['fBal', k.b], ['fGas', k.g], ['fTu', k.q], ['fTd', k.e]]) { const b = document.getElementById(id); if (b && !b.dataset.halten) b.classList.toggle('akt', !!an); }
     if (Math.abs(ny) > 0.05 && ap.hoehe != null) { ap.hoehe = null; apAnzeigen(); }
     if (ap.hoehe == null) { if (Z.hs) ap.nick = Math.max(-1, Math.min(1, ny)) * 8 * RAD; else { ap.nick = null; s.hr = -Math.max(-1, Math.min(1, ny)); } }
     s.ventil = (k.g || Z.gasKnopf) ? 1 : 0;
@@ -266,19 +282,34 @@
     eingaben();
     const F = Z.F, s = F.s, W = Z.W;
     if (!Z.pause) {
-      let n = Math.round(dtR * Z.zr / 0.1); const max = 4000; if (n > max) n = max;
-      for (let i = 0; i < n; i++) {
+      // Schrittweite 0,1 s; beim Boost 0,5 s (geprüft: bis 1 s stabil), höchstens 3000 Schritte je Bild
+      const dt = Z.zr >= 5000 ? 0.5 : 0.1;
+      let n = Math.round(dtR * Z.zr / dt); if (n > 3000) n = 3000;
+      for (let i = 0; i < n && !Z.pause; i++) {
         const tMs = W.startMs + s.t * 1000, w = LSWetter.bei(W.model, tMs, s.h);
-        LSFlug.schritt(F, 0.1, w);
-        if (s.landung && s.landung !== Z.letzteLandung) { Z.letzteLandung = s.landung; landung(s.landung); }
+        const x0 = s.x, y0 = s.y;
+        LSFlug.schritt(F, dt, w);
+        Z.stat.weg += Math.hypot(s.x - x0, s.y - y0); if (s.h > Z.stat.hMax) Z.stat.hMax = s.h; if (s.U > Z.stat.vMax) Z.stat.vMax = s.U;
+        if (s.landung && s.landung !== Z.letzteLandung) { Z.letzteLandung = s.landung; Z.stat.landungen.push(Object.assign({ lat: Z.lat, lon: Z.lon }, s.landung)); landung(s.landung); }
       }
+      Z.wJetzt = LSWetter.bei(W.model, W.startMs + s.t * 1000, s.h);
+      // Landeanflug: unter 100 m über Grund und sinkend ⇒ Seitenansicht einblenden (einmal je Anflug)
+      const agl = s.h - Z.elev;
+      if (agl < 100 && s.w < -0.2 && !Z.anflug) { Z.anflug = true; Z.seiteAn = true; }
+      if (agl > 150) Z.anflug = false;
     }
     // Ort auf der Erde aus den Wegstücken (Ost/Nord in Metern) fortschreiben
     const dx = s.x - Z.lx, dy = s.y - Z.ly; Z.lx = s.x; Z.ly = s.y;
     Z.lat += dy / 111320; Z.lon += dx / (111320 * Math.cos(Z.lat * RAD));
-    if (s.t - Z.tTrack > 5) { Z.tTrack = s.t; Z.track.push([Z.lat, Z.lon]); if (Z.poly) Z.poly.setLatLngs(Z.track); }
+    // Spur: neuer Punkt nach 150 m Weg; über 4000 Punkte wird jeder zweite verworfen (Karte bleibt flüssig)
+    const lt = Z.track[Z.track.length - 1];
+    if (Math.hypot((Z.lat - lt[0]) * 111320, (Z.lon - lt[1]) * 111320 * Math.cos(Z.lat * RAD)) > 150) {
+      Z.track.push([Z.lat, Z.lon]);
+      if (Z.track.length > 4000) { Z.track = Z.track.filter((p, i) => i % 2 === 0 || i === Z.track.length - 1); if (Z.poly) Z.poly.setLatLngs(Z.track); }
+      else if (Z.poly) Z.poly.addLatLng([Z.lat, Z.lon]);
+    }
     nachladen();
-    if (Z.map) { Z.ship.setLatLng([Z.lat, Z.lon]); const sv = document.getElementById('fShipSvg'); if (sv) sv.style.transform = `rotate(${s.psi / RAD}deg)`; if (Z.follow && now - (Z.panT || 0) > 500) { Z.panT = now; Z.map.panTo([Z.lat, Z.lon], { animate: false }); } }
+    if (Z.map) { Z.ship.setLatLng([Z.lat, Z.lon]); const sv = document.getElementById('fShipSvg'); if (sv) sv.style.transform = `rotate(${s.psi / RAD}deg)`; if (Z.follow) folgen(dtR); }
     if (now - Z.uiT > 200) { Z.uiT = now; anzeigen(); }
     seite();
     Z.raf = requestAnimationFrame(loop);
@@ -295,6 +326,14 @@
     if (Z) Z.laden = false;
   }
 
+  // Massen für die Anzeige: unter 1 kg in g, unter 100 kg in kg, ab 100 kg in t (Vorgabe: dreistellige Zahlen in die nächste Einheit)
+  function fk(kg) {
+    const a = Math.abs(kg);
+    if (a < 1) return de(kg * 1000, a < 0.01 ? 1 : 0) + ' g';
+    if (a < 100) return de(kg, a < 10 ? 1 : 0) + ' kg';
+    const t = kg / 1000; return de(t, Math.abs(t) < 1 ? 2 : Math.abs(t) < 10 ? 2 : Math.abs(t) < 100 ? 1 : 0) + ' t';
+  }
+
   // ---------- Anzeigen ----------
   function anzeigen() {
     const F = Z.F, s = F.s, K = F.K, a = s.anz || {}, W = Z.W;
@@ -307,12 +346,13 @@
     const rest = K.verbrenner ? (verbrauch > 0 ? s.energie / verbrauch / 3600 : null) : (verbrauch > 0 ? s.E / verbrauch / 3600 : null);
     const frei = a.frei || 0, prall = C.hOfSigma(Math.min(1, s.Vn / K.Vgas));
     const kurs = String(Math.round(s.psi / RAD + 360) % 360).padStart(3, '0') + '°';
+    const kgr = Math.atan2(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n), kog = vg > 1 ? String(Math.round(kgr / RAD + 360) % 360).padStart(3, '0') + '°' : '–';
     const z = [
       ['Höhe NN', de(s.h) + ' m', ''], ['Steigen', (s.w >= 0 ? '+' : '−') + de(Math.abs(s.w), 1) + ' m/s', s.w > 0.2 ? 'up' : s.w < -0.2 ? 'dn' : ''],
       ['Fahrt (Luft)', de(s.U * 3.6) + ' km/h', ''], ['über Grund', de(vg * 3.6) + ' km/h', ''],
-      ['Kurs', kurs, ''], ['Nicken', (s.th >= 0 ? '+' : '−') + de(Math.abs(s.th / RAD), 1) + '°', ''],
-      ['Auftrieb frei', (frei >= 0 ? '+' : '−') + fm(Math.abs(frei)), frei > 0 ? 'up' : frei < 0 ? 'dn' : ''], ['Gas (Füllung)', de(Math.min(100, (a.fuell || 0) * 100)) + ' %' + (a.schlaff ? ' schlaff' : ''), a.schlaff ? 'dn' : ''],
-      ['Ballast', fm(s.ballast), ''], [K.verbrenner ? 'Kraftstoff' : 'Akku', K.verbrenner ? fm(s.energie) : de(s.E / Math.max(K.E0, 1) * 100) + ' %', ''],
+      ['Kurs (Bug · Grund)', kurs + ' · ' + kog, ''], ['Nicken', (s.th >= 0 ? '+' : '−') + de(Math.abs(s.th / RAD), 1) + '°', ''],
+      ['Auftrieb frei', (frei >= 0 ? '+' : '−') + fk(Math.abs(frei)), frei > 0 ? 'up' : frei < 0 ? 'dn' : ''], ['Gas (Füllung)', de(Math.min(100, (a.fuell || 0) * 100)) + ' %' + (a.schlaff ? ' schlaff' : ''), a.schlaff ? 'dn' : ''],
+      ['Ballast', fk(s.ballast), ''], [K.verbrenner ? 'Kraftstoff' : 'Akku', K.verbrenner ? fk(s.energie) : de(s.E / Math.max(K.E0, 1) * 100) + ' %', ''],
       ['Reicht noch', rest == null ? '–' : rest > 99 ? '> 99 h' : de(rest, 1) + ' h', ''], ['Prallhöhe', de(prall) + ' m', ''],
     ];
     if (window.innerWidth >= 900) z.push(['Schub', de(s.schub * 100) + ' %', ''], ['Höhenruder', de(s.hr * 100) + ' %', ''], ['Seitenruder', de(s.sr * 100) + ' %', '']);
@@ -323,7 +363,7 @@
   }
 
   // ---------- Seitenansicht: unter 100 m über Grund von selbst, sonst nach Wahl ----------
-  function seiteSichtbar() { const agl = Z.F.s.h - Z.elev; return Z.seiteAn != null ? Z.seiteAn : agl < 100; }
+  function seiteSichtbar() { return Z.seiteAn; }
   function seite() {
     const box = $('#fSide'), sicht = seiteSichtbar();
     if (box.style.display !== (sicht ? 'block' : 'none')) { box.style.display = sicht ? 'block' : 'none'; if (Z.map) setTimeout(() => Z.map.invalidateSize(), 30); }
@@ -349,12 +389,87 @@
     if (s.amBoden) { g.fillStyle = '#1d2733'; g.fillText('am Boden', xc - 20, gy + 10); }
   }
 
+  // ---------- Karte folgt dem Schiff gedämpft (Vorgabe: weich nachziehen, kein Ruckeln) ----------
+  // Die Kartenmitte rückt je Bild um den Anteil 1 − e^(−dt/τ) zum Schiff (τ = 0,6 s). Ist das Schiff (bei hohem
+  // Zeitraffer) weiter als 30 % der Kartengröße von der Mitte weg, wird der Überstand sofort ausgeglichen.
+  function folgen(dt) {
+    const m = Z.map, sz = m.getSize(), p = m.latLngToContainerPoint([Z.lat, Z.lon]);
+    let dx = p.x - sz.x / 2, dy = p.y - sz.y / 2;
+    const k = 1 - Math.exp(-dt / 0.6);
+    let mx = dx * k, my = dy * k;
+    const gx = 0.3 * sz.x, gy = 0.3 * sz.y;
+    if (Math.abs(dx - mx) > gx) mx = dx - Math.sign(dx) * gx;
+    if (Math.abs(dy - my) > gy) my = dy - Math.sign(dy) * gy;
+    if (Math.abs(mx) + Math.abs(my) > 0.05) m.panBy([mx, my], { animate: false });
+  }
+
+  // ---------- Fahrt speichern (beim Verlassen) und fortsetzen ----------
+  function speichern() {
+    if (!Z || Z.beendet) return;
+    try {
+      const s = Object.assign({}, Z.F.s); delete s.anz;
+      const tr = Z.track.length > 1500 ? Z.track.filter((p, i) => i % Math.ceil(Z.track.length / 1500) === 0) : Z.track;
+      localStorage.setItem('ls_fahrt', JSON.stringify({ code: C.encode(S.d), s, lat: Z.lat, lon: Z.lon, lx: Z.lx, ly: Z.ly, elev: Z.elev, track: tr,
+        zr: Z.zr === BOOST ? 100 : Z.zr, hs: Z.hs, seiteAn: Z.seiteAn, stat: Z.stat, VB: Object.assign({}, VB), W: Z.W, gespeichert: Date.now() }));
+    } catch (e) { /* Speicher voll oder gesperrt: dann eben nicht */ }
+  }
+  function gespeicherteFahrt() { try { const f = JSON.parse(localStorage.getItem('ls_fahrt') || 'null'); return f && f.code === C.encode(S.d) ? f : null; } catch (e) { return null; } }
+  window.gespeicherteFahrt = gespeicherteFahrt;
+  function fortsetzen(f) {
+    Object.assign(VB, f.VB);
+    startFahrt(f.W, f.elev, f);
+  }
+  window.fahrtFortsetzen = () => { const f = gespeicherteFahrt(); if (f) fortsetzen(f); };
+
+  // ---------- Fahrt beenden: Zusammenfassung und Bericht als Textdatei ----------
+  function bericht() {
+    const F = Z.F, s = F.s, K = F.K, W = Z.W, st = Z.stat;
+    const t0 = new Date(W.startMs), t1 = new Date(W.startMs + s.t * 1000);
+    const dauer = s.t / 3600, hh = Math.floor(dauer), mm = Math.round((dauer - hh) * 60);
+    const z = [
+      'Fahrtbericht Luftschiff-Simulator (Build ' + BUILD + ')',
+      '==================================================',
+      'Luftschiff:      ' + S.d.name + (S.d.erbauer ? ' (Erbauer: ' + S.d.erbauer + ')' : ''),
+      'Start:           ' + VB.name + ', ' + Z.track[0][0].toFixed(4) + '° N, ' + Z.track[0][1].toFixed(4) + '° O, ' + t0.toLocaleString('de-DE'),
+      'Ende:            ' + Z.lat.toFixed(4) + '° N, ' + Z.lon.toFixed(4) + '° O, ' + t1.toLocaleString('de-DE'),
+      'Wetter:          ' + W.quelle,
+      '',
+      'Fahrtdauer:      ' + hh + ' h ' + String(mm).padStart(2, '0') + ' min',
+      'Weg über Grund:  ' + de(st.weg / 1000, 1) + ' km',
+      'Höchste Höhe:    ' + de(st.hMax) + ' m NN (' + de(st.hMax - Z.elev) + ' m über Start)',
+      'Höchste Fahrt:   ' + de(st.vMax * 3.6) + ' km/h durch die Luft',
+      (K.verbrenner ? 'Kraftstoff:      ' + fk(K.energie0 - s.energie) + ' verbraucht, ' + fk(s.energie) + ' übrig' : 'Akku:            ' + de((1 - s.E / Math.max(K.E0, 1)) * 100) + ' % verbraucht'),
+      'Ballast:         ' + fk(s.ballastAbGesamt) + ' abgeworfen, ' + fk(s.ballast) + ' übrig',
+      'Gas abgelassen:  ' + de(s.gasAb) + ' m³ (Normvolumen)',
+      '',
+      'Landungen:       ' + (st.landungen.length ? '' : 'keine'),
+      ...st.landungen.map((l, i) => '  ' + (i + 1) + '. ' + (l.gut ? 'gelungen' : 'hart') + ': Sinken ' + de(l.sinken, 1) + ' m/s, über Grund ' + de(l.ueberGrund, 1) + ' m/s, ' + l.lat.toFixed(4) + '° N ' + l.lon.toFixed(4) + '° O'),
+      '',
+      'Speicher-Code des Luftschiffs:',
+      C.encode(S.d),
+    ];
+    return z.join('\n') + '\n';
+  }
+  function beenden() {
+    const txt = bericht(); Z.beendet = true;
+    try { localStorage.removeItem('ls_fahrt'); } catch (e) {}
+    Z.pause = true;
+    const box = document.createElement('div'); box.className = 'ende';
+    box.innerHTML = `<div class="box"><b>Fahrt beendet</b><pre style="font-size:11px;white-space:pre-wrap;max-height:50vh;overflow:auto;margin:0">${escapeHtml(txt)}</pre>
+      <div style="display:flex;gap:8px"><button class="btn s" id="eTxt">Bericht (.txt)</button><button class="btn p" id="eAus">Zur Auslegung</button></div></div>`;
+    $('#app').appendChild(box);
+    box.querySelector('#eTxt').onclick = () => download('Fahrtbericht ' + S.d.name.replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim() + ' ' + new Date().toISOString().slice(0, 10) + '.txt', txt);
+    box.querySelector('#eAus').onclick = () => { stopFahrt(); $('#app').classList.remove('wide'); showErgebnis(); };
+  }
+
   // ---------- Landung ----------
   function landung(L) {
     const gut = L.gut, txt = `Sinken ${de(L.sinken, 1)} m/s · über Grund ${de(L.ueberGrund, 1)} m/s`;
     const box = document.createElement('div'); box.className = 'ende';
-    box.innerHTML = `<div class="box"><b>${gut ? '✓ Gelandet' : '⚠ Harte Landung'}</b><div>${txt}</div><div class="desc">Gelungen gilt höchstens 1 m/s Sinken und 2 m/s über Grund. Das Schiff steht; mit Ballast oder Schub geht es weiter.</div><button class="btn p" id="eOk">Weiter</button></div>`;
+    box.innerHTML = `<div class="box"><b>${gut ? '✓ Gelandet' : '⚠ Harte Landung'}</b><div>${txt}</div><div class="desc">Gelungen gilt höchstens 1 m/s Sinken und 2 m/s über Grund. Möchtest du die Fahrt beenden?</div>
+      <div style="display:flex;gap:8px"><button class="btn s" id="eOk">Weiterfahren</button><button class="btn p" id="eEnde">Fahrt beenden</button></div></div>`;
     $('#app').appendChild(box); Z.pause = true; zrAnzeigen();
     box.querySelector('#eOk').onclick = () => { box.remove(); if (Z) { Z.pause = false; zrAnzeigen(); } };
+    box.querySelector('#eEnde').onclick = () => { box.remove(); beenden(); };
   }
 })();

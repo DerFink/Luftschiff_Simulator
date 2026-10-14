@@ -1,3 +1,4 @@
+// 2026-10-14 12:00 · viewer.js 0.9: Ruder als Strich auf den Flossen (Klappe: Scharnierlinie, Pendelleitwerk: Drehachse und Wurzelspalt)
 // 2026-10-14 01:30 · viewer.js 0.8: Motorgondeln in Größe nach Leistung und an gewählter Längslage, Gondel an der Trimmlage, Gondelbug steil
 // 2026-10-14 00:30 · viewer.js 0.7: Gondel als Körper nach Seitenriss (Stromlinie/Tropfen/Kasten, Fenster, Abstand mit Seilen), Schnittansicht (Gerüst, Gaszellen, Ballonets, Kiel)
 // 2026-10-13 23:20 · viewer.js 0.6: Motorpaar der Mittelgondel hintereinander mit einem Propeller (LZ 120), einzelner Motor am Heck (Zeppelin NT), 1 Flosse unten, Selbstdrehung schaltbar
@@ -222,6 +223,14 @@ export function createViewer(host) {
       const fin = new THREE.Mesh(new THREE.ShapeGeometry(shape), finMat);
       fin.rotation.x = th;              // Flosse um die Längsachse an ihre Stelle drehen
       g.add(fin);
+      // Ruder als Strich: Klappe = Scharnierlinie bei (1 − E) der Tiefe von vorn; Pendelleitwerk = Drehachse bei 25 %
+      // der Tiefe und Spalt an der Wurzel (die ganze Flosse dreht)
+      const ru = LSCore.ruder(d.ltw), f = ru.pendel ? 0.25 : 1 - ru.E;
+      const lp = [new THREE.Vector3(xa + f * cr, ra + 0.01 * R, 0), new THREE.Vector3(xtLE + f * ct, rb + span, 0)];
+      if (ru.pendel) lp.unshift(new THREE.Vector3(xa, ra + 0.01 * R, 0), new THREE.Vector3(xa + f * cr, ra + 0.01 * R, 0));
+      const rl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(ru.pendel ? [lp[0], new THREE.Vector3(xb, rb + 0.01 * R, 0), lp[1], lp[2], lp[3]] : lp),
+        new THREE.LineBasicMaterial({ color: 0x3a1a10 }));
+      rl.rotation.x = th; g.add(rl);
     }
 
     // Gondel

@@ -1,3 +1,4 @@
+// 2026-10-14 11:00 · core.js 0.14: Ruder (Anteil der Flossenfläche, Pendelleitwerk), Speicher-Code zukunftssicher (eingefrorene Grundwerte LS1, Text drumherum erlaubt), Erbauer (U)
 // 2026-10-14 05:00 · core.js 0.13: Trimmwiderstand aus der Schublinie unter der Achse (Höhenruder gleicht das aufnickende Moment aus)
 // 2026-10-14 02:30 · core.js 0.12: Lage des Leitwerks (ltw.xTE) und der Tanks/Akkus (xtank) wählbar
 // 2026-10-14 01:30 · core.js 0.11: Längslage der Motorgondeln wählbar (antrieb.xs, antrieb.xm), Größe der Motorgondeln nach Leistung, Gondellage (gx) und Trimm (Schwerpunkt gegen Auftriebsmitte)
@@ -383,10 +384,21 @@
   /* Trimmwiderstand aus der Schublinie (Hinweis des Nutzers, 13.10.2026):
      Motoren unter der Achse (an der Gondel, am Rumpf unten) erzeugen mit dem Schub T ein aufnickendes Moment
      T · z_T. Um waagerecht zu fahren, drückt das Höhenruder dagegen: Kraft am Leitwerk Z_e = T · z_T / l_t.
-       Ruderausschlag δ aus C_L = Z_e / (q · A_h) = a_eff · τ · δ  (τ = 0,45, Ruder etwa ein Drittel der Flossentiefe)
-       Ruderwiderstand  ΔC_D = 0,9 · 0,3 · sin²δ  auf A_h   (Hoerner 1965, Kap. 13, einfache Klappe c_R/c ≈ 0,3)
+       Ruderausschlag δ aus C_L = Z_e / (q · A_h) = a_eff · τ · δ  (τ aus der Rudergröße, siehe ruder())
+       Ruderwiderstand  ΔC_D aus ruder() auf A_h   (Hoerner 1965, Kap. 13)
        induzierter Widerstand  Z_e² / (q · π · e · b_h²),  e = 0,8, b_h = Spannweite des Höhenleitwerks samt Rumpf
      Ohne Höhenleitwerk (1 oder 2 senkrechte Flossen) bleibt nur Neigen: dann kein Ruderwiderstand (Schiff fährt schräg). */
+  /* RUDER (Vorgabe des Nutzers, 14.10.2026): Klappenruder als Anteil E der Flossenfläche (Standard 30 %) oder
+     Pendelleitwerk (die ganze Flosse dreht). Ruderwirkung τ = Anstellwinkel-Gegenwert je Grad Ausschlag:
+       Klappe  τ ≈ 1,03 · E^0,52 (Näherung der üblichen Kurve, z. B. Raymer Abb. 16.7: E 0,1 → 0,31; 0,3 → 0,55; 0,5 → 0,72)
+       Pendel  τ = 1
+     Größter Ausschlag: Klappe 25°, Pendel 15° (darüber reißt die Strömung ab).
+     Ruderwiderstand: Klappe ΔC_D = 0,9 · E · sin²δ (Hoerner Kap. 13), Pendel ΔC_D = 0,1 · sin²δ (nur Profil).     */
+  function ruder(ltw) {
+    if (ltw && ltw.pendel) return { E: 1, tau: 1, dmax: 15 * Math.PI / 180, kd: 0.1, pendel: true };
+    const E = Math.min(0.6, Math.max(0.05, (ltw && ltw.ruder) || 0.3));
+    return { E, tau: Math.min(1, 1.03 * Math.pow(E, 0.52)), dmax: 25 * Math.PI / 180, kd: 0.9 * E, pendel: false };
+  }
   function schubHebel(d, geo) {
     const a = d.antrieb;
     if (a.lage === 'H') return 0;
@@ -396,9 +408,9 @@
   function trimDrag(d, geo, tl, v, rho, T) {
     if (!tl.elevator || T <= 0 || v <= 0.1) return { D: 0, Ze: 0, delta: 0 };
     const q = 0.5 * rho * v * v, Ah = tl.Aplane, Ze = T * schubHebel(d, geo) / Math.max(tl.lt, 0.1);
-    const CL = Ze / (q * Ah), delta = Math.min(Math.abs(CL) / (tl.aeff * 0.45), 0.44);          // höchstens 25° Ruder
+    const ru = ruder(d.ltw), CL = Ze / (q * Ah), delta = Math.min(Math.abs(CL) / (tl.aeff * ru.tau), ru.dmax);
     const bh = 2 * tl.b + 0.3 * geo.D;
-    const D = q * Ah * 0.27 * Math.pow(Math.sin(delta), 2) + Ze * Ze / (q * Math.PI * 0.8 * bh * bh);
+    const D = q * Ah * ru.kd * Math.pow(Math.sin(delta), 2) + Ze * Ze / (q * Math.PI * 0.8 * bh * bh);
     return { D, Ze, delta };
   }
   function powerAt(d, geo, tl, v, h) {
@@ -471,6 +483,15 @@
     antrieb: { art: 'E', n: 2, kW: 10, lage: 'G', mg: 'V', eta: 0.7, kWh: 30, whkg: 180, kraftstoff: 0, sfc: 0.30, kgkW: null },
     v_reise: 40, ballast: 50, schlepptau: 0, anbauten: 0,
   };
+  /* SPEICHER-CODE, ZUKUNFTSSICHER (Vorgabe des Nutzers, 14.10.2026)
+     – Jeder Code beginnt mit seiner Version (LS1). Ein LS1-Code wird immer mit den hier eingefrorenen
+       Grundwerten gelesen, auch wenn sich DEFAULTS später ändern: fehlende Angaben bleiben so, wie sie
+       beim Speichern gemeint waren.
+     – Unbekannte Schlüssel werden übersprungen (Codes aus späteren Versionen lassen sich trotzdem öffnen).
+     – Neue Angaben bekommen neue Schlüssel; ihr Grundwert muss das bisherige Verhalten ergeben.
+     – Der Code darf in Text eingebettet sein (Datei, Nachricht): gelesen wird ab „LS1|“ bis zum Zeilenende.   */
+  const DEF_LS1 = JSON.parse(JSON.stringify(DEFAULTS));
+
 
   /* TRIMM (Längsgleichgewicht im Stand)
      Jede Masse bekommt eine Lage x (Anteil der Länge ab Bug) und eine Höhe z (m, Achse = 0, nach unten negativ).
@@ -733,7 +754,7 @@
       ['Seile', r.gondel.ropes ? r.gondel.ropes.n + ' · 1,2 · Ø ' + nn(r.gondel.ropes.dmm) + ' mm · ' + nn(r.gondel.ropes.len) + ' m (Ø aus 2-facher Last ' + m(d._hang) + ' bei 60 N/mm²) / V^(2/3)' : 'keine außen (Gondel an der Hülle)', n(dr.seile, 4)],
       ['Zusatzfläche', nn(d.anbauten || 0) + ' m² / V^(2/3)', n(dr.extra, 4)],
       ['Summe', 'C_D bezogen auf V^(2/3)', n(dr.total, 4)],
-      ['Trimmwiderstand (Schublinie)', 'Schub ' + nn(r.trimV.D0 / 1000) + ' kN · ' + nn(r.trimV.zT) + ' m unter der Achse / Hebelarm ' + nn(t.lt) + ' m ⇒ Ruderkraft ' + nn(r.trimV.Ze / 1000) + ' kN, Ruder ' + n(r.trimV.delta * 180 / Math.PI, 1) + '°; ΔC_D = 0,27·sin²δ · A_h + Z_e²/(q·π·0,8·b_h²)', '+' + n(r.trimV.D / Math.max(r.trimV.D0, 1e-9) * 100, 1) + ' % Widerstand', 'Hoerner 1965, Kap. 13; Hinweis Nutzer'],
+      ['Trimmwiderstand (Schublinie)', 'Schub ' + nn(r.trimV.D0 / 1000) + ' kN · ' + nn(r.trimV.zT) + ' m unter der Achse / Hebelarm ' + nn(t.lt) + ' m ⇒ Ruderkraft ' + nn(r.trimV.Ze / 1000) + ' kN, Ruder ' + n(r.trimV.delta * 180 / Math.PI, 1) + '° (' + (ruder(d.ltw).pendel ? 'Pendelleitwerk, τ = 1' : 'Ruder ' + n(ruder(d.ltw).E * 100) + ' % der Flossenfläche, τ = ' + n(ruder(d.ltw).tau, 2)) + '); ΔC_D = ' + n(ruder(d.ltw).kd, 2) + '·sin²δ · A_h + Z_e²/(q·π·0,8·b_h²)', '+' + n(r.trimV.D / Math.max(r.trimV.D0, 1e-9) * 100, 1) + ' % Widerstand', 'Hoerner 1965, Kap. 13; Hinweis Nutzer'],
     ] });
     const Pin = a.n * a.kW * 1000;
     S.push({ titel: '6 Leistung und Geschwindigkeit', zeilen: [
@@ -802,13 +823,14 @@
   function encode(d) {
     const f = d.form, a = d.antrieb, p = [];
     const num = x => String(+(+x).toFixed(3)).replace(/^0\./, '.');
-    p.push('LS1', 'N:' + (d.name || '').replace(/[|:]/g, ' '), 'B:' + d.bauweise, 'G:' + d.gas, 'R:' + num(d.reinheit), 'V:' + num(d.V));
+    const txt = t => String(t || '').replace(/[|\r\n]/g, ' ').trim();
+    p.push('LS1', 'N:' + txt(d.name), 'B:' + d.bauweise, 'G:' + d.gas, 'R:' + num(d.reinheit), 'V:' + num(d.V));
     p.push('F:' + [f.LD, f.m, f.Cp, f.r0, f.r1].map(num).join(','));
     p.push('H:' + num(d.huelle_gm2));
     if (d.bauweise === 'S') p.push('Z:' + num(d.zellen_gm2), 'W:' + num(d.werkstoff));
     if (d.bauweise !== 'O') p.push('HP:' + num(d.prallhoehe));          // Prallhöhe für Starr, Prall und Halbstarr
     if (d.bauweise === 'P' || d.bauweise === 'H') p.push('BO:' + num(d.ballonet));
-    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : '', d.ltw.gm2 ? num(d.ltw.gm2) : '', d.ltw.xTE != null ? num(d.ltw.xTE) : ''].join(',').replace(/,+$/, ''));
+    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : '', d.ltw.gm2 ? num(d.ltw.gm2) : '', d.ltw.xTE != null ? num(d.ltw.xTE) : '', d.ltw.ruder != null ? num(d.ltw.ruder) : '', d.ltw.pendel ? 'P' : ''].join(',').replace(/,+$/, ''));
     p.push(('K:' + [d.gondel, d.gform || '', d.gabstand != null ? num(d.gabstand) : '', d.gseile || '', d.gx != null ? num(d.gx) : ''].join(',')).replace(/,+$/, ''), 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
     // Antrieb: Art, Zahl, kW je Motor, Lage, η, Energie (kWh, Wh/kg bzw. kg Kraftstoff, sfc), Motorgondeln, kg/kW
@@ -821,19 +843,24 @@
     if (d.schlepptau) p.push('ST:' + num(d.schlepptau));
     if (d.gasanteil) p.push('GA:' + num(d.gasanteil));
     if (d.xtank != null) p.push('XT:' + num(d.xtank));                  // Lage der Tanks/Akkus
+    if (d.erbauer) p.push('U:' + txt(d.erbauer));                       // Erbauer
     if (d.m_person && d.m_person !== 80) p.push('MP:' + num(d.m_person));
     if (d.gl || d.gb || d.gh) p.push('GD:' + [d.gl ? num(d.gl) : '', d.gb ? num(d.gb) : '', d.gh ? num(d.gh) : ''].join(','));
     return p.join('|').replace(/,+(?=\||$)/g, '');
   }
   function decode(s) {
-    const parts = String(s).trim().split('|');
-    if (parts[0] !== 'LS1') throw new Error('Unbekannter Speicher-Code (erwartet LS1)');
-    const d = JSON.parse(JSON.stringify(DEFAULTS));
+    // Code aus beliebigem Text herauslösen: ab „LS<Zahl>|“ bis zum Zeilenende; Leerraum um die Trenner entfernen
+    const m = String(s).match(/LS(\d+)\s*\|[^\r\n]*/);
+    if (!m) throw new Error('Kein Speicher-Code gefunden (er beginnt mit LS1|)');
+    if (m[1] !== '1') throw new Error('Speicher-Code Version LS' + m[1] + ' ist neuer als diese App – bitte die App aktualisieren');
+    const parts = m[0].trim().split(/\s*\|\s*/);
+    const d = JSON.parse(JSON.stringify(DEF_LS1));
     for (const part of parts.slice(1)) {
       const i = part.indexOf(':'); if (i < 0) continue;
       const k = part.slice(0, i), v = part.slice(i + 1), n = v.split(',');
       switch (k) {
         case 'N': d.name = v; break;
+        case 'U': d.erbauer = v; break;                               // Name des Erbauers (unterscheidet gleiche Schiffe)
         case 'B': d.bauweise = v; break;
         case 'G': d.gas = v; break;
         case 'R': d.reinheit = +v; break;
@@ -844,7 +871,7 @@
         case 'W': d.werkstoff = +v; break;
         case 'HP': d.prallhoehe = +v; break;
         case 'BO': d.ballonet = +v; break;
-        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; if (n[7]) d.ltw.gm2 = +n[7]; if (n[8]) d.ltw.xTE = +n[8]; break;
+        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; if (n[7]) d.ltw.gm2 = +n[7]; if (n[8]) d.ltw.xTE = +n[8]; if (n[9]) d.ltw.ruder = +n[9]; if (n[10] === 'P') d.ltw.pendel = true; break;
         case 'K': d.gondel = n[0]; if (n[1]) d.gform = n[1]; if (n[2] !== undefined && n[2] !== '') d.gabstand = +n[2]; if (n[3]) d.gseile = +n[3]; if (n[4]) d.gx = +n[4]; break;
         case 'C': d.crew = +v; break;
         case 'P': d.pax = +v; break;
@@ -896,7 +923,7 @@
   const LSCore = {
     VERSION: '0.12', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nacelles, nose, noseNeed,
-    dragCoeff, trimDrag, schubHebel, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
+    dragCoeff, trimDrag, schubHebel, ruder, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSCore;
   else root.LSCore = LSCore;

@@ -1,4 +1,5 @@
-<!-- 2026-10-14 06:30 · Build 2026-10-14.3: Fliegen: Startdialog (Ort, Wetter), Flugbildschirm mit Karte, Seitenansicht, Bedienung per Touch und Tastatur
+<!-- 2026-10-14 12:00 · Build 2026-10-14.4: Ruder (Größe, Pendelleitwerk), Speicher-Code als Text/Datei, Erbauer, eingetragene Luftschiffe (flotte.txt)
+     2026-10-14 06:30 · Build 2026-10-14.3: Fliegen: Startdialog (Ort, Wetter), Flugbildschirm mit Karte, Seitenansicht, Bedienung per Touch und Tastatur
      2026-10-14 02:30 · Build 2026-10-14.2: Lage des Leitwerks und der Tanks/Akkus wählbar
      2026-10-14 01:30 · Build 2026-10-14.1: eckigere Knöpfe, Gondel nach Seitenriss, Schnittansicht, Lage der Gondel und der Motorgondeln in m ab Bug, Trimm
      2026-10-14 00:30 · ENTWURF: eckigere Knöpfe, Schalter Schnittansicht
@@ -151,7 +152,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-14.3';
+const BUILD = '2026-10-14.4';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -194,16 +195,21 @@ function showAuswahl() {
     const r = C.compute(m.d);
     h += `<button class="card${S.sel === m.id ? ' sel' : ''}" data-id="${m.id}"><canvas width="70" height="30" data-sil="${m.id}"></canvas><div><b>${m.d.name}</b><span>${fv(r.geo.V)} · ${m.d.gas === 'H2' ? 'H₂' : 'He'} · ${m.jahr} · ${de(r.vmax_kmh)} km/h</span></div></button>`;
   }
+  if (FLOTTE.length) {
+    h += `<div class="grp">Eingetragene Luftschiffe</div>`;
+    FLOTTE.forEach((d, i) => { const r = C.compute(d); h += `<button class="card${S.sel === 'f' + i ? ' sel' : ''}" data-id="f${i}"><canvas width="70" height="30" data-sil="f${i}"></canvas><div><b>${escapeHtml(d.name)}</b><span>${d.erbauer ? 'von ' + escapeHtml(d.erbauer) + ' · ' : ''}${fv(r.geo.V)} · ${d.gas === 'H2' ? 'H₂' : 'He'} · ${de(r.vmax_kmh)} km/h</span></div></button>`; });
+  }
   if (mine.length) {
     h += `<div class="grp">Meine Luftschiffe</div>`;
-    mine.forEach((x, i) => { h += `<button class="card${S.sel === 'm' + i ? ' sel' : ''}" data-id="m${i}"><canvas width="70" height="30" data-sil="m${i}"></canvas><div><b>${x.name}</b><span>gespeichert ${x.datum}</span></div></button>`; });
+    mine.forEach((x, i) => { const dd = safeDecode(x.code); h += `<button class="card${S.sel === 'm' + i ? ' sel' : ''}" data-id="m${i}"><canvas width="70" height="30" data-sil="m${i}"></canvas><div><b>${escapeHtml(x.name)}</b><span>${dd && dd.erbauer ? 'von ' + escapeHtml(dd.erbauer) + ' · ' : ''}gespeichert ${x.datum}</span></div></button>`; });
   }
-  h += `<div class="foot">Luftschiff-Simulator · Version 1 (Build ${BUILD}) · Auslegen und Speichern; Fliegen folgt.<br>Rechnung nach Burgess, Airship Design (1927), Rumpfformen nach Gertler (Series 58). Abschätzung, kein Nachweis.</div></div>
+  h += `<div class="foot">Luftschiff-Simulator · Version 1 (Build ${BUILD}) · Auslegen, Speichern und Fliegen.<br>Rechnung nach Burgess, Airship Design (1927), Rumpfformen nach Gertler (Series 58). Abschätzung, kein Nachweis.</div></div>
   <div class="btns"><button class="btn s" id="bCode">Code laden</button><button class="btn s" id="bNeu">Selbst bauen</button><button class="btn p" id="bOpen">Öffnen</button></div>`;
   $('#app').innerHTML = h;
   // Umrisse aus der echten Gertler-Kontur zeichnen
   document.querySelectorAll('canvas[data-sil]').forEach(cv => {
-    const id = cv.dataset.sil, d = id[0] === 'm' && id !== 'luffihopper' && !MODELS.find(m => m.id === id) ? safeDecode(mine[+id.slice(1)].code) : MODELS.find(m => m.id === id).d;
+    const id = cv.dataset.sil, eigen = !MODELS.find(m => m.id === id);
+    const d = !eigen ? MODELS.find(m => m.id === id).d : id[0] === 'f' ? FLOTTE[+id.slice(1)] : safeDecode(mine[+id.slice(1)].code);
     if (d) drawSil(cv, C.compute(d));
   });
   document.querySelectorAll('.card').forEach(b => {
@@ -213,6 +219,11 @@ function showAuswahl() {
   $('#bOpen').onclick = openSel;
   $('#bNeu').onclick = () => startDesign(clone(C.DEFAULTS), 'eigen', true);
   $('#bCode').onclick = codeDialog;
+}
+// Text als Datei herunterladen (Speicher-Code, Fahrtbericht)
+function download(name, text) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 function safeDecode(code) { try { return C.decode(code); } catch (e) { return null; } }
 function drawSil(cv, r) {
@@ -224,6 +235,7 @@ function drawSil(cv, r) {
   g.fillStyle = '#6b5a46'; if (d.gondel !== 'I' && d.gondel !== 'N') g.fillRect(4 + W * .33, y0 + Rr + (d.gondel === 'K' ? 2 : -1), W * .15, 3);
 }
 function openSel() {
+  if (S.sel[0] === 'f' && !MODELS.find(m => m.id === S.sel)) { const d = FLOTTE[+S.sel.slice(1)]; if (d) startDesign(clone(d), 'eigen'); return; }
   if (S.sel[0] === 'm' && !MODELS.find(m => m.id === S.sel)) {
     const x = loadMine()[+S.sel.slice(1)], d = x && safeDecode(x.code);
     if (d) startDesign(d, 'eigen'); else toast('Gespeicherter Code ist ungültig');
@@ -257,6 +269,9 @@ const STEPS = [
       { typ: 'num', key: 'ltw.lam', label: 'Zuspitzung λ = Endtiefe / Wurzeltiefe', min: 0.2, max: 1, step: 0.05, k: 2, vorschlag: () => C.LTW_ANNAHMEN.lam, def: () => C.LTW_ANNAHMEN.lam },
       { typ: 'num', key: 'ltw.gm2', label: 'Flächengewicht Leitwerk (Gerüst, Bespannung, Ruder je m² Flossenfläche)', unit: 'g/m²', min: 20, max: 5000, log: true, k: 0, def: () => S.r.ltw_gm2_calc, vorschlag: (d, r) => r.ltw_gm2_calc },
       { typ: 'num', key: 'ltw.xTE', label: 'Lage der Flossen-Hinterkante', lfrac: true, min: 0.6, max: 1, step: 0.001, k: 3, def: () => C.LTW_ANNAHMEN.xTE, vorschlag: () => C.LTW_ANNAHMEN.xTE },
+      // Ruder: Klappe (Anteil der Flossenfläche) oder Pendelleitwerk (ganze Flosse dreht)
+      { typ: 'seg', key: '_ruder', label: 'Ruder', opts: [['K', 'Ruderklappe'], ['P', 'Pendelleitwerk']] },
+      { typ: 'num', key: 'ltw.ruder', label: 'Rudergröße (Anteil der Flossenfläche)', min: 0.1, max: 0.6, step: 0.01, k: 0, pct: true, when: d => !d.ltw.pendel, def: () => 0.3, vorschlag: () => 0.3 },
       { typ: 'num', key: 'ltw.sweep', label: 'Pfeilung der Vorderkante', unit: '°', min: 0, max: 75, step: 1, k: 0, vorschlag: () => C.LTW_ANNAHMEN.sweep, def: () => C.LTW_ANNAHMEN.sweep },
     ], text: (d, r) => { const t = r.tail; return `<b>Vorschlag nach Jones</b> (Burgess S. 103): ${de(t.A_jones, 1)} m² je Ebene bei Hebelarm ${de(t.lt, 1)} m (Auftriebsschwerpunkt → Neutralpunkt der Flossen), k₂−k₁ = ${de(t.dk, 3)} aus L/D ${de(r.geo.L / r.geo.D, 2)} und Auftriebsanstieg ${de(t.a, 2)}/rad (Λ, Pfeilung). Statisch neutral wären ${de(t.A_static, 1)} m², Burgess-Faustwert ${de(t.A_burgess, 1)} m².<br>` +
       (d.ltw.A_ebene ? `Dieses Modell hat die bekannte Fläche ${de(t.Aplane, 1)} m² je Ebene (Quelle im Modell). Der Regler „Größe“ ersetzt sie.` : `Gewählt: ${de(t.Aplane, 1)} m² je Ebene, ${t.n} Flossen à ${de(t.Afin, 1)} m², Masse ${fm(r.leer.leitwerk)}.`) +
@@ -371,7 +386,7 @@ function renderBody() {
     if (f.label && f.typ !== 'num') h += `<div class="lab">${f.label}</div>`;   // Zahlenfelder: Überschrift steht in der Wertzeile
     if (f.typ === 'seg' || f.typ === 'chips') {
       const opts = typeof f.opts === 'function' ? f.opts(d) : f.opts;
-      const cur = f.key === '_form' ? formKey(d.form) : f.key === '_mpaar' ? (C.nacelles(d.antrieb).mitte === 2 ? '1' : '0') : f.key === 'antrieb.ungerade' ? (d.antrieb.ungerade || 'U') : getByPath(d, f.key);
+      const cur = f.key === '_form' ? formKey(d.form) : f.key === '_mpaar' ? (C.nacelles(d.antrieb).mitte === 2 ? '1' : '0') : f.key === 'antrieb.ungerade' ? (d.antrieb.ungerade || 'U') : f.key === '_ruder' ? (d.ltw.pendel ? 'P' : 'K') : getByPath(d, f.key);
       h += `<div class="${f.typ === 'seg' ? 'seg' : 'chips'}">` + opts.map(([v, t, dis]) => `<button data-f="${i}" data-v="${v}"${(f.typ === 'seg' && String(cur) === String(v)) ? ' class="on"' : ''}${dis ? ' disabled title="folgt"' : ''}>${t}</button>`).join('') + '</div>';
     } else if (f.typ === 'num') {
       const v = getByPath(d, f.key) ?? (f.def ? f.def() : 0), sv = f.vorschlag ? f.vorschlag(d, r) : null;
@@ -394,6 +409,7 @@ function renderBody() {
     const f = st.fields[+b.dataset.f]; let v = b.dataset.v;
     if (f.key === '_form') { if (v !== 'eigen') Object.assign(d.form, clone(C.FORMS[v]), { name: undefined }); change(); return; }
     // Sonderfall Motorpaar in der Mittelgondel: gespeichert als Zahl der Gondeln = Motoren − 1
+    if (f.key === '_ruder') { if (v === 'P') d.ltw.pendel = true; else delete d.ltw.pendel; change(); return; }
     if (f.key === '_mpaar') { if (v === '1') d.antrieb.gondeln = d.antrieb.n - 1; else delete d.antrieb.gondeln; change(); return; }
     if (f.num || f.typ === 'chips') v = +v;
     setByPath(d, f.key, v);
@@ -521,6 +537,7 @@ function showErgebnis() {
       <div class="rw">${C.rechenweg(r).map(sec => `<details><summary>${sec.titel}</summary>${sec.zeilen.map(z => `<div class="rz"><b>${z[0]}</b><span>${escapeHtml(z[1])}</span><em>${z[2]}</em>${z[3] ? `<i class="q">Quelle: ${escapeHtml(z[3])}</i>` : ''}</div>`).join('')}</details>`).join('')}</div>
       <div class="sec">Speicher-Code</div>
       <div class="code" id="code">${escapeHtml(code)}</div>
+      <button class="btn s" id="bTxt" style="margin:0 14px;width:calc(100% - 28px)">Als Textdatei (.txt) herunterladen</button>
       <div class="foot">Abschätzung nach Burgess (1927) und Gertler (Series 58), kein Festigkeits- oder Zulassungsnachweis.</div>
     </div>
     <div class="btns"><button class="btn s" id="bCopy">Kopieren</button><button class="btn s" id="bSave">Speichern</button><button class="btn s" id="bShare">Teilen</button><button class="btn p" id="bFly">Fliegen</button></div>`;
@@ -530,6 +547,8 @@ function showErgebnis() {
   $('#bCopy').onclick = () => copy(code);
   $('#bShare').onclick = () => { if (navigator.share) navigator.share({ title: d.name, text: code }).catch(() => {}); else copy(code); };
   $('#bSave').onclick = saveDialog;
+  $('#bTxt').onclick = () => download((d.name || 'Luftschiff').replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim() + '.txt',
+    d.name + (d.erbauer ? ' (Erbauer: ' + d.erbauer + ')' : '') + '\nLuftschiff-Simulator, Build ' + BUILD + ', ' + new Date().toLocaleDateString('de-DE') + '\n\n' + code + '\n');
   document.querySelectorAll('button[data-vs]').forEach(b => b.onclick = () => { Object.assign(S.d, clone(S.r.vorschlaege[+b.dataset.vs].set)); recompute(); showErgebnis(); toast('Übernommen'); });
   mountView($('#view'));
   renderKpis(true);
@@ -537,9 +556,13 @@ function showErgebnis() {
 function copy(t) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Code kopiert'), () => toast('Kopieren nicht möglich – Code markieren')); }
 
 /* ---------------- 6. Speichern und Laden ---------------- */
+function erbauerGespeichert() { try { return localStorage.getItem('ls_erbauer') || ''; } catch (e) { return ''; } }
 function saveDialog() {
-  modal(`<b>Unter welchem Namen speichern?</b><input id="mName" style="font:inherit;padding:8px;border:1px solid var(--line);border-radius:10px" value="${escapeHtml(S.d.name)}">`, () => {
+  const fld = 'font:inherit;padding:8px;border:1px solid var(--line);border-radius:5px';
+  modal(`<b>Unter welchem Namen speichern?</b><input id="mName" style="${fld}" value="${escapeHtml(S.d.name)}">
+    <span class="desc">Erbauer (dein Name; unterscheidet gleiche Schiffe verschiedener Erbauer)</span><input id="mUser" style="${fld}" value="${escapeHtml(S.d.erbauer || erbauerGespeichert())}">`, () => {
     const name = $('#mName').value.trim() || 'Ohne Namen'; S.d.name = name;
+    const user = $('#mUser').value.trim(); if (user) { S.d.erbauer = user; try { localStorage.setItem('ls_erbauer', user); } catch (e) {} } else delete S.d.erbauer;
     const list = loadMine().filter(x => x.name !== name);
     list.unshift({ name, code: C.encode(S.d), datum: new Date().toLocaleDateString('de-DE') });
     toast(saveMine(list) ? 'Gespeichert unter „Meine Luftschiffe“' : 'Speichern auf diesem Gerät nicht möglich');
@@ -547,9 +570,11 @@ function saveDialog() {
   });
 }
 function codeDialog() {
-  modal(`<b>Speicher-Code einfügen</b><textarea id="mCode" placeholder="LS1|N:…"></textarea>`, () => {
+  modal(`<b>Speicher-Code einfügen</b><textarea id="mCode" placeholder="LS1|N:…  (auch ganzer Text, der Code wird herausgesucht)"></textarea>
+    <label class="btn s" style="text-align:center;cursor:pointer">Textdatei (.txt) öffnen<input type="file" id="mFile" accept=".txt,text/plain" style="display:none"></label>`, () => {
     try { startDesign(C.decode($('#mCode').value), 'eigen'); } catch (e) { toast('Code nicht lesbar: ' + e.message); }
   });
+  $('#mFile').onchange = e => { const f = e.target.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { $('#mCode').value = rd.result; }; rd.readAsText(f); };
 }
 function modal(inner, ok) {
   const m = document.createElement('div'); m.className = 'modal';
@@ -583,6 +608,14 @@ function wireRot() {
   c.onclick = () => { S.schnitt = !S.schnitt; showC(); };
   showC();
 }
+
+/* ---------------- Eingetragene Luftschiffe (flotte.txt, vom Admin gepflegt) ----------------
+   Je Zeile ein Speicher-Code; # = Kommentar. Unlesbare Zeilen werden übersprungen. */
+let FLOTTE = [];
+fetch('flotte.txt', { cache: 'no-cache' }).then(r => r.ok ? r.text() : '').then(t => {
+  FLOTTE = t.split(/\r?\n/).map(z => z.trim()).filter(z => z && z[0] !== '#').map(safeDecode).filter(Boolean);
+  if (FLOTTE.length && S.screen === 'auswahl') showAuswahl();
+}).catch(() => {});
 
 /* ---------------- 7. Start ---------------- */
 showAuswahl();

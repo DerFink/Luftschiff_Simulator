@@ -52,3 +52,9 @@ for (const id of ['lz120', 'nt07', 'c7']) {
 }
 for (const o of out) console.log(o.map(f).join(' | '));
 require('fs').writeFileSync(__dirname + '/pruef04.json', JSON.stringify(out, null, 1));
+
+// ---- Kurs halten = Kurs über Grund: 10 m/s Seitenwind aus West, Kurs Nord (0°), 30 min ----
+{ const r = get('lz120'), Fl = luft(r, 500, r.v_reise_kmh / 3.6); Fl.s.ap.fahrt = r.v_reise_kmh / 3.6; Fl.s.ap.hoehe = 500; Fl.s.ap.kurs = 0;
+  F.lauf(Fl, 1800, () => ({ e: 10, n: 0 }));
+  const kog = Math.atan2(Fl.s.U * Math.sin(Fl.s.psi) + 10, Fl.s.U * Math.cos(Fl.s.psi)) * 180 / Math.PI;
+  console.log(['LZ 120', 'Kurs halten 000° bei 10 m/s Seitenwind: Kurs über Grund (°)', 0, kog.toFixed(1), '°', 'Bug ' + (Fl.s.psi * 180 / Math.PI - 360).toFixed(1) + '°, Versatz nach Ost ' + Math.round(Fl.s.x) + ' m auf ' + Math.round(Fl.s.y / 1000) + ' km'].join(' | ')); }

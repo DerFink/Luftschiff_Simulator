@@ -1,3 +1,4 @@
+# 2026-10-14 12:45 · ablauf02.py: Boost, Tasten-Rückmeldung am Knüppel, Speichern/Fortsetzen, Landung mit Bericht
 # 2026-10-14 06:30 · ablauf02.py: Fahrt im Browser – Startdialog, Flugbildschirm (Handy und Computer), Tastatur, Wetter (nachgebildete Open-Meteo-Antworten)
 # Aufruf: python3 -m http.server 8765 im Repository starten, dann  python3 werkstatt/tests/ablauf02.py <Ausgabeordner>
 # Kartenkacheln werden durch einfarbige Kacheln ersetzt, Open-Meteo durch nachgebildete Antworten (Wind aus WSW, 8 m/s in 500 m).
@@ -57,6 +58,29 @@ with sync_playwright() as p:
         st = pg.evaluate("() => { const r = document.querySelector('#fInst').innerText; return r.replace(/\\n/g, ' | '); }")
         print(name, 'Anzeigen:', st[:400])
         pg.keyboard.press('v'); shot('33_seitenansicht_%s.png' % name)
+        # Tasten-Rückmeldung: ↑ gedrückt halten ⇒ Knüppel oben (sinken)
+        pg.keyboard.down('ArrowUp'); pg.wait_for_timeout(300)
+        print(name, 'Knüppel bei ↑:', pg.eval_on_selector('#fJoy .stick', 'e => e.style.transform')); pg.keyboard.up('ArrowUp')
+        # Boost: 3 s ⇒ etwa 24 h
+        u0 = pg.inner_text('#fUhr'); pg.keyboard.press('8'); pg.wait_for_timeout(3000); pg.keyboard.press('3'); u1 = pg.inner_text('#fUhr')
+        print(name, 'Boost: Uhr', u0, '→', u1, '| Anzeigen:', pg.inner_text('#fInst').replace('\n', ' | ')[:200])
+        shot('34_boost_%s.png' % name)
+        # Verlassen speichert, Fliegen bietet Fortsetzen an
+        if pg.locator('#eOk').count(): print(name, 'Landung während Boost (Abfrage erscheint)'); pg.click('#eOk')
+        pg.click('#fBack'); pg.wait_for_timeout(500); pg.click('#bFly'); pg.wait_for_timeout(500)
+        print(name, 'Fortsetzen angeboten:', pg.locator('#bWeiter').count() == 1)
+        pg.click('#bWeiter'); pg.wait_for_selector('#fInst div', timeout=10000); pg.wait_for_timeout(800)
+        # Landen: Assistenten aus, Schub aus, Gas ablassen bis zum Boden, dann Fahrt beenden mit Bericht
+        pg.evaluate("() => { document.querySelectorAll('#fApRow button.on').forEach(b => { if (b.dataset.a !== 'hs') b.click(); }); }")
+        for i in range(6): pg.keyboard.press('b')                # wieder leicht machen und abheben
+        pg.keyboard.press('5'); pg.wait_for_timeout(3000)
+        pg.keyboard.press('x'); pg.keyboard.down('g')
+        try: pg.wait_for_selector('#eEnde', timeout=60000)
+        except Exception: pass
+        pg.keyboard.up('g')
+        shot('35_landung_%s.png' % name)
+        if pg.locator('#eEnde').count():
+            pg.click('#eEnde'); shot('36_bericht_%s.png' % name); print(name, 'Bericht:', pg.inner_text('.ende pre')[:300].replace('\n', ' / '))
         ctx.close()
     print('Fehler:', errs)
     b.close()

@@ -1,0 +1,5 @@
+# Eingetragene Luftschiffe (Flotte) – erscheinen in der Auswahl unter „Eingetragene Luftschiffe“
+# Pflege durch den Admin: je Zeile ein Speicher-Code (beginnt mit LS1|). Zeilen mit # sind Kommentare.
+# Der Erbauer steht im Code als U:Name (beim Speichern in der App eintragen), so lassen sich gleiche Schiffe
+# verschiedener Erbauer unterscheiden. Codes bleiben in allen künftigen Versionen lesbar (siehe core.js, decode).
+# Bearbeiten: auf GitHub diese Datei öffnen (app/flotte.txt), Stift-Symbol, Code als neue Zeile einfügen, speichern.

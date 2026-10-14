@@ -1,3 +1,4 @@
+// 2026-10-14 11:30 · flug.js 0.5: Ruder nach Größe bzw. Pendelleitwerk (τ, Ausschlag, Widerstand), Kurs halten = Kurs über Grund mit Vorhaltewinkel, Wenderadius nach Ruderwirkung
 // 2026-10-14 06:45 · flug.js 0.4: Landung erst nach dem Abheben (nicht schon beim Loslassen am Boden)
 // 2026-10-14 05:00 · flug.js 0.3: Höhenruder ±25°, Ruder- und induzierter Widerstand, Schublinie aus dem Rechenkern
 // 2026-10-14 04:10 · flug.js 0.2: Hülle als Streifenrechnung (Potential bis zur Ablösung + Querströmung, nach Jones & DeLaurier) statt festem Munk-Moment
@@ -65,10 +66,13 @@
       st.push({ x: xf * L, r: r0, dA, dx: L / NS });
       if (dA < dAmin) { dAmin = dA; x0 = xf * L; }
     }
-    // Wenderadius bei vollem Seitenruder: Erfahrungswert 3,5 L, größer bei kleinem Seitenleitwerk
-    const Rturn = 3.5 * L * Math.sqrt(clamp(tl.A_jones / Math.max(Av, 1e-6), 0.5, 4));
+    // Ruder aus der Auslegung: Wirkung τ, größter Ausschlag, Widerstandsbeiwert (LSCore.ruder)
+    const ru = C.ruder(d.ltw);
+    // Wenderadius bei vollem Seitenruder: Erfahrungswert 3,5 L bei Flossen nach Jones und Ruder 30 % (τ 0,55, 25°);
+    // größer bei kleinem Seitenleitwerk oder schwächerem Ruder (Wendemoment ~ τ · größter Ausschlag)
+    const Rturn = 3.5 * L * Math.sqrt(clamp(tl.A_jones / Math.max(Av, 1e-6), 0.5, 4)) * Math.sqrt(clamp(0.55 * 0.436 / (ru.tau * ru.dmax), 0.3, 5));
     return {
-      d, L, D, Vol, Vs, R: geo.R, st, x0, bh: 2 * tl.b + 0.3 * geo.D, xB: geo.xB * L, vTab, cdTab, Ah, Av, aeff: tl.aeff, lt: tl.lt, k1: tl.k1, k2: tl.k2, Cdc, Aseit, Aprop, zT, Rturn,
+      d, ru, L, D, Vol, Vs, R: geo.R, st, x0, bh: 2 * tl.b + 0.3 * geo.D, xB: geo.xB * L, vTab, cdTab, Ah, Av, aeff: tl.aeff, lt: tl.lt, k1: tl.k1, k2: tl.k2, Cdc, Aseit, Aprop, zT, Rturn,
       P: a.n * a.kW * 1000, eta: a.eta || 0.7, verbrenner: a.art === 'V', sfc: a.sfc || 0.3, solarW: r.propulsion.solarW || 0,
       mLeer: r.mLeer, mPers: z.personen + z.nutzlast + z.schlepptau, ballast0: z.ballast, energie0: r.propulsion.mEnergie, E0: r.propulsion.E_J,
       Vgas: r.Vgas, lpm0: r.lpm, dx: r.trim.dx, BG: r.trim.BG, vmax: r.vmax,
@@ -154,12 +158,12 @@
     let X = T - 0.5 * rho * K.Vs * cd * va * Math.abs(va);                         // längs
     // Flossen: Anstellwinkel am Leitwerk −vnt/va; Höhenruder: + = Kraft nach oben am Heck ⇒ Bug tief,
     // Ruderwirkung 45 % der Flossenwirkung je Einheit Ausschlag (Ruder etwa ein Drittel der Flossentiefe)
-    // Ausschlag: hr = ±1 entspricht ±25° (0,44 rad); Ruderwirkung τ = 0,45 (Ruder etwa ein Drittel der Flossentiefe)
-    const dRud = s.hr * 0.44;
-    const Zf = -0.5 * rho * K.aeff * K.Ah * va * vnt + 0.5 * rho * K.aeff * K.Ah * 0.45 * dRud * va * Math.abs(va);
+    // Ausschlag: hr = ±1 entspricht dem größten Ausschlag (Klappe 25°, Pendel 15°); Ruderwirkung τ aus der Rudergröße
+    const dRud = s.hr * K.ru.dmax;
+    const Zf = -0.5 * rho * K.aeff * K.Ah * va * vnt + 0.5 * rho * K.aeff * K.Ah * K.ru.tau * dRud * va * Math.abs(va);
     // Widerstand durch Ruderausschlag (Hoerner, einfache Klappe) und induzierter Widerstand der Flossenkraft
     const qa = 0.5 * rho * va * va;
-    const Drud = K.Ah > 0 ? qa * K.Ah * 0.27 * Math.sin(dRud) ** 2 + (qa > 1 ? Zf * Zf / (qa * Math.PI * 0.8 * K.bh * K.bh) : 0) : 0;
+    const Drud = K.Ah > 0 ? qa * K.Ah * K.ru.kd * Math.sin(dRud) ** 2 + (qa > 1 ? Zf * Zf / (qa * Math.PI * 0.8 * K.bh * K.bh) : 0) : 0;
     // Hülle in Streifen: Normalkraft und Moment um die Auftriebsmitte
     let Zh = 0, Mh = 0;
     for (const e of K.st) {
@@ -227,23 +231,35 @@
     //   weit weg (über 3 Wenderadien): direkt hinfahren, Fahrt über Grund zum Ziel;
     //   nah dran: Bug in den Wind, Fahrt = Windgeschwindigkeit ± Abstand in Windrichtung, kleine Kurskorrektur
     //   für den seitlichen Versatz (große Schiffe können nicht auf der Stelle kreisen).
+    let psiSoll = null;                                           // Sollrichtung des Bugs für das Seitenruder
     if (ap.pos) {
       const ex = ap.pos.x - s.x, ny = ap.pos.y - s.y, dist = Math.hypot(ex, ny), W = Math.hypot(wind.e, wind.n);
       if (dist > 3 * K.Rturn || W < 0.5) {
         const vZiel = Math.min(0.03 * dist, 0.5 * K.vmax);        // langsam annähern
         const ge = dist > 0.1 ? ex / dist * vZiel : 0, gn = dist > 0.1 ? ny / dist * vZiel : 0;
         const le = ge - wind.e, ln = gn - wind.n;                 // nötige Fahrt durch die Luft
-        if (Math.hypot(le, ln) > 0.3) ap.kurs = Math.atan2(le, ln);
+        psiSoll = Math.hypot(le, ln) > 0.3 ? Math.atan2(le, ln) : s.psi;
         ap.fahrt = Math.hypot(le, ln);
       } else {
         const pw = Math.atan2(-wind.e, -wind.n);                  // Kurs gegen den Wind
         const fe = Math.sin(pw), fn = Math.cos(pw);               // Einheitsvektor nach vorn (gegen den Wind)
         const vor = ex * fe + ny * fn, quer = ex * fn - ny * fe;  // Ziel vor uns (+) und rechts von uns (+)
-        ap.kurs = pw + clamp(0.004 * quer, -0.5, 0.5);
+        psiSoll = pw + clamp(0.004 * quer, -0.5, 0.5);
         ap.fahrt = clamp(W + 0.01 * vor, 0, K.vmax);
       }
+    } else if (ap.kurs != null) {
+      // Kurs halten = Kurs über Grund (Vorgabe des Nutzers): Bug um den Vorhaltewinkel in den Seitenwind drehen,
+      // damit die Bewegung über Grund in der gewünschten Richtung bleibt.  sin(Vorhalt) = −Seitenwind / Fahrt
+      const ce = Math.cos(ap.kurs), cn = -Math.sin(ap.kurs);      // Einheitsvektor rechts vom Kurs (Ost, Nord)
+      const quer = wind.e * ce + wind.n * cn;                     // Wind nach rechts (+)
+      const U = Math.max(Math.abs(s.U), 0.1);
+      psiSoll = ap.kurs + Math.asin(clamp(-quer / U, -0.95, 0.95));
+      // kleine Nachführung aus dem tatsächlichen Kurs über Grund (Rest-Abdrift, Böen)
+      const ve = s.U * Math.sin(s.psi) + wind.e, vn2 = s.U * Math.cos(s.psi) + wind.n;
+      if (Math.hypot(ve, vn2) > 1) psiSoll += clamp(0.5 * wrapPi(ap.kurs - Math.atan2(ve, vn2)), -0.2, 0.2);
     }
-    if (ap.kurs != null) s.sr = clamp(2.5 * wrapPi(ap.kurs - s.psi) - 8 * s.r * K.L / Math.max(K.vmax, 1), -1, 1);
+    ap._psi = psiSoll;
+    if (psiSoll != null) s.sr = clamp(2.5 * wrapPi(psiSoll - s.psi) - 8 * s.r * K.L / Math.max(K.vmax, 1), -1, 1);
     if (ap.fahrt != null) {                                           // Tempomat: PI-Regler auf die Fahrt
       const e = ap.fahrt - s.U; ap._i = clamp((ap._i || 0) + e * dt * 0.02, -1, 1);
       s.schub = clamp(Math.pow(clamp(ap.fahrt / K.vmax, 0, 1), 3) + 0.15 * e + ap._i, 0, 1);

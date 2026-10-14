@@ -1,0 +1,587 @@
+[
+ {
+  "code": "LS1|N:USS Los Angeles (LZ 126)|B:S|G:He|R:.95|V:78155|F:7.236,.42,.651,.5,.1|H:150|Z:170|W:1|HP:1500|T:4,+,1,241.772|K:F,S|C:30|P:0|A:V,5,298,R,.72,15000,.33,,3.5,O|S:100|BL:3000",
+  "entwurf": {
+   "name": "USS Los Angeles (LZ 126)",
+   "bauweise": "S",
+   "gas": "He",
+   "reinheit": 0.95,
+   "V": 78155,
+   "form": {
+    "LD": 7.236,
+    "m": 0.42,
+    "Cp": 0.651,
+    "r0": 0.5,
+    "r1": 0.1
+   },
+   "huelle_gm2": 150,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 1500,
+   "ballonet": 25,
+   "ltw": {
+    "n": 4,
+    "anord": "+",
+    "faktor": 1,
+    "A_ebene": 241.772
+   },
+   "gondel": "F",
+   "crew": 30,
+   "pax": 0,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "V",
+    "n": 5,
+    "kW": 298,
+    "lage": "R",
+    "mg": "O",
+    "eta": 0.72,
+    "kWh": 0,
+    "whkg": 180,
+    "kraftstoff": 15000,
+    "sfc": 0.33,
+    "kgkW": 3.5
+   },
+   "v_reise": 100,
+   "ballast": 3000,
+   "schlepptau": 0,
+   "anbauten": 0,
+   "gform": "S"
+  }
+ },
+ {
+  "code": "LS1|N:LZ 120 „Bodensee“ (1919)|B:S|G:H2|R:.97|V:21534|F:6.447,.433,.644,.793,.024|H:150|Z:170|W:1|HP:500|T:4,+,1,122,1.4,.15,66|K:F,T|C:12|P:20|A:V,4,176,R,.72,2000,.36,3,5,,,.53,.7|S:110|BL:1000|GA:.929|GD:20.7,2.86,2.6",
+  "entwurf": {
+   "name": "LZ 120 „Bodensee“ (1919)",
+   "bauweise": "S",
+   "gas": "H2",
+   "reinheit": 0.97,
+   "V": 21534,
+   "form": {
+    "LD": 6.447,
+    "m": 0.433,
+    "Cp": 0.644,
+    "r0": 0.793,
+    "r1": 0.024
+   },
+   "huelle_gm2": 150,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 500,
+   "ballonet": 25,
+   "ltw": {
+    "n": 4,
+    "anord": "+",
+    "faktor": 1,
+    "A_ebene": 122,
+    "ar": 1.4,
+    "lam": 0.15,
+    "sweep": 66
+   },
+   "gondel": "F",
+   "crew": 12,
+   "pax": 20,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "V",
+    "n": 4,
+    "kW": 176,
+    "lage": "R",
+    "mg": "V",
+    "eta": 0.72,
+    "kWh": 0,
+    "whkg": 180,
+    "kraftstoff": 2000,
+    "sfc": 0.36,
+    "kgkW": 5,
+    "gondeln": 3,
+    "xs": [
+     0.53
+    ],
+    "xm": 0.7
+   },
+   "v_reise": 110,
+   "ballast": 1000,
+   "schlepptau": 0,
+   "anbauten": 0,
+   "gform": "T",
+   "gasanteil": 0.929,
+   "gl": 20.7,
+   "gb": 2.86,
+   "gh": 2.6
+  }
+ },
+ {
+  "code": "LS1|N:LZ 129 „Hindenburg“|B:S|G:H2|R:.97|V:210526.316|F:5.988,.45,.64,.6,.06|H:150|Z:170|W:1|HP:1000|T:4,+,1|K:I|C:55|P:50|A:V,4,883,R,.75,60000,.23,,4,O,,.48;.6|S:125|BL:10000",
+  "entwurf": {
+   "name": "LZ 129 „Hindenburg“",
+   "bauweise": "S",
+   "gas": "H2",
+   "reinheit": 0.97,
+   "V": 210526.316,
+   "form": {
+    "LD": 5.988,
+    "m": 0.45,
+    "Cp": 0.64,
+    "r0": 0.6,
+    "r1": 0.06
+   },
+   "huelle_gm2": 150,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 1000,
+   "ballonet": 25,
+   "ltw": {
+    "n": 4,
+    "anord": "+",
+    "faktor": 1
+   },
+   "gondel": "I",
+   "crew": 55,
+   "pax": 50,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "V",
+    "n": 4,
+    "kW": 883,
+    "lage": "R",
+    "mg": "O",
+    "eta": 0.75,
+    "kWh": 0,
+    "whkg": 180,
+    "kraftstoff": 60000,
+    "sfc": 0.23,
+    "kgkW": 4,
+    "xs": [
+     0.48,
+     0.6
+    ]
+   },
+   "v_reise": 125,
+   "ballast": 10000,
+   "schlepptau": 0,
+   "anbauten": 0
+  }
+ },
+ {
+  "code": "LS1|N:N-1 „Norge“|B:H|G:H2|R:.97|V:19000|F:5.436,.42,.6,.55,.1|H:400|HP:1500|BO:25|T:4,+,1|K:F|C:16|P:0|A:V,3,180,R,.7,5000,.36,,5,O|S:70|BL:1500",
+  "entwurf": {
+   "name": "N-1 „Norge“",
+   "bauweise": "H",
+   "gas": "H2",
+   "reinheit": 0.97,
+   "V": 19000,
+   "form": {
+    "LD": 5.436,
+    "m": 0.42,
+    "Cp": 0.6,
+    "r0": 0.55,
+    "r1": 0.1
+   },
+   "huelle_gm2": 400,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 1500,
+   "ballonet": 25,
+   "ltw": {
+    "n": 4,
+    "anord": "+",
+    "faktor": 1
+   },
+   "gondel": "F",
+   "crew": 16,
+   "pax": 0,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "V",
+    "n": 3,
+    "kW": 180,
+    "lage": "R",
+    "mg": "O",
+    "eta": 0.7,
+    "kWh": 0,
+    "whkg": 180,
+    "kraftstoff": 5000,
+    "sfc": 0.36,
+    "kgkW": 5
+   },
+   "v_reise": 70,
+   "ballast": 1500,
+   "schlepptau": 0,
+   "anbauten": 0
+  }
+ },
+ {
+  "code": "LS1|N:Zeppelin NT 07|B:H|G:He|R:.99|V:8425|F:5.245,.42,.699,.6,.1|H:350|HP:2600|BO:25|T:3,L,1|K:F,S|C:2|P:12|A:V,3,147,R,.7,400,.3,,2.5,,H,.38|S:70|BL:100",
+  "entwurf": {
+   "name": "Zeppelin NT 07",
+   "bauweise": "H",
+   "gas": "He",
+   "reinheit": 0.99,
+   "V": 8425,
+   "form": {
+    "LD": 5.245,
+    "m": 0.42,
+    "Cp": 0.699,
+    "r0": 0.6,
+    "r1": 0.1
+   },
+   "huelle_gm2": 350,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 2600,
+   "ballonet": 25,
+   "ltw": {
+    "n": 3,
+    "anord": "L",
+    "faktor": 1
+   },
+   "gondel": "F",
+   "crew": 2,
+   "pax": 12,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "V",
+    "n": 3,
+    "kW": 147,
+    "lage": "R",
+    "mg": "V",
+    "eta": 0.7,
+    "kWh": 0,
+    "whkg": 180,
+    "kraftstoff": 400,
+    "sfc": 0.3,
+    "kgkW": 2.5,
+    "ungerade": "H",
+    "xs": [
+     0.38
+    ]
+   },
+   "v_reise": 70,
+   "ballast": 100,
+   "schlepptau": 0,
+   "anbauten": 0,
+   "gform": "S"
+  }
+ },
+ {
+  "code": "LS1|N:US Navy C-7|B:P|G:H2|R:.97|V:5125|F:4.669,.42,.666,.5,.1|H:475|HP:1219|BO:25|T:4,+,1,44.592|K:F,E,4,24|C:4|P:0|A:V,2,112,G,.65,800,.365,,3.65,O|S:70|BL:200",
+  "entwurf": {
+   "name": "US Navy C-7",
+   "bauweise": "P",
+   "gas": "H2",
+   "reinheit": 0.97,
+   "V": 5125,
+   "form": {
+    "LD": 4.669,
+    "m": 0.42,
+    "Cp": 0.666,
+    "r0": 0.5,
+    "r1": 0.1
+   },
+   "huelle_gm2": 475,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 1219,
+   "ballonet": 25,
+   "ltw": {
+    "n": 4,
+    "anord": "+",
+    "faktor": 1,
+    "A_ebene": 44.592
+   },
+   "gondel": "F",
+   "crew": 4,
+   "pax": 0,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "V",
+    "n": 2,
+    "kW": 112,
+    "lage": "G",
+    "mg": "O",
+    "eta": 0.65,
+    "kWh": 0,
+    "whkg": 180,
+    "kraftstoff": 800,
+    "sfc": 0.365,
+    "kgkW": 3.65
+   },
+   "v_reise": 70,
+   "ballast": 200,
+   "schlepptau": 0,
+   "anbauten": 0,
+   "gform": "E",
+   "gabstand": 4,
+   "gseile": 24
+  }
+ },
+ {
+  "code": "LS1|N:Skyship 600|B:P|G:He|R:.99|V:7200|F:4.012,.42,.65,.55,.12|H:400|HP:1500|BO:25|T:4,X,1|K:F,E,0|C:2|P:13|A:V,2,188,G,.7,400,.3,,3|S:72|BL:100",
+  "entwurf": {
+   "name": "Skyship 600",
+   "bauweise": "P",
+   "gas": "He",
+   "reinheit": 0.99,
+   "V": 7200,
+   "form": {
+    "LD": 4.012,
+    "m": 0.42,
+    "Cp": 0.65,
+    "r0": 0.55,
+    "r1": 0.12
+   },
+   "huelle_gm2": 400,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 1500,
+   "ballonet": 25,
+   "ltw": {
+    "n": 4,
+    "anord": "X",
+    "faktor": 1
+   },
+   "gondel": "F",
+   "crew": 2,
+   "pax": 13,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "V",
+    "n": 2,
+    "kW": 188,
+    "lage": "G",
+    "mg": "V",
+    "eta": 0.7,
+    "kWh": 0,
+    "whkg": 180,
+    "kraftstoff": 400,
+    "sfc": 0.3,
+    "kgkW": 3
+   },
+   "v_reise": 72,
+   "ballast": 100,
+   "schlepptau": 0,
+   "anbauten": 0,
+   "gform": "E",
+   "gabstand": 0
+  }
+ },
+ {
+  "code": "LS1|N:LuffiHopper|B:O|G:H2|R:.98|V:2000|F:3.5,.43,.6,.5,.2|H:300|T:4,+,1|K:K|C:1|P:1|A:E,2,8,G,.65,40,160|S:30|BL:300",
+  "entwurf": {
+   "name": "LuffiHopper",
+   "bauweise": "O",
+   "gas": "H2",
+   "reinheit": 0.98,
+   "V": 2000,
+   "form": {
+    "LD": 3.5,
+    "m": 0.43,
+    "Cp": 0.6,
+    "r0": 0.5,
+    "r1": 0.2
+   },
+   "huelle_gm2": 300,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 1000,
+   "ballonet": 25,
+   "ltw": {
+    "n": 4,
+    "anord": "+",
+    "faktor": 1
+   },
+   "gondel": "K",
+   "crew": 1,
+   "pax": 1,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "E",
+    "n": 2,
+    "kW": 8,
+    "lage": "G",
+    "mg": "V",
+    "eta": 0.65,
+    "kWh": 40,
+    "whkg": 160,
+    "kraftstoff": 0,
+    "sfc": 0.3,
+    "kgkW": null
+   },
+   "v_reise": 30,
+   "ballast": 300,
+   "schlepptau": 0,
+   "anbauten": 0
+  }
+ },
+ {
+  "code": "LS1|N:RC-Blimp|B:P|G:He|R:.99|V:.5|F:3.2,.43,.66,.6,.15|H:27|HP:0|BO:0|T:4,+,1|K:R|C:0|P:0|A:E,2,.01,G,.5,.011,150,,2|S:5|BL:0|AV:.06",
+  "entwurf": {
+   "name": "RC-Blimp",
+   "bauweise": "P",
+   "gas": "He",
+   "reinheit": 0.99,
+   "V": 0.5,
+   "form": {
+    "LD": 3.2,
+    "m": 0.43,
+    "Cp": 0.66,
+    "r0": 0.6,
+    "r1": 0.15
+   },
+   "huelle_gm2": 27,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 0,
+   "ballonet": 0,
+   "ltw": {
+    "n": 4,
+    "anord": "+",
+    "faktor": 1
+   },
+   "gondel": "R",
+   "crew": 0,
+   "pax": 0,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0.06,
+   "antrieb": {
+    "art": "E",
+    "n": 2,
+    "kW": 0.01,
+    "lage": "G",
+    "mg": "V",
+    "eta": 0.5,
+    "kWh": 0.011,
+    "whkg": 150,
+    "kraftstoff": 0,
+    "sfc": 0.3,
+    "kgkW": 2
+   },
+   "v_reise": 5,
+   "ballast": 0,
+   "schlepptau": 0,
+   "anbauten": 0
+  }
+ },
+ {
+  "code": "LS1|N:Nur Name|V:1000",
+  "entwurf": {
+   "name": "Nur Name",
+   "bauweise": "P",
+   "gas": "He",
+   "reinheit": 0.98,
+   "V": 1000,
+   "form": {
+    "name": "Blimp",
+    "LD": 4,
+    "m": 0.42,
+    "Cp": 0.65,
+    "r0": 0.55,
+    "r1": 0.12
+   },
+   "huelle_gm2": 250,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 1000,
+   "ballonet": 25,
+   "ltw": {
+    "n": 4,
+    "anord": "+",
+    "faktor": 1
+   },
+   "gondel": "F",
+   "crew": 1,
+   "pax": 1,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "E",
+    "n": 2,
+    "kW": 10,
+    "lage": "G",
+    "mg": "V",
+    "eta": 0.7,
+    "kWh": 30,
+    "whkg": 180,
+    "kraftstoff": 0,
+    "sfc": 0.3,
+    "kgkW": null
+   },
+   "v_reise": 40,
+   "ballast": 50,
+   "schlepptau": 0,
+   "anbauten": 0
+  }
+ },
+ {
+  "code": "LS1|N:Mit Erbauer|B:P|V:3000|U:Erich|T:3,L,1,,,,,,,0.4|ZZ:zukunft",
+  "entwurf": {
+   "name": "Mit Erbauer",
+   "bauweise": "P",
+   "gas": "He",
+   "reinheit": 0.98,
+   "V": 3000,
+   "form": {
+    "name": "Blimp",
+    "LD": 4,
+    "m": 0.42,
+    "Cp": 0.65,
+    "r0": 0.55,
+    "r1": 0.12
+   },
+   "huelle_gm2": 250,
+   "zellen_gm2": 170,
+   "werkstoff": 1,
+   "prallhoehe": 1000,
+   "ballonet": 25,
+   "ltw": {
+    "n": 3,
+    "anord": "L",
+    "faktor": 1,
+    "ruder": 0.4
+   },
+   "gondel": "F",
+   "crew": 1,
+   "pax": 1,
+   "m_person": 80,
+   "nutzlast": 0,
+   "avionik": 0,
+   "antrieb": {
+    "art": "E",
+    "n": 2,
+    "kW": 10,
+    "lage": "G",
+    "mg": "V",
+    "eta": 0.7,
+    "kWh": 30,
+    "whkg": 180,
+    "kraftstoff": 0,
+    "sfc": 0.3,
+    "kgkW": null
+   },
+   "v_reise": 40,
+   "ballast": 50,
+   "schlepptau": 0,
+   "anbauten": 0,
+   "erbauer": "Erich"
+  }
+ }
+]

@@ -1,3 +1,4 @@
+// 2026-10-14 14:40 · flug.js 0.8: kein Wind am Boden (Grenzschicht unter 10 m), Landung zählt erst nach 5 m Abheben
 // 2026-10-14 13:30 · flug.js 0.7: Höhe halten mit Gas und Ballast, Trimm über Ballonets (ab 2), Ruder bei kleiner Fahrt schwächer
 // 2026-10-14 13:00 · flug.js 0.6: Vertikalbeschleunigung für die Anzeige
 // 2026-10-14 11:30 · flug.js 0.5: Ruder nach Größe bzw. Pendelleitwerk (τ, Ausschlag, Widerstand), Kurs halten = Kurs über Grund mit Vorhaltewinkel, Wenderadius nach Ruderwirkung
@@ -119,8 +120,14 @@
      3. EIN ZEITSCHRITT
      wind: { e, n } in m/s (nach Osten, nach Norden) in der aktuellen Höhe; dT: Temperaturabweichung zur ISA
      ----------------------------------------------------------------------------------------------- */
+  /* Wind in Bodennähe (Wunsch Nutzer 14.10.2026: am Boden kein Wind): logarithmisches Grenzschichtprofil
+     unter 10 m über Grund, u(z) = u(10 m) · ln(z/z0) / ln(10 m/z0), Rauigkeit z0 = 0,1 m (Wiese, Flugplatz);
+     am Boden (z ≤ z0) 0. Darüber gilt der Wind aus dem Wetter unverändert.                                 */
+  const Z0 = 0.1;
+  function windFaktor(agl) { return agl <= Z0 ? 0 : agl >= 10 ? 1 : Math.log(agl / Z0) / Math.log(10 / Z0); }
   function schritt(F, dt, wind) {
     const K = F.K, s = F.s; wind = wind || { e: 0, n: 0 };
+    const fw = windFaktor(s.h - s.hGrund); if (fw < 1) wind = Object.assign({}, wind, { e: wind.e * fw, n: wind.n * fw });
     assistenten(F, dt, wind);
     const atm = C.atmos(s.h, wind.dT || 0), rho = atm.rho, rho0 = 1.225;
 
@@ -219,7 +226,7 @@
     else { s.E = Math.max(0, s.E - Math.max(0, P - K.solarW) * dt); s.energie = K.energie0; }   // Akku: Masse bleibt
 
     // --- Boden ---
-    if (!s.amBoden && s.h > s.hGrund + 1) s.warOben = true;                    // erst nach dem Abheben zählt ein Aufsetzen als Landung
+    if (!s.amBoden && s.h > s.hGrund + 5) s.warOben = true;                    // erst nach dem Abheben (5 m frei) zählt ein Aufsetzen als Landung
     if (!s.amBoden && s.h <= s.hGrund && s.w <= 0 && !s.warOben) { s.h = s.hGrund; s.w = Math.max(s.w, 0); }   // noch beim Abheben
     else if (!s.amBoden && s.h <= s.hGrund) {
       const vg = Math.hypot(s.U * Math.sin(s.psi) + wind.e, s.U * Math.cos(s.psi) + wind.n);
@@ -309,7 +316,7 @@
     return F.s;
   }
 
-  const LSFlug = { VERSION: '0.7', kennwerte, start, schritt, lauf };
+  const LSFlug = { VERSION: '0.8', windFaktor, kennwerte, start, schritt, lauf };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSFlug;
   else root.LSFlug = LSFlug;
 })(typeof window !== 'undefined' ? window : globalThis);

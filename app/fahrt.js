@@ -1,3 +1,4 @@
+// 2026-10-14 14:40 · fahrt.js 0.8: Windanzeige mit Bodengrenzschicht (am Boden kein Wind)
 // 2026-10-14 14:10 · fahrt.js 0.7: Gelände unter dem Schiff (gelaende.js), Boost nur beim Halten, Vorschau gedämpft (höchstens ±90°), Vergleich A400M und CH-47F je t·km statt A320
 // 2026-10-14 16:00 · fahrt.js 0.6: Fahrtenliste (mehrere Fahrten, löschen, Bericht als Bild teilen), Beenden jederzeit, Schub exponentiell, Zeitraffer ×1 korrigiert,
 //                    beim Steuern ×10, Konsole am Handy einklappbar, TAS groß, Beschleunigungsbalken, Seitenansicht-Knopf, Höhensteuerer/Fahrt halten ausgeblendet
@@ -362,6 +363,7 @@
         if (s.landung && s.landung !== Z.letzteLandung) { Z.letzteLandung = s.landung; Z.stat.landungen.push(Object.assign({ lat: Z.lat, lon: Z.lon }, s.landung)); landung(s.landung); }
       }
       Z.wJetzt = LSWetter.bei(W.model, W.startMs + s.t * 1000, s.h);
+      { const fw = LSFlug.windFaktor ? LSFlug.windFaktor(s.h - s.hGrund) : 1; if (fw < 1) Z.wJetzt = Object.assign({}, Z.wJetzt, { e: Z.wJetzt.e * fw, n: Z.wJetzt.n * fw }); }   // am Boden kein Wind
       // Landeanflug: unter 100 m über Grund und sinkend ⇒ Seitenansicht einblenden (einmal je Anflug)
       const agl = s.h - Z.grund;
       if (agl < 100 && s.w < -0.2 && !Z.anflug) { Z.anflug = true; Z.seiteAn = true; }

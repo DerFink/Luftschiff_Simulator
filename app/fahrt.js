@@ -1,3 +1,4 @@
+// 2026-10-14 15:05 · fahrt.js 0.9: Schubhebel mit weniger Expo (halber Weg ≈ 40 % Schub)
 // 2026-10-14 14:40 · fahrt.js 0.8: Windanzeige mit Bodengrenzschicht (am Boden kein Wind)
 // 2026-10-14 14:10 · fahrt.js 0.7: Gelände unter dem Schiff (gelaende.js), Boost nur beim Halten, Vorschau gedämpft (höchstens ±90°), Vergleich A400M und CH-47F je t·km statt A320
 // 2026-10-14 16:00 · fahrt.js 0.6: Fahrtenliste (mehrere Fahrten, löschen, Bericht als Bild teilen), Beenden jederzeit, Schub exponentiell, Zeitraffer ×1 korrigiert,
@@ -143,7 +144,7 @@
     const app = $('#app'); app.classList.add('wide');
     const zrB = ZR.map((z, i) => `<button data-z="${z}"${z === Z.zr ? ' class="on"' : ''}>×${z}</button>`).join('') + `<button data-z="${BOOST}" id="fBoost" title="Boost: gedrückt halten (24 h in etwa 3 s)">⚡</button>`;
     // Höhensteuerer und „Fahrt halten“ sind vorerst ausgeblendet (Wunsch Nutzer 14.10.2026); der Höhensteuerer arbeitet weiter
-    const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Knüppel vor = sinken, zurück = steigen'], ['W S', 'Schub + / − (unten fein)  ·  X Schub aus'],
+    const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Knüppel vor = sinken, zurück = steigen'], ['W S', 'Schub + / − (unten etwas feiner)  ·  X Schub aus'],
       ['B', 'Ballast: tippen = ' + fm(Z.stoss) + ', halten = laufend'], ['G', 'Gas ablassen (solange gedrückt)'], ['Q E', 'Trimm Heck / Trimm Bug'],
       ['H K P', 'Höhe · Kurs · Position halten'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 halten: Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus'],
       ['', 'Beim Steuern, Gas oder Ballast läuft ein Zeitraffer über ×10 kurz mit ×10']];
@@ -266,7 +267,7 @@
     window.addEventListener('keydown', Z.kd); window.addEventListener('keyup', Z.ku);
     // Schubregler: ziehen setzt den Schub (0 unten, 100 % oben)
     const rail = $('#fThr .rail');
-    // Reglerstellung p (0 unten … 1 oben) ⇒ Schub exponentiell: die untere Hälfte deckt nur 0 … 10 % ab
+    // Reglerstellung p (0 unten … 1 oben) ⇒ Schub leicht exponentiell: die untere Hälfte deckt 0 … 40 % ab
     const setz = e => { const b = rail.getBoundingClientRect(); manuellSchub(); s.schub = schubAus(Math.max(0, Math.min(1, 1 - (e.clientY - b.top) / b.height))); };
     rail.onpointerdown = e => { rail.setPointerCapture(e.pointerId); setz(e); rail.onpointermove = setz; };
     rail.onpointerup = rail.onpointercancel = () => { rail.onpointermove = null; };
@@ -672,9 +673,11 @@
     if (Z.map) setTimeout(() => Z.map.invalidateSize(), 50);
   }
 
-  // ---------- Schub exponentiell (Wunsch Nutzer): Reglerstellung p ⇒ Schub (e^(4,5 p) − 1) / (e^4,5 − 1) ----------
-  // p = 0,5 ⇒ 9,4 % Schub; die ersten 10 % liegen auf gut der Hälfte des Wegs und lassen sich fein einstellen
-  const SA = 4.5, SE = Math.exp(SA) - 1;
+  // ---------- Schub exponentiell (Wunsch Nutzer): Reglerstellung p ⇒ Schub (e^(a·p) − 1) / (e^a − 1) ----------
+  // Weniger Expo (Wunsch Nutzer 14.10.2026, 13:22): bei halbem Weg rund 40 % Schub.
+  //   1 / (e^(a/2) + 1) = 0,4  ⇒  e^(a/2) = 1,5  ⇒  a = 2 · ln 1,5 = 0,811
+  //   p = 0,1 ⇒ 6,8 % · p = 0,25 ⇒ 18 % · p = 0,5 ⇒ 40 % · p = 0,75 ⇒ 68 %
+  const SA = 2 * Math.log(1.5), SE = Math.exp(SA) - 1;
   function schubAus(p) { return (Math.exp(SA * p) - 1) / SE; }
   function schubPos(t) { return Math.log(1 + Math.max(0, t) * SE) / SA; }
 

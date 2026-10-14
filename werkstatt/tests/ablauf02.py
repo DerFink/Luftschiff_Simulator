@@ -1,3 +1,4 @@
+# 2026-10-14 14:30 · ablauf02.py: Ortsnamen (Nominatim nachgebildet), Feuchte/Wolken im Wetter, Anzeige einklappen, Vertikalprofil
 # 2026-10-14 12:45 · ablauf02.py: Boost, Tasten-Rückmeldung am Knüppel, Speichern/Fortsetzen, Landung mit Bericht
 # 2026-10-14 06:30 · ablauf02.py: Fahrt im Browser – Startdialog, Flugbildschirm (Handy und Computer), Tastatur, Wetter (nachgebildete Open-Meteo-Antworten)
 # Aufruf: python3 -m http.server 8765 im Repository starten, dann  python3 werkstatt/tests/ablauf02.py <Ausgabeordner>
@@ -19,11 +20,14 @@ def vorhersage(start):
     t0 = datetime.datetime.fromisoformat(start)
     H = {'time': [(t0 + datetime.timedelta(hours=k)).strftime('%Y-%m-%dT%H:00') for k in range(72)]}
     H['temperature_2m'] = [12.0] * 72; H['wind_speed_10m'] = [4.0] * 72; H['wind_direction_10m'] = [250.0] * 72
+    H['relative_humidity_2m'] = [70] * 72; H['precipitation'] = [0.4] * 72
     for L in LEV:
         H['temperature_%dhPa' % L] = [12 - 0.0065 * Z[L]] * 72
         H['wind_speed_%dhPa' % L] = [min(30, 5 + 0.006 * Z[L])] * 72
         H['wind_direction_%dhPa' % L] = [250 + 0.004 * Z[L]] * 72
         H['geopotential_height_%dhPa' % L] = [Z[L]] * 72
+        H['relative_humidity_%dhPa' % L] = [95 if L in (850, 800) else 60] * 72
+        H['cloud_cover_%dhPa' % L] = [80 if L in (850, 800) else 0] * 72
     return {'latitude': 47.67, 'longitude': 9.51, 'elevation': 417, 'hourly': H}
 def wetter(route):
     u = route.request.url
@@ -44,6 +48,7 @@ with sync_playwright() as p:
         pg.on('pageerror', lambda e: errs.append(str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text))
         pg.route('**/tile.openstreetmap.org/**', lambda r: r.fulfill(status=200, content_type='image/png', body=KACHEL))
         pg.route('**/*open-meteo.com/**', wetter)
+        pg.route('**/nominatim.openstreetmap.org/**', lambda r: r.fulfill(status=200, content_type='application/json', body=json.dumps({'address': {'town': 'Friedrichshafen', 'country_code': 'de'}})))
         shot = lambda n: (pg.wait_for_timeout(900), pg.screenshot(path=os.path.join(OUT, n)))
         pg.goto(URL); pg.click('button.card[data-id="lz120"]'); pg.click('#bOpen'); pg.click('#bFly')
         shot('30_start_%s.png' % name)
@@ -58,6 +63,7 @@ with sync_playwright() as p:
         st = pg.evaluate("() => { const r = document.querySelector('#fInst').innerText; return r.replace(/\\n/g, ' | '); }")
         print(name, 'Anzeigen:', st[:400])
         pg.keyboard.press('v'); shot('33_seitenansicht_%s.png' % name)
+        pg.click('#fInst2'); shot('33b_anzeige_klein_%s.png' % name); pg.click('#fInst2')
         # Tasten-Rückmeldung: ↑ gedrückt halten ⇒ Knüppel oben (sinken)
         pg.keyboard.down('ArrowUp'); pg.wait_for_timeout(300)
         print(name, 'Knüppel bei ↑:', pg.eval_on_selector('#fJoy .stick', 'e => e.style.transform')); pg.keyboard.up('ArrowUp')
@@ -67,6 +73,7 @@ with sync_playwright() as p:
         shot('34_boost_%s.png' % name)
         # Verlassen speichert, Fliegen bietet Fortsetzen an
         if pg.locator('#eOk').count(): print(name, 'Landung während Boost (Abfrage erscheint)'); pg.click('#eOk')
+        print(name, 'fBack', pg.eval_on_selector('#fBack', 'e => JSON.stringify(e.getBoundingClientRect())'), 'scroll', pg.evaluate('[scrollY, document.querySelector(".fz").scrollTop, document.getElementById("app").scrollTop]'))
         pg.click('#fBack'); pg.wait_for_timeout(500); pg.click('#bFly'); pg.wait_for_timeout(500)
         print(name, 'Fortsetzen angeboten:', pg.locator('#bWeiter').count() == 1)
         pg.click('#bWeiter'); pg.wait_for_selector('#fInst div', timeout=10000); pg.wait_for_timeout(800)
@@ -80,7 +87,7 @@ with sync_playwright() as p:
         pg.keyboard.up('g')
         shot('35_landung_%s.png' % name)
         if pg.locator('#eEnde').count():
-            pg.click('#eEnde'); shot('36_bericht_%s.png' % name); print(name, 'Bericht:', pg.inner_text('.ende pre')[:300].replace('\n', ' / '))
+            pg.click('#eEnde'); pg.wait_for_timeout(3500); shot('36_bericht_%s.png' % name); print(name, 'Bericht:', pg.inner_text('.ende pre')[:900].replace('\n', ' / '))
         ctx.close()
     print('Fehler:', errs)
     b.close()

@@ -1,4 +1,5 @@
-/* 2026-10-14 13:00 · fahrt.css 0.3 (ENTWURF): Anzeige auf der Karte wie im Gasballon-Simulator, Leiste darunter
+/* 2026-10-14 14:30 · fahrt.css 0.4: Anzeige einklappbar mit Flugbegriffen, Vertikalprofil (dunkle Karte links, wie Gasballon), Prallhöhe NN und über Grund
+   2026-10-14 13:00 · fahrt.css 0.3: Anzeige auf der Karte wie im Gasballon-Simulator, Leiste darunter
    2026-10-14 07:00 · fahrt.css 0.2: Zeitraffer am Handy ohne Beschriftung in einer Zeile
    2026-10-14 06:30 · fahrt.css 0.1: Startdialog und Flugbildschirm (Handy hochkant, Computer breit) nach Entwurf vom 13.10.2026 */
 
@@ -71,7 +72,7 @@
 .ende .box{background:#fff;border-radius:9px;padding:16px;max-width:360px;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
 
 /* Anzeige auf der Karte oben rechts (wie Gasballon): Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken */
-.inst2{position:absolute;right:0;top:0;z-index:600;width:118px;background:rgba(255,255,255,.94);border-radius:0 0 0 9px;padding:6px 9px 7px 10px;box-shadow:0 1px 4px rgba(0,0,0,.15);pointer-events:none}
+.inst2{position:absolute;right:0;top:0;z-index:600;width:156px;cursor:pointer;background:rgba(255,255,255,.94);border-radius:0 0 0 9px;padding:6px 9px 7px 10px;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .inst2 .lbl{font-size:11px;color:var(--mut)}
 .inst2 .big{font-size:30px;font-weight:700;line-height:1;white-space:nowrap}
 .inst2 .big small{font-size:13px;font-weight:600;color:var(--mut);margin-left:2px}
@@ -86,3 +87,22 @@
 .fz>.inst div:nth-child(4n){border-right:1px solid var(--line)}.fz>.inst div:nth-child(6n){border-right:none}
 .fz>.inst i{font-size:9.5px}.fz>.inst b{font-size:12.5px}
 .cbtn{font-size:14px!important;padding:10px 14px!important;bottom:12px!important}
+
+/* Flugbegriffe: Kürzel groß, ausgeschriebene Bedeutung ganz klein daneben */
+.inst2 .kv span small,.inst2 .lbl small,.inst2 .nn small{font-size:7.5px;color:#8a97a5;margin-left:3px;letter-spacing:-.1px}
+.inst2 .kv span{white-space:nowrap}
+.inst2 .tip{font-size:9.5px;color:var(--acc);text-align:center;margin-top:2px}
+.inst2.klein{width:146px}
+.inst2 .kv b small{font-size:8px;font-weight:500;color:#8a97a5;margin-left:2px}
+.fz>.inst b small,.rp .inst b small{display:block;font-size:8.5px;font-weight:500;color:var(--mut)}
+/* Vertikalprofil: dunkle Karte links oben (wie im Gasballon-Simulator), mit Griff zum Ein- und Ausklappen */
+.prof{position:absolute;left:0;top:0;z-index:550;width:118px;height:62%;background:rgba(13,22,38,.9);border-radius:0 0 12px 0;display:flex;flex-direction:column;overflow:hidden}
+.prof canvas{display:block;width:100%;flex:1;min-height:0}
+.prof .hdl{flex:none;height:16px;border-bottom:1px solid rgba(255,255,255,.12);position:relative}
+.prof .hdl::after{content:'';position:absolute;left:50%;top:50%;width:30px;height:4px;margin:-2px 0 0 -15px;border-radius:2px;background:#9aabc4}
+.prof.zu{width:22px;height:86px}
+.prof.zu canvas{display:none}
+.prof.zu .hdl{height:100%;border:0}
+.prof.zu .hdl::after{width:4px;height:30px;margin:-15px 0 0 -2px}
+@media (min-width:900px){.prof{width:170px}}
+.cbtn{left:50%;right:auto!important;transform:translateX(-50%)}

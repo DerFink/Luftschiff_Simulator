@@ -1,4 +1,6 @@
-// 2026-10-14 13:00 · fahrt.js 0.4 (ENTWURF): Anzeige wie Gasballon (Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken) auf der Karte,
+// 2026-10-14 14:30 · fahrt.js 0.5: Anzeige einklappbar (Höhe, Vario, TAS, Beschleunigung), Flugbegriffe (TAS, GS, HDG, TRK), Spur durchgehend und Vorschau 1 h gestrichelt,
+//                    Vertikalprofil ein-/ausklappbar (wie Gasballon), Fahrtbericht mit Ortsnamen und CO₂ samt Vergleich A320 Berlin–Hamburg
+// 2026-10-14 13:00 · fahrt.js 0.4: Anzeige wie Gasballon (Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken) auf der Karte,
 //                    Leiste darunter; Seitenansicht mit dem 3D-Modell; Schiff auf der Karte mit echtem Umriss (L/D, Leitwerk) und Maßstab
 // 2026-10-14 12:30 · fahrt.js 0.3: Boost (24 h in etwa 3 s), Karte folgt gedämpft, Spur nach Weg, Fahrt speichern/fortsetzen, Landung: weiter oder beenden mit Bericht (.txt),
 //                    Seitenansicht vom Nutzer geschaltet (bei Landeanflug eingeblendet), Tasten bewegen Knüppel und Knöpfe, Knüppel vorn = sinken, Massen ab 100 kg in t, Kurs über Grund
@@ -115,6 +117,7 @@
       r, F, W, lat: VB.lat, lon: VB.lon, lx: 0, ly: 0, elev, zr: 5, pause: false, keys: {}, joy: { x: 0, y: 0, an: false },
       seiteAn: true,                                 // vom Nutzer geschaltet; beim Landeanflug (unter 100 m, sinkend) wieder eingeblendet
       stat: { weg: 0, hMax: elev, vMax: 0, landungen: [] },   // für den Fahrtbericht
+      klein: (() => { try { return localStorage.getItem('ls_dash_klein') === '1'; } catch (e) { return false; } })(),   // Anzeige eingeklappt
       follow: true, track: [[VB.lat, VB.lon]], tTrack: 0, hs: true,     // Höhensteuerer an
       stoss: rund(0.0025 * lift), laden: false, ende: null, letzteLandung: null, uiT: 0, raf: 0, last: 0,
     };
@@ -140,8 +143,9 @@
       <div class="zr"><span class="zrl">Zeitraffer</span>${zrB}<button data-z="0" id="fPause">❚❚</button></div>
       <div class="fmap"><div class="lmap" id="fMap"></div>
         <div class="badge" id="fWind" style="display:none"></div>
-        <div class="aps" id="fAps" style="right:auto;left:52px;top:10px;align-items:flex-start"></div>
-        <div class="inst2" id="fInst2"></div>
+        <div class="aps" id="fAps" style="right:auto;top:auto;left:50%;bottom:64px;transform:translateX(-50%);align-items:center;flex-direction:row;flex-wrap:wrap;justify-content:center;width:70%"></div>
+        <div class="inst2" id="fInst2" title="Antippen: ein- oder ausklappen"></div>
+        <div class="prof${profilAuf() ? '' : ' zu'}" id="fProf"><button class="hdl" id="fProfH" title="Vertikalprofil ein- oder ausklappen"></button><canvas id="fProfC"></canvas></div>
         <div class="badge" id="fQuelle" style="left:8px;bottom:8px;max-width:70%"></div>
         <button class="cbtn" id="fFollow" style="display:none">⌖ Zum Schiff</button>
       </div>
@@ -165,14 +169,18 @@
     anordnen(); Z.rs = anordnen; window.addEventListener('resize', Z.rs);
     // Karte
     if (window.L) {
-      Z.map = L.map('fMap', { zoomControl: true }).setView([Z.lat, Z.lon], 12); osm().addTo(Z.map);
+      Z.map = L.map('fMap', { zoomControl: false }).setView([Z.lat, Z.lon], 12); osm().addTo(Z.map);
+      L.control.zoom({ position: 'bottomright' }).addTo(Z.map);
       L.circleMarker([Z.lat, Z.lon], { radius: 5, color: '#1b8a4c', fillColor: '#1b8a4c', fillOpacity: 1 }).addTo(Z.map);
-      Z.poly = L.polyline(Z.track, { color: '#d65a3c', weight: 2, dashArray: '5 4' }).addTo(Z.map);
+      Z.poly = L.polyline(Z.track, { color: '#d65a3c', weight: 2.5 }).addTo(Z.map);                       // geflogene Strecke: durchgehend
+      Z.vor = L.polyline([], { color: '#1f6fd1', weight: 2, dashArray: '6 5', opacity: 0.85 }).addTo(Z.map); // Vorschau 1 h: gestrichelt
       Z.ship = L.marker([Z.lat, Z.lon], { icon: schiffIcon() }).addTo(Z.map);
       Z.map.on('zoomend', () => Z.ship.setIcon(schiffIcon()));
       Z.map.on('dragstart', () => { Z.follow = false; $('#fFollow').style.display = 'block'; });
     } else $('#fMap').innerHTML = '<div class="desc" style="padding:40px 12px">Karte nicht geladen (offline?). Die Fahrt läuft trotzdem.</div>';
     $('#fFollow').onclick = () => { Z.follow = true; $('#fFollow').style.display = 'none'; };
+    $('#fInst2').onclick = () => { Z.klein = !Z.klein; try { localStorage.setItem('ls_dash_klein', Z.klein ? '1' : '0'); } catch (e) {} anzeigen(); };
+    $('#fProfH').onclick = () => { const zu = !$('#fProf').classList.toggle('zu'); try { localStorage.setItem('ls_profil', zu ? '1' : '0'); } catch (e) {} Z.profT = 0; };
     $('#fBack').onclick = () => { speichern(); stopFahrt(); $('#app').classList.remove('wide'); showErgebnis(); toast('Fahrt gespeichert – „Fliegen“ setzt sie fort'); };
     Z.ph = () => speichern(); window.addEventListener('pagehide', Z.ph); document.addEventListener('visibilitychange', Z.ph);
     document.querySelectorAll('.zr button').forEach(b => b.onclick = () => { const z = +b.dataset.z; if (z === 0) Z.pause = !Z.pause; else { Z.zr = z; Z.pause = false; } zrAnzeigen(); });
@@ -340,6 +348,8 @@
     nachladen();
     if (Z.map) { Z.ship.setLatLng([Z.lat, Z.lon]); const sv = document.getElementById('fShipSvg'); if (sv) sv.style.transform = `rotate(${s.psi / RAD}deg)`; if (Z.follow) folgen(dtR); }
     if (now - Z.uiT > 200) { Z.uiT = now; anzeigen(); }
+    if (now - (Z.vorT || 0) > 1000) { Z.vorT = now; vorschau(); }
+    if (now - (Z.profT || 0) > 700) { Z.profT = now; profil(); }
     seite();
     Z.raf = requestAnimationFrame(loop);
   }
@@ -358,6 +368,7 @@
   // Massen für die Anzeige: unter 1 kg in g, unter 100 kg in kg, ab 100 kg in t (Vorgabe: dreistellige Zahlen in die nächste Einheit)
   function fk(kg) {
     const a = Math.abs(kg);
+    if (a < 0.0005) return '0 kg';
     if (a < 1) return de(kg * 1000, a < 0.01 ? 1 : 0) + ' g';
     if (a < 100) return de(kg, a < 10 ? 1 : 0) + ' kg';
     const t = kg / 1000; return de(t, Math.abs(t) < 1 ? 2 : Math.abs(t) < 10 ? 2 : Math.abs(t) < 100 ? 1 : 0) + ' t';
@@ -376,18 +387,25 @@
     const frei = a.frei || 0, prall = C.hOfSigma(Math.min(1, s.Vn / K.Vgas));
     const kurs = String(Math.round(s.psi / RAD + 360) % 360).padStart(3, '0') + '°';
     const kgr = Math.atan2(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n), kog = vg > 1 ? String(Math.round(kgr / RAD + 360) % 360).padStart(3, '0') + '°' : '–';
-    // Anzeige auf der Karte (wie im Gasballon-Simulator): Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken
-    const agl = s.h - Z.elev, acc = s.acc || 0, accH = Math.min(14, Math.abs(acc) * 40);
-    $('#fInst2').innerHTML = `<div class="lbl">über Grund</div><div class="big">${de(agl)}<small>m</small></div><div class="nn">NN ${de(s.h)} m</div>
-      <div class="kv vario"><i class="${acc >= 0 ? 'up' : 'dn'}" style="height:${accH}px"></i><span>m/s</span><b class="${s.w > 0.2 ? 'up' : s.w < -0.2 ? 'dn' : ''}">${(s.w >= 0 ? '+' : '−') + de(Math.abs(s.w), 1)}</b></div>
-      <div class="kv"><span>Fahrt</span><b>${de(s.U * 3.6)}</b></div><div class="kv"><span>Grund</span><b>${de(vg * 3.6)}</b></div>
-      <div class="kv"><span>Kurs</span><b>${kurs}</b></div><div class="kv"><span>ü. Gr.</span><b>${kog}</b></div><div class="kv"><span>Nicken</span><b>${(s.th >= 0 ? '+' : '−') + de(Math.abs(s.th / RAD), 1)}°</b></div>
-      <div class="kv"><span>Wind</span><b>${de(wr.sp, wr.sp < 10 ? 1 : 0)} ${kompass(wr.d)}</b></div>`;
+    // Anzeige auf der Karte (wie im Gasballon-Simulator): Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken.
+    // Beschleunigungsbalken: Wurzelskala (kleine Werte bleiben sichtbar), voll bei 0,3 m/s², grün nach oben, rot nach unten.
+    // Eingeklappt (antippen): nur Höhe, Vario mit Beschleunigung und TAS.
+    const agl = s.h - Z.elev, acc = s.amBoden ? 0 : (s.acc || 0);
+    const accH = Math.abs(acc) < 0.002 ? 0 : Math.max(2, Math.round(26 * Math.min(1, Math.sqrt(Math.abs(acc) / 0.3))));
+    const zeile = (kurz, lang, wert, cls) => `<div class="kv"><span>${kurz}<small>${lang}</small></span><b class="${cls || ''}">${wert}</b></div>`;
+    let h2 = `<div class="lbl">AGL <small>über Grund</small></div><div class="big">${de(agl)}<small>m</small></div>`;
+    if (!Z.klein) h2 += `<div class="nn">MSL ${de(s.h)} m <small>über NN</small></div>`;
+    h2 += `<div class="kv vario"><i class="${acc >= 0 ? 'up' : 'dn'}" style="height:${accH}px"></i><span>VS<small>Vario</small></span><b class="${s.w > 0.2 ? 'up' : s.w < -0.2 ? 'dn' : ''}">${(s.w >= 0 ? '+' : '−') + de(Math.abs(s.w), 1)}<small>m/s</small></b></div>`;
+    h2 += zeile('TAS', 'True Airspeed', de(s.U * 3.6) + '<small>km/h</small>');
+    if (!Z.klein) h2 += zeile('GS', 'Ground Speed', de(vg * 3.6) + '<small>km/h</small>') + zeile('HDG', 'Heading', kurs) + zeile('TRK', 'Track', kog)
+      + zeile('PITCH', 'Nicken', (s.th >= 0 ? '+' : '−') + de(Math.abs(s.th / RAD), 1) + '°') + zeile('WIND', 'aus ' + String(Math.round(wr.d)).padStart(3, '0') + '°', de(wr.sp * 3.6) + '<small>km/h</small>');
+    h2 += `<div class="tip">${Z.klein ? '▾ mehr' : '▴ weniger'}</div>`;
+    $('#fInst2').innerHTML = h2; $('#fInst2').classList.toggle('klein', !!Z.klein);
     // Leiste unter der Karte: Last und Vorräte
     const z = [
       ['Auftrieb frei', (frei >= 0 ? '+' : '−') + fk(Math.abs(frei)), frei > 0 ? 'up' : frei < 0 ? 'dn' : ''], ['Gas', de(Math.min(100, (a.fuell || 0) * 100)) + ' %' + (a.schlaff ? ' schlaff' : ''), a.schlaff ? 'dn' : ''],
       ['Ballast', fk(s.ballast), ''], [K.verbrenner ? 'Kraftstoff' : 'Akku', K.verbrenner ? fk(s.energie) : de(s.E / Math.max(K.E0, 1) * 100) + ' %', ''],
-      ['Reicht', rest == null ? '–' : rest > 99 ? '> 99 h' : de(rest, 1) + ' h', ''], ['Prallhöhe', de(prall) + ' m', ''],
+      ['Reicht', rest == null ? '–' : rest > 99 ? '> 99 h' : de(rest, 1) + ' h', ''], ['Prallhöhe', de(prall) + ' m<small>NN · ' + (prall - Z.elev >= 0 ? '+' : '') + de(prall - Z.elev) + ' ü. Gr.</small>', ''],
     ];
     if (window.innerWidth >= 900) z.push(['Schub', de(s.schub * 100) + ' %', ''], ['Höhenruder', de(s.hr * 100) + ' %', ''], ['Seitenruder', de(s.sr * 100) + ' %', '']);
     $('#fInst').innerHTML = z.map(([t, v, c]) => `<div><i>${t}</i><b class="${c}">${v}</b></div>`).join('');
@@ -436,6 +454,58 @@
     if (s.amBoden) { g.fillStyle = '#1d2733'; g.fillText('am Boden', xc - 20, gy + 10); }
   }
 
+  // ---------- Vorschau: wohin das Schiff in der nächsten Stunde kommt, wenn alles so bleibt ----------
+  // Fahrt (TAS), Höhe und Drehgeschwindigkeit bleiben; der Wind kommt je Minute aus dem Wetter an der Stelle.
+  // Mit „Kurs halten“ bleibt der Kurs über Grund, mit „Position halten“ steht das Schiff.
+  function vorschau() {
+    if (!Z.vor) return;
+    const s = Z.F.s, W = Z.W, ap = s.ap, pts = [[Z.lat, Z.lon]];
+    if (s.amBoden || ap.pos) { Z.vor.setLatLngs([]); return; }
+    let la = Z.lat, lo = Z.lon, psi = s.psi;
+    for (let k = 1; k <= 60; k++) {
+      const w = LSWetter.bei(W.model, W.startMs + (s.t + k * 60) * 1000, s.h);
+      let ve, vn;
+      if (ap.kurs != null) {                                    // Kurs über Grund halten: Geschwindigkeit über Grund entlang des Kurses
+        const ce = Math.cos(ap.kurs), cn = -Math.sin(ap.kurs), quer = w.e * ce + w.n * cn, U = Math.max(s.U, 0.1);
+        const vorh = Math.asin(Math.max(-0.95, Math.min(0.95, -quer / U))), p2 = ap.kurs + vorh;
+        ve = U * Math.sin(p2) + w.e; vn = U * Math.cos(p2) + w.n;
+      } else { psi += s.r * 60; ve = s.U * Math.sin(psi) + w.e; vn = s.U * Math.cos(psi) + w.n; }
+      la += vn * 60 / 111320; lo += ve * 60 / (111320 * Math.cos(la * RAD));
+      pts.push([la, lo]);
+    }
+    Z.vor.setLatLngs(pts);
+  }
+
+  // ---------- Vertikalprofil (profil.js) ----------
+  function profilAuf() { try { return localStorage.getItem('ls_profil') !== '0'; } catch (e) { return true; } }
+  function profil() {
+    const box = $('#fProf'); if (!box || box.classList.contains('zu')) return;
+    const s = Z.F.s, K = Z.F.K, W = Z.W, tMs = W.startMs + s.t * 1000;
+    LSProfil.zeichne($('#fProfC'), { bei: z => LSWetter.bei(W.model, tMs, z), h: s.h, grund: Z.elev, prall: C.hOfSigma(Math.min(1, s.Vn / K.Vgas)), soll: s.ap.hoehe });
+  }
+
+  // ---------- Ortsnamen für den Bericht (OpenStreetMap, Nominatim; höchstens 1 Abfrage je Sekunde) ----------
+  const ortCache = {};
+  async function ortsname(lat, lon) {
+    const k = lat.toFixed(3) + ',' + lon.toFixed(3); if (k in ortCache) return ortCache[k];
+    try {
+      const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=de&lat=' + lat.toFixed(4) + '&lon=' + lon.toFixed(4), { signal: AbortSignal.timeout(8000) });
+      const j = await r.json(), a = j.address || {}, n = a.city || a.town || a.village || a.municipality || a.county || a.state || j.name;
+      return ortCache[k] = n ? n + (a.country_code ? ' (' + a.country_code.toUpperCase() + ')' : '') : 'kein Ort gefunden (Gewässer?)';
+    } catch (e) { return ortCache[k] = null; }
+  }
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+
+  // ---------- CO₂ ----------
+  // Verbrenner: 3,18 kg CO₂ je kg Benzin bzw. 3,17 je kg Diesel (EBeV 2022, Anlage 1: 0,0731 t/GJ · 43,5 GJ/t bzw. 0,074 · 42,8)
+  // Elektrisch: Strommix Deutschland 2024 363 g CO₂ je kWh (Umweltbundesamt)
+  // Vergleich: A320 Berlin–Hamburg, geschätzt rund 1,8 t Kerosin (Steigflug, kurzer Reiseteil, Sinkflug, Rollen) ⇒ rund 5,7 t CO₂
+  const A320_BER_HAM = 5700;
+  function co2(K, s) {
+    if (K.verbrenner) { const kg = K.energie0 - s.energie; return { kg: kg * 3.18, text: fk(kg) + ' Kraftstoff' }; }
+    const kWh = (K.E0 - s.E) / 3.6e6 / 0.85; return { kg: kWh * 0.363, text: de(kWh, kWh < 10 ? 1 : 0) + ' kWh Strom' };
+  }
+
   // ---------- Karte folgt dem Schiff gedämpft (Vorgabe: weich nachziehen, kein Ruckeln) ----------
   // Die Kartenmitte rückt je Bild um den Anteil 1 − e^(−dt/τ) zum Schiff (τ = 0,6 s). Ist das Schiff (bei hohem
   // Zeitraffer) weiter als 30 % der Kartengröße von der Mitte weg, wird der Überstand sofort ausgeglichen.
@@ -469,44 +539,57 @@
   window.fahrtFortsetzen = () => { const f = gespeicherteFahrt(); if (f) fortsetzen(f); };
 
   // ---------- Fahrt beenden: Zusammenfassung und Bericht als Textdatei ----------
-  function bericht() {
-    const F = Z.F, s = F.s, K = F.K, W = Z.W, st = Z.stat;
+  function bericht(orte) {
+    const F = Z.F, s = F.s, K = F.K, W = Z.W, st = Z.stat, ort = i => orte && orte[i] ? ' – nahe ' + orte[i] : orte ? '' : ' – Ort wird gesucht …';
     const t0 = new Date(W.startMs), t1 = new Date(W.startMs + s.t * 1000);
     const dauer = s.t / 3600, hh = Math.floor(dauer), mm = Math.round((dauer - hh) * 60);
+    const cc = co2(K, s), vgl = cc.kg / A320_BER_HAM;
     const z = [
       'Fahrtbericht Luftschiff-Simulator (Build ' + BUILD + ')',
       '==================================================',
       'Luftschiff:      ' + S.d.name + (S.d.erbauer ? ' (Erbauer: ' + S.d.erbauer + ')' : ''),
-      'Start:           ' + VB.name + ', ' + Z.track[0][0].toFixed(4) + '° N, ' + Z.track[0][1].toFixed(4) + '° O, ' + t0.toLocaleString('de-DE'),
-      'Ende:            ' + Z.lat.toFixed(4) + '° N, ' + Z.lon.toFixed(4) + '° O, ' + t1.toLocaleString('de-DE'),
+      'Start:           ' + VB.name + ', ' + Z.track[0][0].toFixed(4) + '° N, ' + Z.track[0][1].toFixed(4) + '° O' + ort(0) + ', ' + t0.toLocaleString('de-DE'),
+      'Ende:            ' + Z.lat.toFixed(4) + '° N, ' + Z.lon.toFixed(4) + '° O' + ort(1) + ', ' + t1.toLocaleString('de-DE'),
       'Wetter:          ' + W.quelle,
       '',
       'Fahrtdauer:      ' + hh + ' h ' + String(mm).padStart(2, '0') + ' min',
       'Weg über Grund:  ' + de(st.weg / 1000, 1) + ' km',
       'Höchste Höhe:    ' + de(st.hMax) + ' m NN (' + de(st.hMax - Z.elev) + ' m über Start)',
-      'Höchste Fahrt:   ' + de(st.vMax * 3.6) + ' km/h durch die Luft',
+      'Höchste Fahrt:   ' + de(st.vMax * 3.6) + ' km/h TAS',
       (K.verbrenner ? 'Kraftstoff:      ' + fk(K.energie0 - s.energie) + ' verbraucht, ' + fk(s.energie) + ' übrig' : 'Akku:            ' + de((1 - s.E / Math.max(K.E0, 1)) * 100) + ' % verbraucht'),
+      'CO₂:             ' + fk(cc.kg) + ' aus ' + cc.text,
+      '                 ' + (vgl >= 1 ? 'das ' + de(vgl, 1) + '-fache' : de(vgl * 100, vgl < 0.1 ? 1 : 0) + ' %') + ' eines A320-Flugs Berlin–Hamburg (Schätzung 5,7 t CO₂)',
       'Ballast:         ' + fk(s.ballastAbGesamt) + ' abgeworfen, ' + fk(s.ballast) + ' übrig',
       'Gas abgelassen:  ' + de(s.gasAb) + ' m³ (Normvolumen)',
       '',
       'Landungen:       ' + (st.landungen.length ? '' : 'keine'),
-      ...st.landungen.map((l, i) => '  ' + (i + 1) + '. ' + (l.gut ? 'gelungen' : 'hart') + ': Sinken ' + de(l.sinken, 1) + ' m/s, über Grund ' + de(l.ueberGrund, 1) + ' m/s, ' + l.lat.toFixed(4) + '° N ' + l.lon.toFixed(4) + '° O'),
+      ...st.landungen.map((l, i) => '  ' + (i + 1) + '. ' + (l.gut ? 'gelungen' : 'hart') + ': Sinken ' + de(l.sinken, 1) + ' m/s, über Grund ' + de(l.ueberGrund, 1) + ' m/s, ' + l.lat.toFixed(4) + '° N ' + l.lon.toFixed(4) + '° O' + ort(2 + i)),
       '',
       'Speicher-Code des Luftschiffs:',
       C.encode(S.d),
+      '',
+      'Quellen: Wetter Open-Meteo (CC BY 4.0); Ortsnamen © OpenStreetMap-Mitwirkende (Nominatim);',
+      'CO₂-Faktoren EBeV 2022 Anl. 1 (Benzin 3,18 kg/kg) bzw. Umweltbundesamt Strommix 2024 (363 g/kWh).',
     ];
     return z.join('\n') + '\n';
   }
   function beenden() {
-    const txt = bericht(); Z.beendet = true;
+    let txt = bericht(null); Z.beendet = true;
     try { localStorage.removeItem('ls_fahrt'); } catch (e) {}
     Z.pause = true;
     const box = document.createElement('div'); box.className = 'ende';
-    box.innerHTML = `<div class="box"><b>Fahrt beendet</b><pre style="font-size:11px;white-space:pre-wrap;max-height:50vh;overflow:auto;margin:0">${escapeHtml(txt)}</pre>
+    box.innerHTML = `<div class="box"><b>Fahrt beendet</b><pre id="ePre" style="font-size:11px;white-space:pre-wrap;max-height:50vh;overflow:auto;margin:0">${escapeHtml(txt)}</pre>
       <div style="display:flex;gap:8px"><button class="btn s" id="eTxt">Bericht (.txt)</button><button class="btn p" id="eAus">Zur Auslegung</button></div></div>`;
     $('#app').appendChild(box);
     box.querySelector('#eTxt').onclick = () => download('Fahrtbericht ' + S.d.name.replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim() + ' ' + new Date().toISOString().slice(0, 10) + '.txt', txt);
     box.querySelector('#eAus').onclick = () => { stopFahrt(); $('#app').classList.remove('wide'); showErgebnis(); };
+    // Ortsnamen nachladen (Start, Ende, Landungen; nacheinander, höchstens eine Abfrage je Sekunde)
+    (async () => {
+      const Zb = Z, pkte = [Zb.track[0], [Zb.lat, Zb.lon], ...Zb.stat.landungen.slice(0, 5).map(l => [l.lat, l.lon])], orte = [];
+      for (let i = 0; i < pkte.length; i++) { if (i) await warte(1100); orte.push(await ortsname(pkte[i][0], pkte[i][1])); }
+      if (Z !== Zb) return;
+      txt = bericht(orte); const pre = document.getElementById('ePre'); if (pre) pre.textContent = txt;
+    })();
   }
 
   // ---------- Landung ----------

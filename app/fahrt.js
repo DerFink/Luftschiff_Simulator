@@ -440,12 +440,16 @@
     h2 += `<div class="tip">${Z.klein ? '▾ mehr' : '▴ weniger'}</div>`;
     $('#fInst2').innerHTML = h2; $('#fInst2').classList.toggle('klein', !!Z.klein);
     // Leiste unter der Karte: Last und Vorräte
+    const breit = window.innerWidth >= 900;
     const z = [
       ['Auftrieb frei', (frei >= 0 ? '+' : '−') + fk(Math.abs(frei)), frei > 0 ? 'up' : frei < 0 ? 'dn' : ''], ['Gas', de(Math.min(100, (a.fuell || 0) * 100)) + ' %' + (a.schlaff ? ' schlaff' : ''), a.schlaff ? 'dn' : ''],
-      ['Ballast', fk(s.ballast), ''], [K.verbrenner ? 'Kraftstoff' : 'Akku', K.verbrenner ? fk(s.energie) : de(s.E / Math.max(K.E0, 1) * 100) + ' %', ''],
+      // Am Computer (breit) zusätzlich der Rest in Prozent (ENTWURF, Wunsch Nutzer 14.10.2026): Ballast bezogen auf den Ballast
+      // nach dem Abwiegen beim Start, Kraftstoff auf den vollen Tank
+      ['Ballast', fk(s.ballast) + (breit ? '<small>' + de(s.ballast / Math.max(1e-6, s.ballast + s.ballastAbGesamt) * 100) + ' %</small>' : ''), ''],
+      [K.verbrenner ? 'Kraftstoff' : 'Akku', K.verbrenner ? fk(s.energie) + (breit ? '<small>' + de(s.energie / Math.max(1e-6, K.energie0) * 100) + ' %</small>' : '') : de(s.E / Math.max(K.E0, 1) * 100) + ' %', ''],
       ['Reicht', rest == null ? '–' : rest > 99 ? '> 99 h' : de(rest, 1) + ' h', ''], ['Prallhöhe', de(prall) + ' m<small>NN · ' + (prall - Z.grund >= 0 ? '+' : '') + de(prall - Z.grund) + ' ü. Gr.</small>', ''],
     ];
-    if (window.innerWidth >= 900) z.push(['Schub', de(s.schub * 100) + ' %', ''], ['Höhenruder', de(s.hr * 100) + ' %', ''], ['Seitenruder', de(s.sr * 100) + ' %', '']);
+    if (breit) z.push(['Schub', de(s.schub * 100) + ' %', ''], ['Höhenruder', de(s.hr * 100) + ' %', ''], ['Seitenruder', de(s.sr * 100) + ' %', '']);
     $('#fInst').innerHTML = z.map(([t, v, c]) => `<div><i>${t}</i><b class="${c}">${v}</b></div>`).join('');
     // Schubregler zeigt die Reglerstellung (exponentiell), die Zahl den Schub
     $('#fThrV').textContent = de(s.schub * 100, s.schub < 0.1 && s.schub > 0 ? 1 : 0) + ' %';
@@ -464,10 +468,17 @@
     if (c.width !== W * 2) { c.width = W * 2; c.height = H * 2; }
     const g = c.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, W, H);
     const s = Z.F.s, K = Z.F.K, agl = Math.max(0, s.h - Z.grund), top = Math.max(120, agl * 1.3 + K.D), gy = H - 12, sc = (gy - 6) / top;   // Meter → Pixel (gleich in x und y)
-    g.fillStyle = '#9fbf8a'; g.fillRect(0, gy, W, H - gy);
+    // Gelände (ENTWURF, Wunsch Nutzer 14.10.2026): Höhenprofil aus den lokal geladenen Höhendaten (gelaende.js)
+    // entlang der Bugrichtung, gleicher Maßstab wie das Schiff; rechts = voraus. Meer (≤ 0,5 m NN) blau.
+    const halb = W / 2 / sc, prof = window.LSGelaende ? LSGelaende.profil(Z.lat, Z.lon, s.psi, -halb, halb, 60) : [[-halb, null], [halb, null]];
+    const yG = e => gy - ((e == null ? Z.grund : e) - Z.grund) * sc;
+    g.beginPath(); g.moveTo(0, H); prof.forEach(([d, e]) => g.lineTo(W / 2 + d * sc, yG(e))); g.lineTo(W, H); g.closePath();
+    g.fillStyle = '#9fbf8a'; g.fill(); g.strokeStyle = '#6f8f5c'; g.lineWidth = 1.2; g.stroke(); g.lineWidth = 1;
+    for (let q = 0; q < prof.length - 1; q++) { const [d0, e0] = prof[q], [d1, e1] = prof[q + 1];
+      if (e0 != null && e1 != null && e0 <= 0.5 && e1 <= 0.5) { g.fillStyle = '#7fb0d8'; g.fillRect(W / 2 + d0 * sc, yG(e0), (d1 - d0) * sc + 1, H - yG(e0)); } }
     g.strokeStyle = 'rgba(80,100,120,.25)'; g.fillStyle = '#6b7a8a'; g.font = '10px system-ui';
     const step = top > 600 ? 200 : top > 250 ? 100 : top > 120 ? 50 : 25;
-    for (let hh = step; hh < top; hh += step) { const y = gy - hh * sc; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillText(hh + ' m', 4, y - 2); }
+    for (let hh = step; hh < top; hh += step) { const y = gy - hh * sc; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillText(hh + ' m ü. Gr.', 4, y - 2); }
     // Schiff im Profil: Bild aus dem 3D-Modell (wie die Vorschau), maßstäblich, mit dem Nickwinkel gedreht.
     // Ohne 3D (noch nicht geladen) die einfache Kontur.
     const Lp = K.L * sc, yc = gy - (agl + K.R + (Z.r.gondel.h || 0) + (Z.r.gondel.ga || 0)) * sc, xc = W / 2;
@@ -480,16 +491,22 @@
       g.save(); g.translate(xc, yc); g.rotate(-s.th);
       g.drawImage(sb.im, -sb.mitteX * f, -sb.achseY * f, sb.w * f, sb.h * f);
       g.restore();
-      if (s.amBoden) { g.fillStyle = '#1d2733'; g.fillText('am Boden', xc - 20, gy + 10); }
-      return;
+    } else {
+      g.save(); g.translate(xc, yc); g.rotate(-s.th);
+      g.beginPath(); for (let i = 0; i <= 60; i++) { const x = i / 60, r = K.R * Math.sqrt(Math.max(0, C.y2(Z.r.geo.a, x))) * sc; g.lineTo(Lp / 2 - x * Lp, -r); }
+      for (let i = 60; i >= 0; i--) { const x = i / 60, r = K.R * Math.sqrt(Math.max(0, C.y2(Z.r.geo.a, x))) * sc; g.lineTo(Lp / 2 - x * Lp, r); }
+      g.closePath(); g.fillStyle = '#cfd6de'; g.fill(); g.strokeStyle = '#5b6575'; g.stroke();
+      g.fillStyle = '#d65a3c'; const xt = -Lp * 0.44; g.beginPath(); g.moveTo(xt, 0); g.lineTo(-Lp / 2, -K.R * sc * 0.9); g.lineTo(-Lp * 0.48, 0); g.lineTo(-Lp / 2, K.R * sc * 0.9); g.closePath(); g.fill();
+      const G = Z.r.gondel; if (G.l) { const gx = Lp / 2 - Z.r.trim.gx * Lp; g.fillStyle = '#9aa4b0'; g.fillRect(gx - G.l * sc / 2, K.R * sc * 0.85 + (G.ga || 0) * sc, G.l * sc, Math.max(2, G.h * sc)); }
+      g.restore();
     }
-    g.save(); g.translate(xc, yc); g.rotate(-s.th);
-    g.beginPath(); for (let i = 0; i <= 60; i++) { const x = i / 60, r = K.R * Math.sqrt(Math.max(0, C.y2(Z.r.geo.a, x))) * sc; g.lineTo(Lp / 2 - x * Lp, -r); }
-    for (let i = 60; i >= 0; i--) { const x = i / 60, r = K.R * Math.sqrt(Math.max(0, C.y2(Z.r.geo.a, x))) * sc; g.lineTo(Lp / 2 - x * Lp, r); }
-    g.closePath(); g.fillStyle = '#cfd6de'; g.fill(); g.strokeStyle = '#5b6575'; g.stroke();
-    g.fillStyle = '#d65a3c'; const xt = -Lp * 0.44; g.beginPath(); g.moveTo(xt, 0); g.lineTo(-Lp / 2, -K.R * sc * 0.9); g.lineTo(-Lp * 0.48, 0); g.lineTo(-Lp / 2, K.R * sc * 0.9); g.closePath(); g.fill();
-    const G = Z.r.gondel; if (G.l) { const gx = Lp / 2 - Z.r.trim.gx * Lp; g.fillStyle = '#9aa4b0'; g.fillRect(gx - G.l * sc / 2, K.R * sc * 0.85 + (G.ga || 0) * sc, G.l * sc, Math.max(2, G.h * sc)); }
-    g.restore();
+    // Höhe direkt am Schiff (ENTWURF): über Grund groß, NN klein, mit Strich zum Boden
+    g.strokeStyle = 'rgba(29,39,51,.45)'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(xc, yc + K.R * sc); g.lineTo(xc, gy); g.stroke(); g.setLineDash([]);
+    const t1 = de(agl) + ' m über Grund', t2 = de(s.h) + ' m NN';
+    g.font = 'bold 12px system-ui'; const w1 = g.measureText(t1).width; g.font = '10px system-ui'; const w2 = g.measureText(t2).width;
+    const bw = Math.max(w1, w2) + 12, bx = Math.max(4, xc - Lp * 0.5 - bw - 10), by = Math.max(4, Math.min(gy - 34, yc - 15));   // links neben dem Heck (rechts oben sitzt der Schließen-Knopf)
+    g.fillStyle = 'rgba(255,255,255,.88)'; g.beginPath(); g.roundRect ? g.roundRect(bx, by, bw, 30, 6) : g.rect(bx, by, bw, 30); g.fill();
+    g.fillStyle = '#1d2733'; g.font = 'bold 12px system-ui'; g.fillText(t1, bx + 6, by + 13); g.fillStyle = '#6b7a8a'; g.font = '10px system-ui'; g.fillText(t2, bx + 6, by + 25);
     // Bodenkontakt markieren
     if (s.amBoden) { g.fillStyle = '#1d2733'; g.fillText('am Boden', xc - 20, gy + 10); }
   }
@@ -622,7 +639,7 @@
     box.querySelectorAll('button[data-f]').forEach(b => b.onclick = () => {
       const l2 = fahrtenLaden(), f = l2.find(x => x.id === b.dataset.f); if (!f) return;
       if (b.dataset.a === 'weiter') fortsetzen(f);
-      if (b.dataset.a === 'teilen') berichtTeilen(f.bericht || '', f.code);
+      if (b.dataset.a === 'teilen') berichtTeilen(f.bericht || '', f.code, f.track || (f.zustand && f.zustand.track));
       if (b.dataset.a === 'weg' && confirm('Fahrt „' + f.name + '“ löschen?')) { fahrtenSchreiben(l2.filter(x => x.id !== f.id)); fahrtenListe(); }
     });
   }
@@ -643,16 +660,50 @@
     box.querySelector('#eBe').onclick = () => { box.remove(); beenden(); };
   }
 
+  // Gefahrene Strecke verkleinert (höchstens 400 Punkte) für die Fahrtenliste und das Teilbild
+  function spurKurz() { const t = Z.track.concat([[Z.lat, Z.lon]]), k = Math.ceil(t.length / 400); return t.filter((p, i) => i % k === 0 || i === t.length - 1).map(p => [+p[0].toFixed(5), +p[1].toFixed(5)]); }
+  /* Routenkarte als Bild (ENTWURF): OpenStreetMap-Kacheln im passenden Zoom (Web-Mercator), darüber die Strecke rot,
+     Start grün, Ende als Schiffssymbol. Ohne Netz bleibt ein heller Hintergrund mit Gitter.                        */
+  async function routenKarte(spur, W, H) {
+    const px = (la, lo, z) => { const n = 256 * Math.pow(2, z), s = Math.sin(la * RAD); return [(lo + 180) / 360 * n, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n]; };
+    let la0 = 90, la1 = -90, lo0 = 180, lo1 = -180; for (const [la, lo] of spur) { la0 = Math.min(la0, la); la1 = Math.max(la1, la); lo0 = Math.min(lo0, lo); lo1 = Math.max(lo1, lo); }
+    let z = 16; for (; z > 2; z--) { const a = px(la1, lo0, z), b = px(la0, lo1, z); if (b[0] - a[0] < W - 120 && b[1] - a[1] < H - 120) break; }
+    const m = px((la0 + la1) / 2, (lo0 + lo1) / 2, z), x0 = m[0] - W / 2, y0 = m[1] - H / 2;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+    g.fillStyle = '#e9eef3'; g.fillRect(0, 0, W, H); g.strokeStyle = '#d5dde6';
+    for (let q = 0; q < W; q += 60) { g.beginPath(); g.moveTo(q, 0); g.lineTo(q, H); g.stroke(); } for (let q = 0; q < H; q += 60) { g.beginPath(); g.moveTo(0, q); g.lineTo(W, q); g.stroke(); }
+    const lade = (tx, ty) => new Promise(res => { const im = new Image(); im.crossOrigin = 'anonymous'; const t = setTimeout(() => res(null), 6000);
+      im.onload = () => { clearTimeout(t); res([im, tx, ty]); }; im.onerror = () => { clearTimeout(t); res(null); };
+      const n = Math.pow(2, z); im.src = 'https://tile.openstreetmap.org/' + z + '/' + (((tx % n) + n) % n) + '/' + ty + '.png'; });
+    const jobs = []; for (let tx = Math.floor(x0 / 256); tx <= Math.floor((x0 + W) / 256); tx++) for (let ty = Math.max(0, Math.floor(y0 / 256)); ty <= Math.floor((y0 + H) / 256); ty++) jobs.push(lade(tx, ty));
+    for (const r of await Promise.all(jobs)) if (r) g.drawImage(r[0], r[1] * 256 - x0, r[2] * 256 - y0);
+    const P = ([la, lo]) => { const p = px(la, lo, z); return [p[0] - x0, p[1] - y0]; };
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    for (const [farbe, breite] of [['rgba(255,255,255,.85)', 9], ['#d65a3c', 5]]) { g.strokeStyle = farbe; g.lineWidth = breite; g.beginPath(); spur.forEach((q, i) => { const [x, y] = P(q); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); }
+    const [sx, sy] = P(spur[0]), [ex, ey] = P(spur[spur.length - 1]);
+    g.fillStyle = '#1b8a4c'; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(sx, sy, 11, 0, 2 * Math.PI); g.fill(); g.stroke();
+    g.fillStyle = '#1d2733'; g.beginPath(); g.arc(ex, ey, 11, 0, 2 * Math.PI); g.fill(); g.stroke();
+    g.font = 'bold 24px system-ui'; g.lineWidth = 5; g.strokeStyle = 'rgba(255,255,255,.9)';
+    g.strokeText('Start', sx + 16, sy + 8); g.fillStyle = '#1b8a4c'; g.fillText('Start', sx + 16, sy + 8);
+    g.strokeText('Ende', ex + 16, ey + 8); g.fillStyle = '#1d2733'; g.fillText('Ende', ex + 16, ey + 8);
+    g.font = '16px system-ui'; const at = '© OpenStreetMap-Mitwirkende'; const aw = g.measureText(at).width;
+    g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(W - aw - 16, H - 26, aw + 16, 26); g.fillStyle = '#333'; g.fillText(at, W - aw - 8, H - 8);
+    try { cv.toDataURL(); return cv; } catch (e) { return null; }            // falls Kacheln ohne Freigabe (CORS) geladen wurden
+  }
+
   // ---------- Bericht als Bild teilen: oben das Luftschiff schräg von vorn unten als Schnittansicht (Wunsch Nutzer), darunter der Text in Schreibmaschinenschrift ----------
-  async function berichtTeilen(txt, code) {
+  async function berichtTeilen(txt, code, spur) {
     const d = safeDecode(code); let schiff = null;
     if (d && viewerBereit()) { try { const b = viewer.schraegbild(C.compute(d), 1080, true); /* Schnittansicht: Gerüst, Zellen, Ballonets sichtbar */ schiff = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = b.url; }); } catch (e) { schiff = null; } }
     const zeilen = []; const umbruch = 58;                      // Zeichen je Zeile (Schreibmaschine)
     for (const z of txt.split('\n')) { if (z.length <= umbruch) { zeilen.push(z); continue; } let r = z; while (r.length > umbruch) { zeilen.push(r.slice(0, umbruch)); r = '    ' + r.slice(umbruch); } zeilen.push(r); }
-    const W = 1080, oben = schiff ? 540 : 120, zh = 30, H = oben + 60 + zeilen.length * zh + 60;
+    // Karte der gefahrenen Route (ENTWURF, Wunsch Nutzer 14.10.2026) zwischen Schiff und Text
+    const karte = spur && spur.length > 1 ? await routenKarte(spur, 1080, 600) : null;
+    const W = 1080, kH = karte ? 600 : 0, oben = (schiff ? 540 : 120) + kH, zh = 30, H = oben + 60 + zeilen.length * zh + 60;
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
     const hg = g.createLinearGradient(0, 0, 0, oben); hg.addColorStop(0, '#cfe3f6'); hg.addColorStop(1, '#eef5fc'); g.fillStyle = hg; g.fillRect(0, 0, W, oben);
     if (schiff) g.drawImage(schiff, 0, 0, W, 540);
+    if (karte) g.drawImage(karte, 0, oben - kH);
     g.fillStyle = '#f6f1e3'; g.fillRect(0, oben, W, H - oben);                                    // Papier
     g.fillStyle = '#2a2622'; g.font = '24px "Courier New", Courier, monospace'; g.textBaseline = 'top';
     zeilen.forEach((z, i) => g.fillText(z, 50, oben + 40 + i * zh));
@@ -716,7 +767,7 @@
   function beenden() {
     let txt = bericht(null); Z.beendet = true;
     // in der Fahrtenliste als beendet ablegen (nur der Bericht bleibt)
-    const ablegen = t => { const l = fahrtenLaden().filter(f => f.id !== Z.id); l.unshift({ id: Z.id, name: S.d.name, code: C.encode(S.d), gespeichert: Date.now(), beendet: true, bericht: t }); fahrtenSchreiben(l); };
+    const ablegen = t => { const l = fahrtenLaden().filter(f => f.id !== Z.id); l.unshift({ id: Z.id, name: S.d.name, code: C.encode(S.d), gespeichert: Date.now(), beendet: true, bericht: t, track: spurKurz() }); fahrtenSchreiben(l); };
     ablegen(txt);
     Z.pause = true;
     const box = document.createElement('div'); box.className = 'ende';
@@ -724,7 +775,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn s" id="eTxt">Bericht (.txt)</button><button class="btn s" id="eBild">Teilen (Bild)</button><button class="btn p" id="eAus">Zur Auslegung</button></div></div>`;
     $('#app').appendChild(box);
     box.querySelector('#eTxt').onclick = () => download('Fahrtbericht ' + S.d.name.replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim() + ' ' + new Date().toISOString().slice(0, 10) + '.txt', txt);
-    box.querySelector('#eBild').onclick = () => berichtTeilen(txt, C.encode(S.d));
+    box.querySelector('#eBild').onclick = () => berichtTeilen(txt, C.encode(S.d), spurKurz());
     box.querySelector('#eAus').onclick = () => { stopFahrt(); $('#app').classList.remove('wide'); showErgebnis(); };
     // Ortsnamen nachladen (Start, Ende, Landungen; nacheinander, höchstens eine Abfrage je Sekunde)
     (async () => {

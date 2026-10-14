@@ -50,7 +50,7 @@ with sync_playwright() as p:
         ctx = b.new_context(viewport=vp, device_scale_factor=2, is_mobile=mobile, has_touch=mobile)
         pg = ctx.new_page()
         pg.on('pageerror', lambda e: errs.append(str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text))
-        pg.route('**/tile.openstreetmap.org/**', lambda r: r.fulfill(status=200, content_type='image/png', body=KACHEL))
+        pg.route('**/tile.openstreetmap.org/**', lambda r: r.fulfill(status=200, content_type='image/png', headers={'Access-Control-Allow-Origin': '*'}, body=KACHEL))
         pg.route('**/*open-meteo.com/**', wetter)
         pg.route('**/nominatim.openstreetmap.org/**', lambda r: r.fulfill(status=200, content_type='application/json', body=json.dumps({'address': {'town': 'Friedrichshafen', 'country_code': 'de'}})))
         shot = lambda n: (pg.wait_for_timeout(900), pg.screenshot(path=os.path.join(OUT, n)))

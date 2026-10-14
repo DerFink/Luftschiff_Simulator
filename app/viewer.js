@@ -1,4 +1,8 @@
-// 2026-10-14 13:00 · viewer.js 0.10 (ENTWURF): Seitenbild für die Seitenansicht der Fahrt
+// 2026-10-14 12:05 · viewer.js 0.13: Gondelleinen (Blimp, z. B. C-7) paarweise an der Hülle von 25 % bis 75 % der Länge gespreizt;
+//                    Vorschau zeichnet nur, wenn sichtbar (behebt Hänger nach langer Fahrt)
+// 2026-10-14 17:00 · viewer.js 0.12: Teilbild wahlweise als Schnittansicht (Innenleben sichtbar)
+// 2026-10-14 15:30 · viewer.js 0.11: Cockpitfenster am Gondelbug, Bilder ohne sichtbare Ansicht (Seite, schräg von vorn unten) mit gemeinsamem Renderer
+// 2026-10-14 13:00 · viewer.js 0.10: Seitenbild für die Seitenansicht der Fahrt
 // 2026-10-14 12:00 · viewer.js 0.9: Ruder als Strich auf den Flossen (Klappe: Scharnierlinie, Pendelleitwerk: Drehachse und Wurzelspalt)
 // 2026-10-14 01:30 · viewer.js 0.8: Motorgondeln in Größe nach Leistung und an gewählter Längslage, Gondel an der Trimmlage, Gondelbug steil
 // 2026-10-14 00:30 · viewer.js 0.7: Gondel als Körper nach Seitenriss (Stromlinie/Tropfen/Kasten, Fenster, Abstand mit Seilen), Schnittansicht (Gerüst, Gaszellen, Ballonets, Kiel)
@@ -45,6 +49,7 @@ export function createViewer(host) {
   controls.addEventListener('end', () => { if (autoOn) resumeTimer = setTimeout(() => controls.autoRotate = true, 3000); });
 
   let ship = null;   // aktuelle Gruppe mit allen Teilen
+  let bildRD = null; // gemeinsamer Renderer für Bilder (Auswahl, Seitenansicht, Teilbild)
   let schnitt = false, last = null;   // Schnittansicht, letztes Rechenergebnis (zum Neuzeichnen)
 
   /* ---------- Größe an den Rahmen anpassen ---------- */
@@ -56,7 +61,14 @@ export function createViewer(host) {
   new ResizeObserver(resize).observe(host); resize();
 
   /* ---------- Zeichenschleife ---------- */
-  (function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+  // Nur zeichnen, wenn die Vorschau sichtbar ist: während der Fahrt ist sie ausgeblendet. Würde trotzdem
+  // gezeichnet, stauen sich die Befehle der Grafikkarte über die ganze Fahrt an und werden beim Zurückkehren
+  // auf einmal abgearbeitet (Seite hing danach bis zu 30 s). Spart außerdem Akku.
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (!host.isConnected || host.offsetParent === null || !host.clientWidth) return;   // ausgeblendet
+    controls.update(); renderer.render(scene, camera);
+  })();
 
   /* ---------- Gondelkörper nach Seitenriss ----------
      Lofting aus Querschnitten entlang der Länge (t = 0 Bug … 1 Heck):
@@ -64,7 +76,7 @@ export function createViewer(host) {
        Höhe    h(t): Oberkante gerade an der Hülle, Unterkante flach, Bug rund, Heck läuft nach oben aus
        Querschnitt: Superellipse (eckig mit runden Ecken), dazu ein Fensterband auf beiden Seiten.        */
   function gondelKoerper(len, w, h, form) {
-    const NS = 40, NK = 28, pos = [], idx = [];
+    const NS = 48, NK = 32, pos = [], idx = [], col = [];
     const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     const W = t => form === 'T' ? Math.pow(Math.sin(Math.PI * Math.pow(t, 0.62)), 0.75)            // Tropfen: vorn voll, hinten spitz
                  : form === 'S' ? Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 0.9) / 1.1, 2.6)), 0.5)   // Stromlinie
@@ -72,12 +84,17 @@ export function createViewer(host) {
     const H = t => form === 'E' ? Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 1), 10)), 0.2)
                  : ss(0, 0.035, t) * (1 - 0.8 * ss(0.62, 1, t)) * 0.97 + 0.03;   // Bug fällt steil von der Hülle ab
     const ex = form === 'E' ? 6 : 3.2;  // Superellipse: je größer, desto eckiger
+    // Querschnitte vorn dichter (t = (i/NS)^1,6), damit der Bug mit der Cockpitverglasung fein aufgelöst ist
+    const cG = new THREE.Color(COL.gondel), cF = new THREE.Color(0x2b3a4c);
     for (let i = 0; i <= NS; i++) {
-      const t = i / NS, hw = Math.max(1e-3, w / 2 * W(t)), hh = Math.max(1e-3, h * H(t));
+      const t = Math.pow(i / NS, 1.6), hw = Math.max(1e-3, w / 2 * W(t)), hh = Math.max(1e-3, h * H(t));
       for (let k = 0; k < NK; k++) {
         const a = k / NK * 2 * Math.PI, c = Math.cos(a), sn = Math.sin(a);
         const cy = Math.sign(c) * Math.pow(Math.abs(c), 2 / ex), cz = Math.sign(sn) * Math.pow(Math.abs(sn), 2 / ex);
         pos.push(t * len, -hh / 2 + cy * hh / 2, cz * hw);
+        // Cockpitfenster: Glasband um den Bug (vorderste 5 % der Länge, oberer Teil der Front, nicht ganz oben)
+        const glas = t > 0.002 && t < 0.05 && cy > -0.05 && cy < 0.6;
+        const cc = glas ? cF : cG; col.push(cc.r, cc.g, cc.b);
       }
     }
     for (let i = 0; i < NS; i++) for (let k = 0; k < NK; k++) {
@@ -85,9 +102,10 @@ export function createViewer(host) {
       idx.push(a, c2, b, b, c2, d2);
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx); geo.computeVertexNormals();
     const grp = new THREE.Group();
-    grp.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: COL.gondel, roughness: 0.45, side: THREE.DoubleSide })));
+    grp.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, side: THREE.DoubleSide })));
     // Fensterband: dunkle Felder auf beiden Seiten, im vorderen und mittleren Teil
     const fm = new THREE.MeshStandardMaterial({ color: 0x35475c, roughness: 0.3 });
     const nF = Math.max(2, Math.round(len / (h * 0.9)));
@@ -257,9 +275,13 @@ export function createViewer(host) {
       gm.position.set(xc - len / 2, top - ga, 0); g.add(gm);
       if (ga > 0) {                     // Gondel hängt an Seilen unter der Hülle (Blimp)
         const sm = new THREE.LineBasicMaterial({ color: COL.seil }), nS = (G.ropes && G.ropes.n) || 4;
-        for (let k = 0; k < nS; k++) {
-          const t = nS > 1 ? k / (nS - 1) : 0.5, side = k % 2 ? 1 : -1, xs = xc - len * 0.4 + t * len * 0.8;
-          const xh = xc + (xs - xc) * 1.8, rh = rad(xh / Ls + 0.5);
+        // Leinen paarweise (links/rechts): Anschlag an der Gondel über 90 % ihrer Länge verteilt,
+        // Anschlag an der Hülle von 25 % bis 75 % der Schiffslänge (ab Bug) gespreizt
+        const paare = Math.max(2, Math.round(nS / 2));          // Anzahl Leinenpaare
+        for (let k = 0; k < 2 * paare; k++) {
+          const j = Math.floor(k / 2), t = paare > 1 ? j / (paare - 1) : 0.5, side = k % 2 ? 1 : -1;
+          const xs = xc - len * 0.45 + t * len * 0.9;               // Punkt an der Gondel
+          const xh = X(0.25 + 0.5 * t), rh = rad(0.25 + 0.5 * t);  // Punkt an der Hülle
           g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(xs, top - ga, side * w * 0.4), new THREE.Vector3(xh, -rh * 0.85, side * rh * 0.5)]), sm));
         }
@@ -334,6 +356,35 @@ export function createViewer(host) {
     return g;
   }
 
+  /* Bilder aus dem 3D-Modell ohne sichtbare Ansicht: 'seite' (genau von der Seite, Bug rechts, ohne Perspektive;
+     für Seitenansicht der Fahrt und die Auswahl) oder 'schraeg' (von vorn unten, für den geteilten Fahrtbericht).
+     Ein gemeinsamer Renderer für alle Bilder, damit der Browser nicht zu viele 3D-Kontexte öffnet.            */
+  function bild(result, w, art, mitSchnitt) {
+    w = w || 640;
+    // mitSchnitt: vordere Hälfte der Hülle weg, Innenleben sichtbar (Teilbild des Fahrtberichts)
+    const alt = schnitt; schnitt = !!mitSchnitt; const g = build(result); schnitt = alt;
+    const sc = new THREE.Scene();
+    sc.add(new THREE.HemisphereLight(0xffffff, 0x9fb3c8, 1.7));
+    const s2 = new THREE.DirectionalLight(0xffffff, 1.5); s2.position.set(-3, 10, -8); sc.add(s2); sc.add(g);
+    if (art === 'schraeg') { const s3 = new THREE.DirectionalLight(0xffffff, 0.9); s3.position.set(-8, -6, 6); sc.add(s3); }
+    const box = new THREE.Box3().setFromObject(g), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    let h, cam;
+    if (art === 'schraeg') {
+      h = Math.round(w * 0.5);
+      cam = new THREE.PerspectiveCamera(26, w / h, 0.1, 200);
+      cam.position.set(c.x - 11, c.y - 4.2, c.z + 8.5); cam.lookAt(c.x + 0.6, c.y, c.z);   // Bug (−x) vorn, von unten
+    } else {
+      h = Math.max(8, Math.round(w * size.y / size.x));
+      cam = new THREE.OrthographicCamera(-size.x / 2, size.x / 2, size.y / 2, -size.y / 2, 0.1, 100);
+      cam.position.set(c.x, c.y, -30); cam.lookAt(c.x, c.y, 0);                                // von −z: Bug (x = −5) rechts
+    }
+    if (!bildRD) bildRD = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    bildRD.setSize(w, h, false); bildRD.setClearColor(0x000000, 0); bildRD.render(sc, cam);
+    const url = bildRD.domElement.toDataURL('image/png');
+    g.traverse(o => { o.geometry && o.geometry.dispose(); });
+    return { url, w, h, einheitenBreit: size.x, achseY: box.max.y / size.y * h, mitteX: (box.max.x - 0) / size.x * w };
+  }
+
   return {
     update(result) {
       if (ship) { scene.remove(ship); ship.traverse(o => { o.geometry && o.geometry.dispose(); }); }
@@ -344,22 +395,9 @@ export function createViewer(host) {
     /* Seitenbild für die Seitenansicht der Fahrt (ENTWURF): dasselbe 3D-Modell wie in der Vorschau, genau von der
        Seite (Bug rechts), ohne Perspektive, auf durchsichtigem Grund. Rückgabe: Bild und Lage der Hüllenachse,
        damit die Fahrt-Anzeige es maßstäblich und mit dem Nickwinkel gedreht zeichnen kann.                        */
-    seitenbild(result, w) {
-      w = w || 640;
-      const g = build(result), sc = new THREE.Scene();
-      sc.add(new THREE.HemisphereLight(0xffffff, 0x9fb3c8, 1.7));
-      const s2 = new THREE.DirectionalLight(0xffffff, 1.5); s2.position.set(-3, 10, -8); sc.add(s2); sc.add(g);
-      const box = new THREE.Box3().setFromObject(g), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
-      const h = Math.max(8, Math.round(w * size.y / size.x));
-      const cam = new THREE.OrthographicCamera(-size.x / 2, size.x / 2, size.y / 2, -size.y / 2, 0.1, 100);
-      cam.position.set(c.x, c.y, -30); cam.lookAt(c.x, c.y, 0);              // von −z: Bug (x = −5) erscheint rechts
-      const rd = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-      rd.setSize(w, h, false); rd.render(sc, cam);
-      const url = rd.domElement.toDataURL('image/png');
-      rd.dispose(); g.traverse(o => { o.geometry && o.geometry.dispose(); });
-      // Einheiten: Rumpflänge = 10; Bildpunkte je Einheit = w / size.x; Achse (y = 0) und Mitte (x = 0) im Bild
-      return { url, w, h, einheitenBreit: size.x, achseY: box.max.y / size.y * h, mitteX: (box.max.x - 0) / size.x * w };
-    },
+    seitenbild(result, w) { return bild(result, w, 'seite'); },
+    // Bild schräg von vorn unten (für den geteilten Fahrtbericht)
+    schraegbild(result, w, mitSchnitt) { return bild(result, w, 'schraeg', mitSchnitt); },
     // Schnittansicht ein/aus: vordere Hälfte der Hülle weglassen und das Innere zeigen
     setCutaway(on) { schnitt = !!on; if (last) this.update(last); },
     setAutoRotate(on) { autoOn = !!on; controls.autoRotate = autoOn; clearTimeout(resumeTimer); },

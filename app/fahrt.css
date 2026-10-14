@@ -1,4 +1,5 @@
-/* 2026-10-14 14:30 · fahrt.css 0.4: Anzeige einklappbar mit Flugbegriffen, Vertikalprofil (dunkle Karte links, wie Gasballon), Prallhöhe NN und über Grund
+/* 2026-10-14 16:00 · fahrt.css 0.5: Konsole einklappbar (dunkel), TAS groß neben AGL, Beschleunigungsbalken, Fahrtenliste, Knopf Seitenansicht
+   2026-10-14 14:30 · fahrt.css 0.4: Anzeige einklappbar mit Flugbegriffen, Vertikalprofil (dunkle Karte links, wie Gasballon), Prallhöhe NN und über Grund
    2026-10-14 13:00 · fahrt.css 0.3: Anzeige auf der Karte wie im Gasballon-Simulator, Leiste darunter
    2026-10-14 07:00 · fahrt.css 0.2: Zeitraffer am Handy ohne Beschriftung in einer Zeile
    2026-10-14 06:30 · fahrt.css 0.1: Startdialog und Flugbildschirm (Handy hochkant, Computer breit) nach Entwurf vom 13.10.2026 */
@@ -106,3 +107,42 @@
 .prof.zu .hdl::after{width:4px;height:30px;margin:-15px 0 0 -2px}
 @media (min-width:900px){.prof{width:170px}}
 .cbtn{left:50%;right:auto!important;transform:translateX(-50%)}
+
+/* Anzeige: AGL und TAS groß nebeneinander, grau darunter MSL und GS; links der Beschleunigungsbalken */
+.inst2{width:188px!important;padding-left:18px!important}
+.inst2.klein{width:176px!important}
+.inst2 .zwei{display:flex;gap:8px;justify-content:space-between}
+.inst2 .zwei .big{font-size:26px}
+.inst2 .zwei .lbl small{display:none}
+.inst2 .grau{font-size:11.5px;color:#8a97a5;white-space:nowrap;margin-bottom:2px}
+.inst2 .accbar{position:absolute;left:6px;top:14px;width:7px;height:62px;border-radius:3px;background:#e7ecf2}
+.inst2 .accbar::after{content:'';position:absolute;left:-2px;right:-2px;top:50%;height:1px;background:#8a97a5}
+.inst2 .accbar i{position:absolute;left:0;right:0;border-radius:3px}
+.inst2 .accbar i.up{bottom:50%;background:var(--ok)}.inst2 .accbar i.dn{top:50%;background:var(--bad)}
+.inst2 .vario i{display:none}
+/* Zeitraffer beim Steuern vorübergehend ×10 */
+.zr button.temp{outline:2px dashed var(--acc);outline-offset:-2px}
+/* Knopf: Seitenansicht wieder einblenden */
+.sbtn{position:absolute;z-index:500;left:8px;bottom:44px;background:#fff;border-radius:6px;padding:7px 10px;font-size:12.5px;font-weight:700;color:var(--acc);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+/* Konsole: Griff zum Einklappen (nur Handy) */
+.konsk{flex:none;font-size:11.5px;color:var(--acc);font-weight:700;padding:4px 0;border-top:1px solid var(--line);background:#fbfcfd}
+@media (min-width:900px){.konsk{display:none}}
+@media (max-width:899px){
+  .fz.konsklein>.inst,.fz.konsklein>.apsrow{display:none}
+  .fz.konsklein .ctl{background:#1d2733;grid-template-columns:44px 1fr 88px;gap:8px;padding:8px 10px}
+  .fz.konsklein .thr{height:88px}.fz.konsklein .thr b{color:#eef3fa;font-size:11px}.fz.konsklein .thr i{color:#9aabc4;font-size:10px}
+  .fz.konsklein .thr .rail{width:26px;background:#2c3a4c}
+  .fz.konsklein .fbtns{grid-template-columns:1fr 1fr;gap:5px}
+  .fz.konsklein .fbtns button{background:#2c3a4c;color:#eef3fa;padding:6px 3px;font-size:12px}
+  .fz.konsklein .fbtns button.gas{background:#4a3524;color:#ffc58a}
+  .fz.konsklein .fbtns button small{display:none}
+  .fz.konsklein .fbtns #fTu,.fz.konsklein .fbtns #fTd{font-size:10.5px;padding:3px 2px;font-weight:600}
+  .fz.konsklein .joy{width:88px;height:88px;background:radial-gradient(circle,#34455a 0,#26323f 70%);border-color:#3a4a5c}
+  .fz.konsklein .joy .stick{width:34px;height:34px;left:27px;top:27px}
+  .fz.konsklein .joy .l{color:#9aabc4;font-size:9px}
+  .fz.konsklein .konsk{background:#1d2733;color:#9fdcff;border-top-color:#2c3a4c}
+}
+/* Fahrtenliste im Startdialog */
+.fl{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.fl>div{flex:1;min-width:0}.fl b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fl span{font-size:11.5px;color:var(--mut)}
+.fl .btn{flex:none;padding:7px 9px;font-size:12px}

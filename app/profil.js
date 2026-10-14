@@ -1,3 +1,4 @@
+// 2026-10-14 16:00 · profil.js 0.2: Boden dunkelgrau schraffiert mit „Ground“
 // 2026-10-14 14:00 · profil.js 0.1: Vertikalprofil für die Fahrt (nach dem Gasballon-Simulator): Schichtung, Temperatur, Taupunkt, Wolken, Regen, Wind, Prallhöhe, Schiff
 /* =================================================================================================
    VERTIKALPROFIL
@@ -75,7 +76,15 @@
       c.font = num; c.fillStyle = '#eef3fa'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(Math.round(sp * 1.943844), xN, y(z));
     }
     // Gelände
-    if (o.grund > zb + 3) { c.fillStyle = 'rgba(169,132,63,.45)'; c.fillRect(xS + 5, y(Math.min(o.grund, top)), W - xS - 9, y(zb) - y(Math.min(o.grund, top))); }
+    // Boden: dunkelgrau, schräg schraffiert, beschriftet „Ground“ (Wunsch Nutzer)
+    if (o.grund > zb + 1) {
+      const yt = y(Math.min(o.grund, top)), yb0 = y(zb), x0g = xS + 5, wg = W - xS - 9;
+      c.save(); c.fillStyle = '#3b4250'; c.fillRect(x0g, yt, wg, yb0 - yt);
+      c.beginPath(); c.rect(x0g, yt, wg, yb0 - yt); c.clip(); c.strokeStyle = 'rgba(200,208,220,.35)'; c.lineWidth = 1;
+      for (let xx = x0g - (yb0 - yt); xx < x0g + wg; xx += 6) { c.beginPath(); c.moveTo(xx, yb0); c.lineTo(xx + (yb0 - yt), yt); c.stroke(); }
+      c.restore(); c.strokeStyle = '#9aabc4'; c.lineWidth = 1; c.beginPath(); c.moveTo(x0g, yt + .5); c.lineTo(x0g + wg, yt + .5); c.stroke();
+      if (yb0 - yt > 11) { c.fillStyle = '#eef3fa'; c.font = small; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Ground', x0g + wg / 2, (yt + yb0) / 2); }
+    }
     // Prallhöhe, Sollhöhe, Schiff
     // Linien mit Beschriftung; „Soll“ steht rechts und unter der Linie, damit es nicht mit „Prall“ zusammenfällt
     const linie = (z, farbe, text, strich, rechts) => { if (z == null || z < zb || z > top) return; const Y = y(z); c.save(); if (strich) c.setLineDash([5, 3]); c.strokeStyle = farbe; c.lineWidth = 1.6; c.beginPath(); c.moveTo(xL, Y); c.lineTo(W, Y); c.stroke(); c.setLineDash([]); c.fillStyle = farbe; c.font = num;

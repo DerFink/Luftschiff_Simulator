@@ -1,3 +1,5 @@
+// 2026-10-14 16:00 · fahrt.js 0.6: Fahrtenliste (mehrere Fahrten, löschen, Bericht als Bild teilen), Beenden jederzeit, Schub exponentiell, Zeitraffer ×1 korrigiert,
+//                    beim Steuern ×10, Konsole am Handy einklappbar, TAS groß, Beschleunigungsbalken, Seitenansicht-Knopf, Höhensteuerer/Fahrt halten ausgeblendet
 // 2026-10-14 14:30 · fahrt.js 0.5: Anzeige einklappbar (Höhe, Vario, TAS, Beschleunigung), Flugbegriffe (TAS, GS, HDG, TRK), Spur durchgehend und Vorschau 1 h gestrichelt,
 //                    Vertikalprofil ein-/ausklappbar (wie Gasballon), Fahrtbericht mit Ortsnamen und CO₂ samt Vergleich A320 Berlin–Hamburg
 // 2026-10-14 13:00 · fahrt.js 0.4: Anzeige wie Gasballon (Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken) auf der Karte,
@@ -43,7 +45,7 @@
     $('#app').innerHTML = `<div class="top"><button class="lnk" id="bBack">‹ Ergebnis</button><span class="t">Fahrt vorbereiten</span><span></span></div>
       <div class="scroll"><div class="vb">
         <div class="q">${escapeHtml(S.d.name)}</div>
-        ${gespeicherteFahrt() ? `<div class="sug" style="display:flex;gap:10px;align-items:center"><span style="flex:1">Es gibt eine gespeicherte Fahrt mit diesem Luftschiff (${new Date(gespeicherteFahrt().gespeichert).toLocaleString('de-DE')}).</span><button class="btn p" id="bWeiter" style="flex:none;padding:8px 12px">Fortsetzen</button></div>` : ''}
+        <div id="vbListe"></div>
         <div class="lab">Startort</div>
         ${wahl('sOrt', [['fn', 'Friedrichshafen'], ['gps', 'Mein Standort'], ['karte', 'Auf der Karte']], VB.ort)}
         <div class="vbmap" id="vbMap"></div>
@@ -55,7 +57,7 @@
       </div></div>
       <div class="btns"><button class="btn s" id="bZur">Zurück</button><button class="btn p" id="bLos">Losfahren</button></div>`;
     $('#bBack').onclick = $('#bZur').onclick = () => showErgebnis();
-    if ($('#bWeiter')) $('#bWeiter').onclick = () => window.fahrtFortsetzen();
+    fahrtenListe();
     // Datum: Vorgabe 10:00 Uhr heute bzw. zuletzt gewählt
     const dIn = $('#vbDatum'), d0 = VB.datum ? new Date(VB.datum) : new Date();
     if (!VB.datum) d0.setHours(10, 0, 0, 0);
@@ -118,10 +120,12 @@
       seiteAn: true,                                 // vom Nutzer geschaltet; beim Landeanflug (unter 100 m, sinkend) wieder eingeblendet
       stat: { weg: 0, hMax: elev, vMax: 0, landungen: [] },   // für den Fahrtbericht
       klein: (() => { try { return localStorage.getItem('ls_dash_klein') === '1'; } catch (e) { return false; } })(),   // Anzeige eingeklappt
+      konsKlein: (() => { try { return localStorage.getItem('ls_kons_klein') === '1'; } catch (e) { return false; } })(),   // Konsole am Handy eingeklappt
+      id: 'f' + Date.now(), zAkku: 0, eingabeT: 0,
       follow: true, track: [[VB.lat, VB.lon]], tTrack: 0, hs: true,     // Höhensteuerer an
       stoss: rund(0.0025 * lift), laden: false, ende: null, letzteLandung: null, uiT: 0, raf: 0, last: 0,
     };
-    if (alt) Object.assign(Z, { lat: alt.lat, lon: alt.lon, lx: alt.lx, ly: alt.ly, track: alt.track, zr: alt.zr, hs: alt.hs, seiteAn: alt.seiteAn, stat: alt.stat, letzteLandung: F.s.landung });
+    if (alt) Object.assign(Z, { id: alt.id || Z.id, lat: alt.lat, lon: alt.lon, lx: alt.lx, ly: alt.ly, track: alt.track, zr: alt.zr, hs: alt.hs, seiteAn: alt.seiteAn, stat: alt.stat, letzteLandung: F.s.landung });
     else if (F.s.zuSchwer > 0) setTimeout(() => toast('Zu schwer: Es fehlen ' + fm(F.s.zuSchwer) + ' – Auslegung prüfen'), 400);
     aufbauen();
     Z.last = performance.now(); Z.raf = requestAnimationFrame(loop);
@@ -130,16 +134,19 @@
   function rund(x) { const p = Math.pow(10, Math.floor(Math.log10(Math.max(x, 1e-4)))), f = x / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
   function stopFahrt() { if (Z) { cancelAnimationFrame(Z.raf); window.removeEventListener('keydown', Z.kd); window.removeEventListener('keyup', Z.ku); window.removeEventListener('resize', Z.rs); window.removeEventListener('pagehide', Z.ph); document.removeEventListener('visibilitychange', Z.ph); Z = null; } }
   window.stopFahrt = stopFahrt;
+  window.LSFahrtZustand = () => Z;   // nur für die Prüfungen (werkstatt/tests)
 
   // ---------- Aufbau der Oberfläche (einmal je Fahrt) ----------
   function aufbauen() {
     const app = $('#app'); app.classList.add('wide');
     const zrB = ZR.map((z, i) => `<button data-z="${z}"${z === Z.zr ? ' class="on"' : ''}>×${z}</button>`).join('') + `<button data-z="${BOOST}" title="24 h in etwa 3 s">⚡</button>`;
-    const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Knüppel vor = sinken, zurück = steigen (Höhensteuerer hält die Nicklage)'], ['W S', 'Schub + / −  ·  X Schub aus'],
-      ['B', 'Ballast: tippen = ' + fm(Z.stoss) + ', halten = laufend'], ['G', 'Gas ablassen (solange gedrückt)'], ['Q E', 'Trimm Bug hoch / tief'],
-      ['H K F P', 'Höhe · Kurs · Fahrt · Position halten'], ['N', 'Höhensteuerer ein/aus (aus: Pfeile direkt aufs Höhenruder)'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus']];
+    // Höhensteuerer und „Fahrt halten“ sind vorerst ausgeblendet (Wunsch Nutzer 14.10.2026); der Höhensteuerer arbeitet weiter
+    const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Knüppel vor = sinken, zurück = steigen'], ['W S', 'Schub + / − (unten fein)  ·  X Schub aus'],
+      ['B', 'Ballast: tippen = ' + fm(Z.stoss) + ', halten = laufend'], ['G', 'Gas ablassen (solange gedrückt)'], ['Q E', 'Trimm Heck / Trimm Bug'],
+      ['H K P', 'Höhe · Kurs · Position halten'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus'],
+      ['', 'Beim Steuern, Gas oder Ballast läuft ein Zeitraffer über ×10 kurz mit ×10']];
     app.innerHTML = `<div class="fz">
-      <div class="top"><button class="lnk" id="fBack">‹ Auslegung</button><b class="t">${escapeHtml(S.d.name)}</b><span id="fUhr" style="white-space:nowrap"></span></div>
+      <div class="top"><button class="lnk" id="fBack">■ Ende</button><b class="t">${escapeHtml(S.d.name)}</b><span id="fUhr" style="white-space:nowrap"></span></div>
       <div class="zr"><span class="zrl">Zeitraffer</span>${zrB}<button data-z="0" id="fPause">❚❚</button></div>
       <div class="fmap"><div class="lmap" id="fMap"></div>
         <div class="badge" id="fWind" style="display:none"></div>
@@ -148,23 +155,25 @@
         <div class="prof${profilAuf() ? '' : ' zu'}" id="fProf"><button class="hdl" id="fProfH" title="Vertikalprofil ein- oder ausklappen"></button><canvas id="fProfC"></canvas></div>
         <div class="badge" id="fQuelle" style="left:8px;bottom:8px;max-width:70%"></div>
         <button class="cbtn" id="fFollow" style="display:none">⌖ Zum Schiff</button>
+        <button class="sbtn" id="fSideAn" style="display:none">▭ Seitenansicht</button>
       </div>
       <div class="fside" id="fSide"><canvas id="fSideC"></canvas><button class="x" id="fSideX">Seitenansicht ✕</button></div>
       <div class="inst" id="fInst"></div>
+      <button class="konsk" id="fKons" title="Konsole ein- oder ausklappen"></button>
       <div class="ctl" id="fCtl">
         <div class="thr" id="fThr"><b id="fThrV">0 %</b><div class="rail"><div class="fill"></div><div class="knob"></div></div><i>Schub</i></div>
         <div class="fbtns">
           <button id="fBal">Ballast<small>tippen: ${fm(Z.stoss)} · halten: laufend</small></button>
           <button class="gas" id="fGas">Gas ablassen<small>halten</small></button>
-          <button id="fTu">Trimm ▲<small>Bug hoch</small></button>
-          <button id="fTd">Trimm ▼<small>Bug tief</small></button>
+          <button id="fTu">Trimm Heck<small>Bug hebt sich</small></button>
+          <button id="fTd">Trimm Bug<small>Bug senkt sich</small></button>
         </div>
         <div class="joy" id="fJoy"><div class="stick"></div><span class="l" style="left:50%;top:1px;transform:translateX(-50%)">sinken</span><span class="l" style="left:50%;bottom:1px;transform:translateX(-50%)">steigen</span><span class="l" style="left:3px;top:50%;transform:translateY(-120%)">links</span><span class="l" style="right:3px;top:50%;transform:translateY(-120%)">rechts</span></div>
       </div>
       <div class="apsrow" id="fApRow">
-        <button data-a="hs">Höhensteuerer</button><button data-a="hoehe">Höhe halten</button><button data-a="kurs">Kurs halten</button><button data-a="fahrt">Fahrt halten</button><button data-a="pos">Position halten</button>
+        <button data-a="hoehe">Höhe halten</button><button data-a="kurs">Kurs halten</button><button data-a="pos">Position halten</button>
       </div>
-      <div class="rp" id="fRp"><div class="sec">Tastatur</div><div class="keys">${tasten.map(([k, t]) => `<span>${k.split(' ').map(x => x === '…' || x === '·' ? x : '<kbd>' + x + '</kbd>').join(' ')}</span><span>${t}</span>`).join('')}</div></div>
+      <div class="rp" id="fRp"><div class="sec">Tastatur</div><div class="keys">${tasten.map(([k, t]) => `<span>${k ? k.split(' ').map(x => x === '…' || x === '·' ? x : '<kbd>' + x + '</kbd>').join(' ') : ''}</span><span>${t}</span>`).join('')}</div></div>
     </div>`;
     anordnen(); Z.rs = anordnen; window.addEventListener('resize', Z.rs);
     // Karte
@@ -181,7 +190,10 @@
     $('#fFollow').onclick = () => { Z.follow = true; $('#fFollow').style.display = 'none'; };
     $('#fInst2').onclick = () => { Z.klein = !Z.klein; try { localStorage.setItem('ls_dash_klein', Z.klein ? '1' : '0'); } catch (e) {} anzeigen(); };
     $('#fProfH').onclick = () => { const zu = !$('#fProf').classList.toggle('zu'); try { localStorage.setItem('ls_profil', zu ? '1' : '0'); } catch (e) {} Z.profT = 0; };
-    $('#fBack').onclick = () => { speichern(); stopFahrt(); $('#app').classList.remove('wide'); showErgebnis(); toast('Fahrt gespeichert – „Fliegen“ setzt sie fort'); };
+    $('#fBack').onclick = endeFrage;
+    $('#fSideAn').onclick = () => { Z.seiteAn = true; };
+    $('#fKons').onclick = () => { Z.konsKlein = !Z.konsKlein; try { localStorage.setItem('ls_kons_klein', Z.konsKlein ? '1' : '0'); } catch (e) {} konsole(); };
+    konsole();
     Z.ph = () => speichern(); window.addEventListener('pagehide', Z.ph); document.addEventListener('visibilitychange', Z.ph);
     document.querySelectorAll('.zr button').forEach(b => b.onclick = () => { const z = +b.dataset.z; if (z === 0) Z.pause = !Z.pause; else { Z.zr = z; Z.pause = false; } zrAnzeigen(); });
     $('#fSideX').onclick = () => { Z.seiteAn = !seiteSichtbar(); };
@@ -233,12 +245,12 @@
       if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; if (zuTasten[e.key]) e.preventDefault();
       const neu = !Z.keys[k]; Z.keys[k] = true;
-      if (k === 'w' || k === 's') { manuellSchub(); s.schub = Math.max(0, Math.min(1, s.schub + (k === 'w' ? 0.05 : -0.05))); }
+      if (k === 'w' || k === 's') { manuellSchub(); s.schub = schubAus(Math.max(0, Math.min(1, schubPos(s.schub) + (k === 'w' ? 0.04 : -0.04)))); }
       if (k === 'x') { manuellSchub(); s.schub = 0; }
       if (!neu) return;                                                       // ab hier nur einmal je Tastendruck
       if (k === 'b') { ballastStoss(); Z.bT = performance.now(); }
       if (k === 'q') s.trimm = Math.min(1, s.trimm + 0.25); if (k === 'e') s.trimm = Math.max(-1, s.trimm - 0.25);
-      if (k === 'h') assist('hoehe'); if (k === 'k') assist('kurs'); if (k === 'f') assist('fahrt'); if (k === 'p') assist('pos'); if (k === 'n') assist('hs');
+      if (k === 'h') assist('hoehe'); if (k === 'k') assist('kurs'); if (k === 'p') assist('pos');
       if (k === 'v') Z.seiteAn = !seiteSichtbar();
       if (k === ' ') { Z.pause = !Z.pause; zrAnzeigen(); }
       if (k >= '1' && k <= '7') { Z.zr = ZR[+k - 1]; Z.pause = false; zrAnzeigen(); }
@@ -248,7 +260,8 @@
     window.addEventListener('keydown', Z.kd); window.addEventListener('keyup', Z.ku);
     // Schubregler: ziehen setzt den Schub (0 unten, 100 % oben)
     const rail = $('#fThr .rail');
-    const setz = e => { const b = rail.getBoundingClientRect(); manuellSchub(); s.schub = Math.max(0, Math.min(1, 1 - (e.clientY - b.top) / b.height)); };
+    // Reglerstellung p (0 unten … 1 oben) ⇒ Schub exponentiell: die untere Hälfte deckt nur 0 … 10 % ab
+    const setz = e => { const b = rail.getBoundingClientRect(); manuellSchub(); s.schub = schubAus(Math.max(0, Math.min(1, 1 - (e.clientY - b.top) / b.height))); };
     rail.onpointerdown = e => { rail.setPointerCapture(e.pointerId); setz(e); rail.onpointermove = setz; };
     rail.onpointerup = rail.onpointercancel = () => { rail.onpointermove = null; };
     // Knöpfe zum Halten: Ballast (tippen = Stoß, halten = laufend), Gas, Trimm
@@ -258,7 +271,7 @@
     $('#fTd').onclick = () => { s.trimm = Math.max(-1, s.trimm - 0.25); };
     // Steuerknüppel: x = Seitenruder, y = Nicklage (bzw. Höhenruder ohne Höhensteuerer); loslassen ⇒ Mitte
     const joy = $('#fJoy'), st = joy.querySelector('.stick');
-    const jm = e => { const b = joy.getBoundingClientRect(), R = b.width / 2 - 22; let x = (e.clientX - b.left - b.width / 2) / R, y = (e.clientY - b.top - b.height / 2) / R; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } Z.joy = { x, y: -y, an: true }; st.style.transform = `translate(${x * R}px,${y * R}px)`; };
+    const jm = e => { const b = joy.getBoundingClientRect(), R = (b.width - st.offsetWidth) / 2; let x = (e.clientX - b.left - b.width / 2) / R, y = (e.clientY - b.top - b.height / 2) / R; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } Z.joy = { x, y: -y, an: true }; st.style.transform = `translate(${x * R}px,${y * R}px)`; };
     joy.onpointerdown = e => { joy.setPointerCapture(e.pointerId); jm(e); joy.onpointermove = jm; };
     joy.onpointerup = joy.onpointercancel = () => { joy.onpointermove = null; Z.joy = { x: 0, y: 0, an: false }; st.style.transform = ''; };
     document.querySelectorAll('#fApRow button').forEach(b => b.onclick = () => assist(b.dataset.a));
@@ -288,7 +301,7 @@
     const t = []; if (on.hoehe) t.push('Höhe ' + de(ap.hoehe) + ' m'); if (on.kurs) t.push('Kurs über Grund ' + String(Math.round(ap.kurs / RAD + 360) % 360).padStart(3, '0') + '°'); if (on.fahrt) t.push('Fahrt ' + de(ap.fahrt * 3.6) + ' km/h'); if (on.pos) t.push('Position halten');
     $('#fAps').innerHTML = t.map(x => `<div class="badge">${x}</div>`).join('');
   }
-  function zrAnzeigen() { document.querySelectorAll('.zr button').forEach(b => b.classList.toggle('on', +b.dataset.z === Z.zr && !Z.pause || (b.dataset.z === '0' && Z.pause))); }
+  function zrAnzeigen() { document.querySelectorAll('.zr button').forEach(b => { b.classList.toggle('on', +b.dataset.z === Z.zr && !Z.pause || (b.dataset.z === '0' && Z.pause)); b.classList.toggle('temp', !!Z.zrTemp && +b.dataset.z === 10); }); }
 
   // ---------- Eingaben je Bild auf das Schiff übertragen ----------
   function eingaben() {
@@ -301,7 +314,7 @@
     // Knüppel vor (↑) = Bug tief = sinken, zurück (↓) = Bug hoch = steigen (wie im Flugzeug)
     const ny = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0) - (j.an ? j.y : 0);
     // Rückmeldung: Tasten bewegen den Knüppel und markieren die Knöpfe
-    if (!j.an) { const st = document.querySelector('#fJoy .stick'), R = 38, kx = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), ky = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0);
+    if (!j.an) { const jb = document.getElementById('fJoy'), st = document.querySelector('#fJoy .stick'), R = jb ? (jb.clientWidth - st.offsetWidth) / 2 - 2 : 38, kx = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), ky = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0);
       if (st) st.style.transform = (kx || ky) ? `translate(${kx * R}px,${ky * R}px)` : ''; }
     for (const [id, an] of [['fBal', k.b], ['fGas', k.g], ['fTu', k.q], ['fTd', k.e]]) { const b = document.getElementById(id); if (b && !b.dataset.halten) b.classList.toggle('akt', !!an); }
     if (Math.abs(ny) > 0.05 && ap.hoehe != null) { ap.hoehe = null; apAnzeigen(); }
@@ -310,7 +323,11 @@
     // Taste B: tippen = ein Stoß (beim Drücken), länger als 0,35 s halten = laufend 2 Stöße je Sekunde
     if (k.b && performance.now() - (Z.bT || 0) > 350) { s.ballastAb = 2 * Z.stoss; Z.keysB = true; }
     else if (!k.b && Z.keysB) { s.ballastAb = 0; Z.keysB = false; }
+    // Steuert man (Ruder, Gas, Ballast), läuft ein Zeitraffer über ×10 so lange mit ×10, bis 1 s nach dem Loslassen
+    if (Math.abs(sr) > 0.05 || Math.abs(ny) > 0.05 || s.ventil > 0 || s.ballastAb > 0 || Z.joy.an) Z.eingabeT = performance.now();
   }
+  // wirksamer Zeitraffer (beim Steuern höchstens ×10)
+  function zrWirk() { return Z.zr > 10 && performance.now() - Z.eingabeT < 1000 ? 10 : Z.zr; }
 
   // ---------- Hauptschleife: Zeitraffer, feste Schritte, Anzeige ----------
   function loop(now) {
@@ -320,8 +337,11 @@
     const F = Z.F, s = F.s, W = Z.W;
     if (!Z.pause) {
       // Schrittweite 0,1 s; beim Boost 0,5 s (geprüft: bis 1 s stabil), höchstens 3000 Schritte je Bild
-      const dt = Z.zr >= 5000 ? 0.5 : 0.1;
-      let n = Math.round(dtR * Z.zr / dt); if (n > 3000) n = 3000;
+      // Restzeit wird gesammelt: bei ×1 und 60 Bildern je Sekunde kommt nur alle 6 Bilder ein 0,1-s-Schritt zusammen
+      const zr = zrWirk(), dt = zr >= 5000 ? 0.5 : 0.1;
+      Z.zAkku = Math.min(Z.zAkku + dtR * zr, 3000 * dt);
+      const n = Math.floor(Z.zAkku / dt); Z.zAkku -= n * dt;
+      if ((zr !== Z.zr) !== !!Z.zrTemp) { Z.zrTemp = zr !== Z.zr; zrAnzeigen(); }
       for (let i = 0; i < n && !Z.pause; i++) {
         const tMs = W.startMs + s.t * 1000, w = LSWetter.bei(W.model, tMs, s.h);
         const x0 = s.x, y0 = s.y;
@@ -346,7 +366,12 @@
       else if (Z.poly) Z.poly.addLatLng([Z.lat, Z.lon]);
     }
     nachladen();
-    if (Z.map) { Z.ship.setLatLng([Z.lat, Z.lon]); const sv = document.getElementById('fShipSvg'); if (sv) sv.style.transform = `rotate(${s.psi / RAD}deg)`; if (Z.follow) folgen(dtR); }
+    if (Z.map) { Z.ship.setLatLng([Z.lat, Z.lon]); const sv = document.getElementById('fShipSvg'); if (sv) sv.style.transform = `rotate(${s.psi / RAD}deg)`; if (Z.follow) {
+      // Bei hohem Zeitraffer (ab ×500) springt die Karte höchstens einmal je Sekunde nach; sonst würde sie jedes Bild
+      // neue Kacheln laden (die Bildrate bricht ein). Darunter folgt sie gedämpft.
+      if (zrWirk() >= 500) { if (now - (Z.panT || 0) > 1000) { Z.panT = now; Z.map.panTo([Z.lat, Z.lon], { animate: false }); } }
+      else folgen(dtR);
+    } }
     if (now - Z.uiT > 200) { Z.uiT = now; anzeigen(); }
     if (now - (Z.vorT || 0) > 1000) { Z.vorT = now; vorschau(); }
     if (now - (Z.profT || 0) > 700) { Z.profT = now; profil(); }
@@ -387,17 +412,16 @@
     const frei = a.frei || 0, prall = C.hOfSigma(Math.min(1, s.Vn / K.Vgas));
     const kurs = String(Math.round(s.psi / RAD + 360) % 360).padStart(3, '0') + '°';
     const kgr = Math.atan2(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n), kog = vg > 1 ? String(Math.round(kgr / RAD + 360) % 360).padStart(3, '0') + '°' : '–';
-    // Anzeige auf der Karte (wie im Gasballon-Simulator): Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken.
-    // Beschleunigungsbalken: Wurzelskala (kleine Werte bleiben sichtbar), voll bei 0,3 m/s², grün nach oben, rot nach unten.
-    // Eingeklappt (antippen): nur Höhe, Vario mit Beschleunigung und TAS.
+    // Anzeige auf der Karte (wie im Gasballon-Simulator): oben groß AGL und TAS, grau darunter MSL und GS; links der
+    // Beschleunigungsbalken (Wurzelskala, voll bei ±0,3 m/s², grün nach oben, rot nach unten). Eingeklappt: AGL, TAS, VS, Balken.
     const agl = s.h - Z.elev, acc = s.amBoden ? 0 : (s.acc || 0);
-    const accH = Math.abs(acc) < 0.002 ? 0 : Math.max(2, Math.round(26 * Math.min(1, Math.sqrt(Math.abs(acc) / 0.3))));
+    const accH = Math.abs(acc) < 0.002 ? 0 : Math.max(2, Math.round(28 * Math.min(1, Math.sqrt(Math.abs(acc) / 0.3))));
     const zeile = (kurz, lang, wert, cls) => `<div class="kv"><span>${kurz}<small>${lang}</small></span><b class="${cls || ''}">${wert}</b></div>`;
-    let h2 = `<div class="lbl">AGL <small>über Grund</small></div><div class="big">${de(agl)}<small>m</small></div>`;
-    if (!Z.klein) h2 += `<div class="nn">MSL ${de(s.h)} m <small>über NN</small></div>`;
-    h2 += `<div class="kv vario"><i class="${acc >= 0 ? 'up' : 'dn'}" style="height:${accH}px"></i><span>VS<small>Vario</small></span><b class="${s.w > 0.2 ? 'up' : s.w < -0.2 ? 'dn' : ''}">${(s.w >= 0 ? '+' : '−') + de(Math.abs(s.w), 1)}<small>m/s</small></b></div>`;
-    h2 += zeile('TAS', 'True Airspeed', de(s.U * 3.6) + '<small>km/h</small>');
-    if (!Z.klein) h2 += zeile('GS', 'Ground Speed', de(vg * 3.6) + '<small>km/h</small>') + zeile('HDG', 'Heading', kurs) + zeile('TRK', 'Track', kog)
+    let h2 = `<div class="accbar" title="Vertikalbeschleunigung"><i class="${acc >= 0 ? 'up' : 'dn'}" style="height:${accH}px"></i></div>
+      <div class="zwei"><div><div class="lbl">AGL<small>über Grund</small></div><div class="big">${de(agl)}<small>m</small></div>${Z.klein ? '' : `<div class="grau">MSL ${de(s.h)} m</div>`}</div>
+      <div><div class="lbl">TAS<small>True Airspeed</small></div><div class="big">${de(s.U * 3.6)}<small>km/h</small></div>${Z.klein ? '' : `<div class="grau">GS ${de(vg * 3.6)} km/h</div>`}</div></div>`;
+    h2 += `<div class="kv vario"><span>VS<small>Vario</small></span><b class="${s.w > 0.2 ? 'up' : s.w < -0.2 ? 'dn' : ''}">${(s.w >= 0 ? '+' : '−') + de(Math.abs(s.w), 1)}<small>m/s</small></b></div>`;
+    if (!Z.klein) h2 += zeile('HDG', 'Heading', kurs) + zeile('TRK', 'Track', kog)
       + zeile('PITCH', 'Nicken', (s.th >= 0 ? '+' : '−') + de(Math.abs(s.th / RAD), 1) + '°') + zeile('WIND', 'aus ' + String(Math.round(wr.d)).padStart(3, '0') + '°', de(wr.sp * 3.6) + '<small>km/h</small>');
     h2 += `<div class="tip">${Z.klein ? '▾ mehr' : '▴ weniger'}</div>`;
     $('#fInst2').innerHTML = h2; $('#fInst2').classList.toggle('klein', !!Z.klein);
@@ -409,8 +433,10 @@
     ];
     if (window.innerWidth >= 900) z.push(['Schub', de(s.schub * 100) + ' %', ''], ['Höhenruder', de(s.hr * 100) + ' %', ''], ['Seitenruder', de(s.sr * 100) + ' %', '']);
     $('#fInst').innerHTML = z.map(([t, v, c]) => `<div><i>${t}</i><b class="${c}">${v}</b></div>`).join('');
-    $('#fThrV').textContent = de(s.schub * 100) + ' %';
-    const fill = $('#fThr .fill'), kn = $('#fThr .knob'); fill.style.height = s.schub * 100 + '%'; kn.style.bottom = `calc(${s.schub * 100}% - 6px)`;
+    // Schubregler zeigt die Reglerstellung (exponentiell), die Zahl den Schub
+    $('#fThrV').textContent = de(s.schub * 100, s.schub < 0.1 && s.schub > 0 ? 1 : 0) + ' %';
+    const pp = schubPos(s.schub), fill = $('#fThr .fill'), kn = $('#fThr .knob'); fill.style.height = pp * 100 + '%'; kn.style.bottom = `calc(${pp * 100}% - 6px)`;
+    $('#fSideAn').style.display = seiteSichtbar() ? 'none' : 'block';
     if (s.ap.hoehe != null || s.ap.kurs != null || s.ap.fahrt != null || s.ap.pos) apAnzeigen();
   }
 
@@ -521,26 +547,105 @@
   }
 
   // ---------- Fahrt speichern (beim Verlassen) und fortsetzen ----------
-  function speichern() {
-    if (!Z || Z.beendet) return;
+  /* Gespeicherte Fahrten: Liste im Browser (localStorage 'ls_fahrten'). Laufende Fahrten mit ganzem Zustand und Wetter
+     (rund 50 kB), höchstens MAXF; beendete Fahrten nur mit Bericht (rund 2 kB). Alte Einzel-Fahrt ('ls_fahrt') wird übernommen. */
+  const MAXF = 10;
+  function fahrtenLaden() {
     try {
-      const s = Object.assign({}, Z.F.s); delete s.anz;
-      const tr = Z.track.length > 1500 ? Z.track.filter((p, i) => i % Math.ceil(Z.track.length / 1500) === 0) : Z.track;
-      localStorage.setItem('ls_fahrt', JSON.stringify({ code: C.encode(S.d), s, lat: Z.lat, lon: Z.lon, lx: Z.lx, ly: Z.ly, elev: Z.elev, track: tr,
-        zr: Z.zr === BOOST ? 100 : Z.zr, hs: Z.hs, seiteAn: Z.seiteAn, stat: Z.stat, VB: Object.assign({}, VB), W: Z.W, gespeichert: Date.now() }));
-    } catch (e) { /* Speicher voll oder gesperrt: dann eben nicht */ }
+      const l = JSON.parse(localStorage.getItem('ls_fahrten') || '[]'), alt = localStorage.getItem('ls_fahrt');
+      if (alt) { const f = JSON.parse(alt); const d = safeDecode(f.code); l.unshift({ id: 'f' + (f.gespeichert || Date.now()), name: d ? d.name : 'Luftschiff', code: f.code, gespeichert: f.gespeichert, beendet: false, zustand: f });
+        localStorage.removeItem('ls_fahrt'); localStorage.setItem('ls_fahrten', JSON.stringify(l)); }
+      return l;
+    } catch (e) { return []; }
   }
-  function gespeicherteFahrt() { try { const f = JSON.parse(localStorage.getItem('ls_fahrt') || 'null'); return f && f.code === C.encode(S.d) ? f : null; } catch (e) { return null; } }
-  window.gespeicherteFahrt = gespeicherteFahrt;
+  function fahrtenSchreiben(l) { try { localStorage.setItem('ls_fahrten', JSON.stringify(l)); return true; } catch (e) { return false; } }
+  function speichern() {
+    if (!Z || Z.beendet) return false;
+    const s = Object.assign({}, Z.F.s); delete s.anz;
+    const tr = Z.track.length > 1500 ? Z.track.filter((p, i) => i % Math.ceil(Z.track.length / 1500) === 0) : Z.track;
+    const zustand = { code: C.encode(S.d), s, lat: Z.lat, lon: Z.lon, lx: Z.lx, ly: Z.ly, elev: Z.elev, track: tr,
+      zr: Z.zr === BOOST ? 100 : Z.zr, hs: Z.hs, seiteAn: Z.seiteAn, stat: Z.stat, VB: Object.assign({}, VB), W: Z.W, gespeichert: Date.now(), id: Z.id };
+    const l = fahrtenLaden(), i = l.findIndex(f => f.id === Z.id);
+    if (i < 0 && l.filter(f => !f.beendet).length >= MAXF) { Z.speicherVoll = true; return false; }
+    const e = { id: Z.id, name: S.d.name, code: zustand.code, gespeichert: zustand.gespeichert, beendet: false, bericht: bericht([]), zustand };
+    if (i >= 0) l[i] = e; else l.unshift(e);
+    return fahrtenSchreiben(l);
+  }
   function fortsetzen(f) {
-    Object.assign(VB, f.VB);
-    startFahrt(f.W, f.elev, f);
+    const z = f.zustand, d = safeDecode(z.code); if (!d) { toast('Luftschiff der Fahrt nicht lesbar'); return; }
+    S.d = d; S.r = C.compute(d);                          // Luftschiff der Fahrt laden (kann ein anderes sein)
+    Object.assign(VB, z.VB);
+    startFahrt(z.W, z.elev, z);
   }
-  window.fahrtFortsetzen = () => { const f = gespeicherteFahrt(); if (f) fortsetzen(f); };
+  // Liste im Startdialog: Fortsetzen, Bericht teilen, Löschen; Hinweis auf Speicherort und Höchstzahl
+  function fahrtenListe() {
+    const box = $('#vbListe'); if (!box) return;
+    const l = fahrtenLaden(), lauf = l.filter(f => !f.beendet).length;
+    if (!l.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="lab">Gespeicherte Fahrten (${lauf} von ${MAXF} laufenden)</div>` + l.map(f => `<div class="fl">
+        <div><b>${escapeHtml(f.name)}</b><span>${f.beendet ? 'beendet' : 'unterbrochen'} · ${new Date(f.gespeichert).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}</span></div>
+        ${f.beendet ? '' : `<button class="btn p" data-f="${f.id}" data-a="weiter">Fortsetzen</button>`}<button class="btn s" data-f="${f.id}" data-a="teilen" title="Bericht als Bild teilen">Teilen</button><button class="btn s" data-f="${f.id}" data-a="weg" title="Löschen">✕</button></div>`).join('') +
+      `<div class="desc">${lauf >= MAXF ? '<b>Der Speicher für laufende Fahrten ist voll: bitte alte Fahrten löschen.</b> ' : ''}Fahrten bleiben im Browser dieses Geräts, bis du sie löschst oder die Browserdaten gelöscht werden. Am iPhone kann Safari die Daten einer nicht installierten Web-App nach etwa 7 Tagen ohne Nutzung löschen; als installierte App („Zum Home-Bildschirm“) bleiben sie.</div>`;
+    box.querySelectorAll('button[data-f]').forEach(b => b.onclick = () => {
+      const l2 = fahrtenLaden(), f = l2.find(x => x.id === b.dataset.f); if (!f) return;
+      if (b.dataset.a === 'weiter') fortsetzen(f);
+      if (b.dataset.a === 'teilen') berichtTeilen(f.bericht || '', f.code);
+      if (b.dataset.a === 'weg' && confirm('Fahrt „' + f.name + '“ löschen?')) { fahrtenSchreiben(l2.filter(x => x.id !== f.id)); fahrtenListe(); }
+    });
+  }
+
+  // ---------- Ende jederzeit: Speichern und verlassen / Fahrt beenden / Weiterfahren ----------
+  function endeFrage() {
+    const vorher = Z.pause; Z.pause = true; zrAnzeigen();
+    const box = document.createElement('div'); box.className = 'ende';
+    box.innerHTML = `<div class="box"><b>Fahrt verlassen?</b><div class="desc">„Speichern“ unterbricht die Fahrt; unter „Fliegen“ kannst du sie später fortsetzen. „Beenden“ schließt sie ab und zeigt den Fahrtbericht.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn s" id="eWeiter">Weiterfahren</button><button class="btn s" id="eSp">Speichern</button><button class="btn p" id="eBe">Beenden</button></div></div>`;
+    $('#app').appendChild(box);
+    box.querySelector('#eWeiter').onclick = () => { box.remove(); Z.pause = vorher; zrAnzeigen(); };
+    box.querySelector('#eSp').onclick = () => {
+      const ok = speichern(); box.remove();
+      if (!ok && Z.speicherVoll) { toast('Speicher voll (' + MAXF + ' laufende Fahrten) – bitte unter „Fliegen“ alte Fahrten löschen'); Z.pause = vorher; zrAnzeigen(); return; }
+      stopFahrt(); $('#app').classList.remove('wide'); showErgebnis(); toast(ok ? 'Fahrt gespeichert – unter „Fliegen“ fortsetzen' : 'Speichern auf diesem Gerät nicht möglich');
+    };
+    box.querySelector('#eBe').onclick = () => { box.remove(); beenden(); };
+  }
+
+  // ---------- Bericht als Bild teilen: oben das Luftschiff schräg von vorn unten, darunter der Text in Schreibmaschinenschrift ----------
+  async function berichtTeilen(txt, code) {
+    const d = safeDecode(code); let schiff = null;
+    if (d && viewerBereit()) { try { const b = viewer.schraegbild(C.compute(d), 1080); schiff = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = b.url; }); } catch (e) { schiff = null; } }
+    const zeilen = []; const umbruch = 58;                      // Zeichen je Zeile (Schreibmaschine)
+    for (const z of txt.split('\n')) { if (z.length <= umbruch) { zeilen.push(z); continue; } let r = z; while (r.length > umbruch) { zeilen.push(r.slice(0, umbruch)); r = '    ' + r.slice(umbruch); } zeilen.push(r); }
+    const W = 1080, oben = schiff ? 540 : 120, zh = 30, H = oben + 60 + zeilen.length * zh + 60;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+    const hg = g.createLinearGradient(0, 0, 0, oben); hg.addColorStop(0, '#cfe3f6'); hg.addColorStop(1, '#eef5fc'); g.fillStyle = hg; g.fillRect(0, 0, W, oben);
+    if (schiff) g.drawImage(schiff, 0, 0, W, 540);
+    g.fillStyle = '#f6f1e3'; g.fillRect(0, oben, W, H - oben);                                    // Papier
+    g.fillStyle = '#2a2622'; g.font = '24px "Courier New", Courier, monospace'; g.textBaseline = 'top';
+    zeilen.forEach((z, i) => g.fillText(z, 50, oben + 40 + i * zh));
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png')), name = 'Fahrtbericht ' + (d ? d.name : '').replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim() + '.png';
+    const file = new File([blob], name, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  // ---------- Konsole am Handy: eingeklappt nur Knüppel, Schub, Gas, Ballast, kleine Trimmknöpfe (dunkel) ----------
+  function konsole() {
+    const fz = $('.fz'); if (!fz) return;
+    fz.classList.toggle('konsklein', !!Z.konsKlein);
+    $('#fKons').textContent = Z.konsKlein ? '▴ Konsole: alle Anzeigen' : '▾ Konsole einklappen';
+    if (Z.map) setTimeout(() => Z.map.invalidateSize(), 50);
+  }
+
+  // ---------- Schub exponentiell (Wunsch Nutzer): Reglerstellung p ⇒ Schub (e^(4,5 p) − 1) / (e^4,5 − 1) ----------
+  // p = 0,5 ⇒ 9,4 % Schub; die ersten 10 % liegen auf gut der Hälfte des Wegs und lassen sich fein einstellen
+  const SA = 4.5, SE = Math.exp(SA) - 1;
+  function schubAus(p) { return (Math.exp(SA * p) - 1) / SE; }
+  function schubPos(t) { return Math.log(1 + Math.max(0, t) * SE) / SA; }
 
   // ---------- Fahrt beenden: Zusammenfassung und Bericht als Textdatei ----------
   function bericht(orte) {
-    const F = Z.F, s = F.s, K = F.K, W = Z.W, st = Z.stat, ort = i => orte && orte[i] ? ' – nahe ' + orte[i] : orte ? '' : ' – Ort wird gesucht …';
+    const F = Z.F, s = F.s, K = F.K, W = Z.W, st = Z.stat, ort = i => orte && orte[i] ? ' – nahe ' + orte[i] : orte ? '' : ' – Ort wird gesucht …';   // orte = [] ⇒ ohne Ortsnamen
     const t0 = new Date(W.startMs), t1 = new Date(W.startMs + s.t * 1000);
     const dauer = s.t / 3600, hh = Math.floor(dauer), mm = Math.round((dauer - hh) * 60);
     const cc = co2(K, s), vgl = cc.kg / A320_BER_HAM;
@@ -575,20 +680,23 @@
   }
   function beenden() {
     let txt = bericht(null); Z.beendet = true;
-    try { localStorage.removeItem('ls_fahrt'); } catch (e) {}
+    // in der Fahrtenliste als beendet ablegen (nur der Bericht bleibt)
+    const ablegen = t => { const l = fahrtenLaden().filter(f => f.id !== Z.id); l.unshift({ id: Z.id, name: S.d.name, code: C.encode(S.d), gespeichert: Date.now(), beendet: true, bericht: t }); fahrtenSchreiben(l); };
+    ablegen(txt);
     Z.pause = true;
     const box = document.createElement('div'); box.className = 'ende';
     box.innerHTML = `<div class="box"><b>Fahrt beendet</b><pre id="ePre" style="font-size:11px;white-space:pre-wrap;max-height:50vh;overflow:auto;margin:0">${escapeHtml(txt)}</pre>
-      <div style="display:flex;gap:8px"><button class="btn s" id="eTxt">Bericht (.txt)</button><button class="btn p" id="eAus">Zur Auslegung</button></div></div>`;
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn s" id="eTxt">Bericht (.txt)</button><button class="btn s" id="eBild">Teilen (Bild)</button><button class="btn p" id="eAus">Zur Auslegung</button></div></div>`;
     $('#app').appendChild(box);
     box.querySelector('#eTxt').onclick = () => download('Fahrtbericht ' + S.d.name.replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim() + ' ' + new Date().toISOString().slice(0, 10) + '.txt', txt);
+    box.querySelector('#eBild').onclick = () => berichtTeilen(txt, C.encode(S.d));
     box.querySelector('#eAus').onclick = () => { stopFahrt(); $('#app').classList.remove('wide'); showErgebnis(); };
     // Ortsnamen nachladen (Start, Ende, Landungen; nacheinander, höchstens eine Abfrage je Sekunde)
     (async () => {
       const Zb = Z, pkte = [Zb.track[0], [Zb.lat, Zb.lon], ...Zb.stat.landungen.slice(0, 5).map(l => [l.lat, l.lon])], orte = [];
       for (let i = 0; i < pkte.length; i++) { if (i) await warte(1100); orte.push(await ortsname(pkte[i][0], pkte[i][1])); }
       if (Z !== Zb) return;
-      txt = bericht(orte); const pre = document.getElementById('ePre'); if (pre) pre.textContent = txt;
+      txt = bericht(orte); const pre = document.getElementById('ePre'); if (pre) pre.textContent = txt; ablegen(txt);
     })();
   }
 

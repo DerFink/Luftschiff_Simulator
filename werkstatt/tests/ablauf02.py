@@ -1,3 +1,4 @@
+# 2026-10-14 16:00 · ablauf02.py: Ende-Abfrage, Fahrtenliste, Zeitraffer ×1, Konsole eingeklappt, Bericht als Bild
 # 2026-10-14 14:30 · ablauf02.py: Ortsnamen (Nominatim nachgebildet), Feuchte/Wolken im Wetter, Anzeige einklappen, Vertikalprofil
 # 2026-10-14 12:45 · ablauf02.py: Boost, Tasten-Rückmeldung am Knüppel, Speichern/Fortsetzen, Landung mit Bericht
 # 2026-10-14 06:30 · ablauf02.py: Fahrt im Browser – Startdialog, Flugbildschirm (Handy und Computer), Tastatur, Wetter (nachgebildete Open-Meteo-Antworten)
@@ -64,6 +65,11 @@ with sync_playwright() as p:
         print(name, 'Anzeigen:', st[:400])
         pg.keyboard.press('v'); shot('33_seitenansicht_%s.png' % name)
         pg.click('#fInst2'); shot('33b_anzeige_klein_%s.png' % name); pg.click('#fInst2')
+        # Zeitraffer ×1 muss laufen (früher wie Pause)
+        pg.keyboard.press('1'); u0 = pg.inner_text('#fUhr'); t0 = pg.evaluate('performance.now()'); pg.wait_for_timeout(2500)
+        print(name, '×1 läuft:', pg.inner_text('#fInst2').split('\n')[0:6])
+        if name == 'handy': pg.click('#fKons'); shot('33c_konsole_klein_handy.png'); pg.click('#fKons')
+        pg.keyboard.press('4')
         # Tasten-Rückmeldung: ↑ gedrückt halten ⇒ Knüppel oben (sinken)
         pg.keyboard.down('ArrowUp'); pg.wait_for_timeout(300)
         print(name, 'Knüppel bei ↑:', pg.eval_on_selector('#fJoy .stick', 'e => e.style.transform')); pg.keyboard.up('ArrowUp')
@@ -72,11 +78,13 @@ with sync_playwright() as p:
         print(name, 'Boost: Uhr', u0, '→', u1, '| Anzeigen:', pg.inner_text('#fInst').replace('\n', ' | ')[:200])
         shot('34_boost_%s.png' % name)
         # Verlassen speichert, Fliegen bietet Fortsetzen an
+        print(name, 'Zustand nach Boost:', pg.evaluate('(() => { const Z = LSFahrtZustand(); return {t: Math.round(Z.F.s.t), zr: Z.zr, ein: Math.round(performance.now() - Z.eingabeT), pause: Z.pause, boden: Z.F.s.amBoden, dialoge: document.querySelectorAll(".ende").length}; })()'))
         if pg.locator('#eOk').count(): print(name, 'Landung während Boost (Abfrage erscheint)'); pg.click('#eOk')
         print(name, 'fBack', pg.eval_on_selector('#fBack', 'e => JSON.stringify(e.getBoundingClientRect())'), 'scroll', pg.evaluate('[scrollY, document.querySelector(".fz").scrollTop, document.getElementById("app").scrollTop]'))
-        pg.click('#fBack'); pg.wait_for_timeout(500); pg.click('#bFly'); pg.wait_for_timeout(500)
-        print(name, 'Fortsetzen angeboten:', pg.locator('#bWeiter').count() == 1)
-        pg.click('#bWeiter'); pg.wait_for_selector('#fInst div', timeout=10000); pg.wait_for_timeout(800)
+        pg.click('#fBack'); pg.click('#eSp'); pg.wait_for_timeout(500); pg.click('#bFly'); pg.wait_for_timeout(500)
+        print(name, 'Fortsetzen angeboten:', pg.locator('button[data-a="weiter"]').count() >= 1)
+        shot('37_fahrtenliste_%s.png' % name)
+        pg.click('button[data-a="weiter"]'); pg.wait_for_selector('#fInst div', timeout=10000); pg.wait_for_timeout(800)
         # Landen: Assistenten aus, Schub aus, Gas ablassen bis zum Boden, dann Fahrt beenden mit Bericht
         pg.evaluate("() => { document.querySelectorAll('#fApRow button.on').forEach(b => { if (b.dataset.a !== 'hs') b.click(); }); }")
         for i in range(6): pg.keyboard.press('b')                # wieder leicht machen und abheben
@@ -87,7 +95,10 @@ with sync_playwright() as p:
         pg.keyboard.up('g')
         shot('35_landung_%s.png' % name)
         if pg.locator('#eEnde').count():
-            pg.click('#eEnde'); pg.wait_for_timeout(3500); shot('36_bericht_%s.png' % name); print(name, 'Bericht:', pg.inner_text('.ende pre')[:900].replace('\n', ' / '))
+            pg.click('#eEnde'); pg.wait_for_timeout(3500); shot('36_bericht_%s.png' % name)
+            with pg.expect_download(timeout=20000) as dl: pg.click('#eBild')
+            dl.value.save_as(os.path.join(OUT, '38_teilbild_%s.png' % name))
+            print(name, 'Bericht:', pg.inner_text('.ende pre')[:900].replace('\n', ' / '))
         ctx.close()
     print('Fehler:', errs)
     b.close()

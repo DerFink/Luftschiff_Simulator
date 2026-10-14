@@ -1,3 +1,4 @@
+// 2026-10-14 14:20 · models.js: Zeppelin NT mit Innengerüst aus CFK (Kiel/Gerüst-Feld)
 // 2026-10-14 01:30 · models.js 0.8: Längslage der Motorgondeln LZ 120 (Foto), LZ 129 (Bauplan), Zeppelin NT
 // 2026-10-13 23:20 · models.js 0.7: Zeppelin NT dritter Motor am Heck
 // 2026-10-13 21:20 · models.js 0.6: LZ 120 nach Windkanalmodell 1:47,62 (Rumpf, Leitwerk, Gondel); Beladung LZ 120 für Fahrt FN–Berlin (Prallhöhe 500 m, Ballast 1 t, Kraftstoff 2 t)
@@ -93,6 +94,7 @@
         V: 8425,                                                                             // [W]
         form: { LD: 75 / 14.3, m: 0.42, Cp: cp(8425, 75, 14.3), r0: 0.6, r1: 0.10 },
         huelle_gm2: 350, ballonet: 25, prallhoehe: 2600,                                      // [A] Laminat
+        kiel: 'G', kwerk: 'C',                                                               // [W] Innengerüst aus CFK-Dreiecksrahmen (14.10.2026)
         ltw: { n: 3, anord: 'L', faktor: 1 },                                                 // NT: umgekehrtes Y (eine Flosse oben, zwei unten)
         gondel: 'F', gform: 'S', crew: 2, pax: 12, m_person: 80,                             // [W] 15 Sitze; [A] Auslastung
         antrieb: { art: 'V', n: 3, kW: 147, lage: 'R', ungerade: 'H', xs: [0.38], eta: 0.70, kraftstoff: 400, sfc: 0.30, kgkW: 2.5 }, // [W] Leistung; [N] zwei Motoren seitlich, der dritte ganz am Heck; Rest [A]

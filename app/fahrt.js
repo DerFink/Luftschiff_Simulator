@@ -1,3 +1,4 @@
+// 2026-10-14 14:10 · fahrt.js 0.7: Gelände unter dem Schiff (gelaende.js), Boost nur beim Halten, Vorschau gedämpft (höchstens ±90°), Vergleich A400M und CH-47F je t·km statt A320
 // 2026-10-14 16:00 · fahrt.js 0.6: Fahrtenliste (mehrere Fahrten, löschen, Bericht als Bild teilen), Beenden jederzeit, Schub exponentiell, Zeitraffer ×1 korrigiert,
 //                    beim Steuern ×10, Konsole am Handy einklappbar, TAS groß, Beschleunigungsbalken, Seitenansicht-Knopf, Höhensteuerer/Fahrt halten ausgeblendet
 // 2026-10-14 14:30 · fahrt.js 0.5: Anzeige einklappbar (Höhe, Vario, TAS, Beschleunigung), Flugbegriffe (TAS, GS, HDG, TRK), Spur durchgehend und Vorschau 1 h gestrichelt,
@@ -116,7 +117,7 @@
     if (alt) Object.assign(F.s, alt.s);                       // gespeicherte Fahrt: Zustand übernehmen
     const lift = F.K.Vgas * r.fill * F.K.lpm0;
     Z = {
-      r, F, W, lat: VB.lat, lon: VB.lon, lx: 0, ly: 0, elev, zr: 5, pause: false, keys: {}, joy: { x: 0, y: 0, an: false },
+      r, F, W, lat: VB.lat, lon: VB.lon, lx: 0, ly: 0, elev, grund: elev, zr: 5, pause: false, keys: {}, joy: { x: 0, y: 0, an: false },   // elev: Höhe am Start, grund: Gelände unter dem Schiff
       seiteAn: true,                                 // vom Nutzer geschaltet; beim Landeanflug (unter 100 m, sinkend) wieder eingeblendet
       stat: { weg: 0, hMax: elev, vMax: 0, landungen: [] },   // für den Fahrtbericht
       klein: (() => { try { return localStorage.getItem('ls_dash_klein') === '1'; } catch (e) { return false; } })(),   // Anzeige eingeklappt
@@ -125,7 +126,7 @@
       follow: true, track: [[VB.lat, VB.lon]], tTrack: 0, hs: true,     // Höhensteuerer an
       stoss: rund(0.0025 * lift), laden: false, ende: null, letzteLandung: null, uiT: 0, raf: 0, last: 0,
     };
-    if (alt) Object.assign(Z, { id: alt.id || Z.id, lat: alt.lat, lon: alt.lon, lx: alt.lx, ly: alt.ly, track: alt.track, zr: alt.zr, hs: alt.hs, seiteAn: alt.seiteAn, stat: alt.stat, letzteLandung: F.s.landung });
+    if (alt) Object.assign(Z, { grund: alt.s.hGrund ?? elev, id: alt.id || Z.id, lat: alt.lat, lon: alt.lon, lx: alt.lx, ly: alt.ly, track: alt.track, zr: alt.zr, hs: alt.hs, seiteAn: alt.seiteAn, stat: alt.stat, letzteLandung: F.s.landung });
     else if (F.s.zuSchwer > 0) setTimeout(() => toast('Zu schwer: Es fehlen ' + fm(F.s.zuSchwer) + ' – Auslegung prüfen'), 400);
     aufbauen();
     Z.last = performance.now(); Z.raf = requestAnimationFrame(loop);
@@ -139,11 +140,11 @@
   // ---------- Aufbau der Oberfläche (einmal je Fahrt) ----------
   function aufbauen() {
     const app = $('#app'); app.classList.add('wide');
-    const zrB = ZR.map((z, i) => `<button data-z="${z}"${z === Z.zr ? ' class="on"' : ''}>×${z}</button>`).join('') + `<button data-z="${BOOST}" title="24 h in etwa 3 s">⚡</button>`;
+    const zrB = ZR.map((z, i) => `<button data-z="${z}"${z === Z.zr ? ' class="on"' : ''}>×${z}</button>`).join('') + `<button data-z="${BOOST}" id="fBoost" title="Boost: gedrückt halten (24 h in etwa 3 s)">⚡</button>`;
     // Höhensteuerer und „Fahrt halten“ sind vorerst ausgeblendet (Wunsch Nutzer 14.10.2026); der Höhensteuerer arbeitet weiter
     const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Knüppel vor = sinken, zurück = steigen'], ['W S', 'Schub + / − (unten fein)  ·  X Schub aus'],
       ['B', 'Ballast: tippen = ' + fm(Z.stoss) + ', halten = laufend'], ['G', 'Gas ablassen (solange gedrückt)'], ['Q E', 'Trimm Heck / Trimm Bug'],
-      ['H K P', 'Höhe · Kurs · Position halten'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus'],
+      ['H K P', 'Höhe · Kurs · Position halten'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 halten: Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus'],
       ['', 'Beim Steuern, Gas oder Ballast läuft ein Zeitraffer über ×10 kurz mit ×10']];
     app.innerHTML = `<div class="fz">
       <div class="top"><button class="lnk" id="fBack">■ Ende</button><b class="t">${escapeHtml(S.d.name)}</b><span id="fUhr" style="white-space:nowrap"></span></div>
@@ -195,7 +196,11 @@
     $('#fKons').onclick = () => { Z.konsKlein = !Z.konsKlein; try { localStorage.setItem('ls_kons_klein', Z.konsKlein ? '1' : '0'); } catch (e) {} konsole(); };
     konsole();
     Z.ph = () => speichern(); window.addEventListener('pagehide', Z.ph); document.addEventListener('visibilitychange', Z.ph);
-    document.querySelectorAll('.zr button').forEach(b => b.onclick = () => { const z = +b.dataset.z; if (z === 0) Z.pause = !Z.pause; else { Z.zr = z; Z.pause = false; } zrAnzeigen(); });
+    document.querySelectorAll('.zr button').forEach(b => b.onclick = () => { const z = +b.dataset.z; if (z === BOOST) return; if (z === 0) Z.pause = !Z.pause; else { Z.zr = z; Z.pause = false; } zrAnzeigen(); });
+    // Boost (Wunsch Nutzer 14.10.2026): nur solange der Knopf gedrückt gehalten wird, danach wieder der gewählte Zeitraffer
+    const bb = $('#fBoost');
+    bb.onpointerdown = e => { e.preventDefault(); bb.setPointerCapture(e.pointerId); Z.boost = true; Z.pause = false; zrAnzeigen(); };
+    bb.onpointerup = bb.onpointercancel = bb.onlostpointercapture = () => { if (Z && Z.boost) { Z.boost = false; zrAnzeigen(); } };
     $('#fSideX').onclick = () => { Z.seiteAn = !seiteSichtbar(); };
     bedienung();
   }
@@ -254,9 +259,9 @@
       if (k === 'v') Z.seiteAn = !seiteSichtbar();
       if (k === ' ') { Z.pause = !Z.pause; zrAnzeigen(); }
       if (k >= '1' && k <= '7') { Z.zr = ZR[+k - 1]; Z.pause = false; zrAnzeigen(); }
-      if (k === '8') { Z.zr = BOOST; Z.pause = false; zrAnzeigen(); }
+      if (k === '8') { Z.boost = true; Z.pause = false; zrAnzeigen(); }            // Boost nur solange die Taste gedrückt ist
     };
-    Z.ku = e => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; Z.keys[k] = false; };
+    Z.ku = e => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; Z.keys[k] = false; if (k === '8') { Z.boost = false; zrAnzeigen(); } };
     window.addEventListener('keydown', Z.kd); window.addEventListener('keyup', Z.ku);
     // Schubregler: ziehen setzt den Schub (0 unten, 100 % oben)
     const rail = $('#fThr .rail');
@@ -301,7 +306,7 @@
     const t = []; if (on.hoehe) t.push('Höhe ' + de(ap.hoehe) + ' m'); if (on.kurs) t.push('Kurs über Grund ' + String(Math.round(ap.kurs / RAD + 360) % 360).padStart(3, '0') + '°'); if (on.fahrt) t.push('Fahrt ' + de(ap.fahrt * 3.6) + ' km/h'); if (on.pos) t.push('Position halten');
     $('#fAps').innerHTML = t.map(x => `<div class="badge">${x}</div>`).join('');
   }
-  function zrAnzeigen() { document.querySelectorAll('.zr button').forEach(b => { b.classList.toggle('on', +b.dataset.z === Z.zr && !Z.pause || (b.dataset.z === '0' && Z.pause)); b.classList.toggle('temp', !!Z.zrTemp && +b.dataset.z === 10); }); }
+  function zrAnzeigen() { document.querySelectorAll('.zr button').forEach(b => { b.classList.toggle('on', (+b.dataset.z === BOOST ? !!Z.boost : +b.dataset.z === Z.zr && !Z.boost) && !Z.pause || (b.dataset.z === '0' && Z.pause)); b.classList.toggle('temp', !!Z.zrTemp && +b.dataset.z === 10); }); }
 
   // ---------- Eingaben je Bild auf das Schiff übertragen ----------
   function eingaben() {
@@ -327,7 +332,7 @@
     if (Math.abs(sr) > 0.05 || Math.abs(ny) > 0.05 || s.ventil > 0 || s.ballastAb > 0 || Z.joy.an) Z.eingabeT = performance.now();
   }
   // wirksamer Zeitraffer (beim Steuern höchstens ×10)
-  function zrWirk() { return Z.zr > 10 && performance.now() - Z.eingabeT < 1000 ? 10 : Z.zr; }
+  function zrWirk() { const z = Z.boost ? BOOST : Z.zr; return z > 10 && performance.now() - Z.eingabeT < 1000 ? 10 : z; }
 
   // ---------- Hauptschleife: Zeitraffer, feste Schritte, Anzeige ----------
   function loop(now) {
@@ -341,17 +346,24 @@
       const zr = zrWirk(), dt = zr >= 5000 ? 0.5 : 0.1;
       Z.zAkku = Math.min(Z.zAkku + dtR * zr, 3000 * dt);
       const n = Math.floor(Z.zAkku / dt); Z.zAkku -= n * dt;
-      if ((zr !== Z.zr) !== !!Z.zrTemp) { Z.zrTemp = zr !== Z.zr; zrAnzeigen(); }
+      const temp = zr !== (Z.boost ? BOOST : Z.zr);                // vorübergehend ×10 wegen Steuereingabe
+      if (temp !== !!Z.zrTemp) { Z.zrTemp = temp; zrAnzeigen(); }
       for (let i = 0; i < n && !Z.pause; i++) {
         const tMs = W.startMs + s.t * 1000, w = LSWetter.bei(W.model, tMs, s.h);
         const x0 = s.x, y0 = s.y;
+        // Gelände unter dem Schiff (gelaende.js) alle 10 Schritte nachführen: Ort aus dem Weg seit dem letzten Bild
+        if (i % 10 === 0 && window.LSGelaende) {
+          const la = Z.lat + (s.y - Z.ly) / 111320, lo = Z.lon + (s.x - Z.lx) / (111320 * Math.cos(Z.lat * RAD)), g = LSGelaende.hoehe(la, lo);
+          if (g != null) Z.grund = g;
+          if (!s.amBoden) s.hGrund = Z.grund;                 // am Boden bleibt der Aufsetzpunkt
+        }
         LSFlug.schritt(F, dt, w);
         Z.stat.weg += Math.hypot(s.x - x0, s.y - y0); if (s.h > Z.stat.hMax) Z.stat.hMax = s.h; if (s.U > Z.stat.vMax) Z.stat.vMax = s.U;
         if (s.landung && s.landung !== Z.letzteLandung) { Z.letzteLandung = s.landung; Z.stat.landungen.push(Object.assign({ lat: Z.lat, lon: Z.lon }, s.landung)); landung(s.landung); }
       }
       Z.wJetzt = LSWetter.bei(W.model, W.startMs + s.t * 1000, s.h);
       // Landeanflug: unter 100 m über Grund und sinkend ⇒ Seitenansicht einblenden (einmal je Anflug)
-      const agl = s.h - Z.elev;
+      const agl = s.h - Z.grund;
       if (agl < 100 && s.w < -0.2 && !Z.anflug) { Z.anflug = true; Z.seiteAn = true; }
       if (agl > 150) Z.anflug = false;
     }
@@ -366,6 +378,8 @@
       else if (Z.poly) Z.poly.addLatLng([Z.lat, Z.lon]);
     }
     nachladen();
+    // Gelände voraus laden (15 km in Richtung der Bewegung über Grund), einmal je Sekunde
+    if (window.LSGelaende && now - (Z.gelT || 0) > 1000) { Z.gelT = now; const w0 = Z.wJetzt || { e: 0, n: 0 }; LSGelaende.vorladen(Z.lat, Z.lon, Math.atan2(s.U * Math.sin(s.psi) + w0.e, s.U * Math.cos(s.psi) + w0.n), 15); }
     if (Z.map) { Z.ship.setLatLng([Z.lat, Z.lon]); const sv = document.getElementById('fShipSvg'); if (sv) sv.style.transform = `rotate(${s.psi / RAD}deg)`; if (Z.follow) {
       // Bei hohem Zeitraffer (ab ×500) springt die Karte höchstens einmal je Sekunde nach; sonst würde sie jedes Bild
       // neue Kacheln laden (die Bildrate bricht ein). Darunter folgt sie gedämpft.
@@ -385,7 +399,7 @@
     if (d < 40000) return;
     Z.laden = true;
     const art = VB.wetter, tMs = W.startMs + Z.F.s.t * 1000;
-    const neu = await LSWetter.laden(Z.lat, Z.lon, art === 'aktuell' ? 'aktuell' : 'datum', tMs, Z.elev);
+    const neu = await LSWetter.laden(Z.lat, Z.lon, art === 'aktuell' ? 'aktuell' : 'datum', tMs, Z.grund);
     if (Z && !neu.offline) { Z.W = Object.assign({}, W, { model: neu.model }); }
     if (Z) Z.laden = false;
   }
@@ -404,7 +418,7 @@
     const F = Z.F, s = F.s, K = F.K, a = s.anz || {}, W = Z.W;
     const tMs = W.startMs + s.t * 1000, w = LSWetter.bei(W.model, tMs, s.h), wr = LSWetter.richtung(w);
     $('#fUhr').textContent = new Date(tMs).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + (window.innerWidth >= 900 ? ' Uhr' : '') + (Z.pause ? ' · Pause' : '');
-    $('#fWind').innerHTML = `Wind <b>${de(wr.sp, wr.sp < 10 ? 1 : 0)} m/s</b> aus ${kompass(wr.d)} · ${de(s.h - Z.elev)} m über Grund`;
+    $('#fWind').innerHTML = `Wind <b>${de(wr.sp, wr.sp < 10 ? 1 : 0)} m/s</b> aus ${kompass(wr.d)} · ${de(s.h - Z.grund)} m über Grund`;
     $('#fQuelle').textContent = W.quelle;
     const vg = s.amBoden ? 0 : Math.hypot(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n);   // am Boden steht das Schiff
     const verbrauch = K.verbrenner ? K.sfc * (a.P || 0) / 3.6e6 : (a.P || 0);   // kg/s bzw. W
@@ -414,7 +428,7 @@
     const kgr = Math.atan2(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n), kog = vg > 1 ? String(Math.round(kgr / RAD + 360) % 360).padStart(3, '0') + '°' : '–';
     // Anzeige auf der Karte (wie im Gasballon-Simulator): oben groß AGL und TAS, grau darunter MSL und GS; links der
     // Beschleunigungsbalken (Wurzelskala, voll bei ±0,3 m/s², grün nach oben, rot nach unten). Eingeklappt: AGL, TAS, VS, Balken.
-    const agl = s.h - Z.elev, acc = s.amBoden ? 0 : (s.acc || 0);
+    const agl = s.h - Z.grund, acc = s.amBoden ? 0 : (s.acc || 0);
     const accH = Math.abs(acc) < 0.002 ? 0 : Math.max(2, Math.round(28 * Math.min(1, Math.sqrt(Math.abs(acc) / 0.3))));
     const zeile = (kurz, lang, wert, cls) => `<div class="kv"><span>${kurz}<small>${lang}</small></span><b class="${cls || ''}">${wert}</b></div>`;
     let h2 = `<div class="accbar" title="Vertikalbeschleunigung"><i class="${acc >= 0 ? 'up' : 'dn'}" style="height:${accH}px"></i></div>
@@ -429,7 +443,7 @@
     const z = [
       ['Auftrieb frei', (frei >= 0 ? '+' : '−') + fk(Math.abs(frei)), frei > 0 ? 'up' : frei < 0 ? 'dn' : ''], ['Gas', de(Math.min(100, (a.fuell || 0) * 100)) + ' %' + (a.schlaff ? ' schlaff' : ''), a.schlaff ? 'dn' : ''],
       ['Ballast', fk(s.ballast), ''], [K.verbrenner ? 'Kraftstoff' : 'Akku', K.verbrenner ? fk(s.energie) : de(s.E / Math.max(K.E0, 1) * 100) + ' %', ''],
-      ['Reicht', rest == null ? '–' : rest > 99 ? '> 99 h' : de(rest, 1) + ' h', ''], ['Prallhöhe', de(prall) + ' m<small>NN · ' + (prall - Z.elev >= 0 ? '+' : '') + de(prall - Z.elev) + ' ü. Gr.</small>', ''],
+      ['Reicht', rest == null ? '–' : rest > 99 ? '> 99 h' : de(rest, 1) + ' h', ''], ['Prallhöhe', de(prall) + ' m<small>NN · ' + (prall - Z.grund >= 0 ? '+' : '') + de(prall - Z.grund) + ' ü. Gr.</small>', ''],
     ];
     if (window.innerWidth >= 900) z.push(['Schub', de(s.schub * 100) + ' %', ''], ['Höhenruder', de(s.hr * 100) + ' %', ''], ['Seitenruder', de(s.sr * 100) + ' %', '']);
     $('#fInst').innerHTML = z.map(([t, v, c]) => `<div><i>${t}</i><b class="${c}">${v}</b></div>`).join('');
@@ -449,7 +463,7 @@
     const c = $('#fSideC'), W = c.clientWidth, H = c.clientHeight; if (!W || !H) return;
     if (c.width !== W * 2) { c.width = W * 2; c.height = H * 2; }
     const g = c.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, W, H);
-    const s = Z.F.s, K = Z.F.K, agl = Math.max(0, s.h - Z.elev), top = Math.max(120, agl * 1.3 + K.D), gy = H - 12, sc = (gy - 6) / top;   // Meter → Pixel (gleich in x und y)
+    const s = Z.F.s, K = Z.F.K, agl = Math.max(0, s.h - Z.grund), top = Math.max(120, agl * 1.3 + K.D), gy = H - 12, sc = (gy - 6) / top;   // Meter → Pixel (gleich in x und y)
     g.fillStyle = '#9fbf8a'; g.fillRect(0, gy, W, H - gy);
     g.strokeStyle = 'rgba(80,100,120,.25)'; g.fillStyle = '#6b7a8a'; g.font = '10px system-ui';
     const step = top > 600 ? 200 : top > 250 ? 100 : top > 120 ? 50 : 25;
@@ -487,7 +501,10 @@
     if (!Z.vor) return;
     const s = Z.F.s, W = Z.W, ap = s.ap, pts = [[Z.lat, Z.lon]];
     if (s.amBoden || ap.pos) { Z.vor.setLatLngs([]); return; }
-    let la = Z.lat, lo = Z.lon, psi = s.psi;
+    // Kurve gedämpft (Wunsch Nutzer 14.10.2026, keine „Kringel“): die Drehgeschwindigkeit klingt mit 2 min ab
+    // (der Fahrer nimmt das Ruder zurück), die Kursänderung bleibt höchstens ±90°. Die Drehgeschwindigkeit
+    // selbst kommt aus dem Flugmodell und berücksichtigt die schwächeren Ruder bei kleiner Fahrt.
+    let la = Z.lat, lo = Z.lon, psi = s.psi, dreh = 0;
     for (let k = 1; k <= 60; k++) {
       const w = LSWetter.bei(W.model, W.startMs + (s.t + k * 60) * 1000, s.h);
       let ve, vn;
@@ -495,7 +512,7 @@
         const ce = Math.cos(ap.kurs), cn = -Math.sin(ap.kurs), quer = w.e * ce + w.n * cn, U = Math.max(s.U, 0.1);
         const vorh = Math.asin(Math.max(-0.95, Math.min(0.95, -quer / U))), p2 = ap.kurs + vorh;
         ve = U * Math.sin(p2) + w.e; vn = U * Math.cos(p2) + w.n;
-      } else { psi += s.r * 60; ve = s.U * Math.sin(psi) + w.e; vn = s.U * Math.cos(psi) + w.n; }
+      } else { const d = s.r * 60 * Math.exp(-(k - 0.5) / 2); dreh = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, dreh + d)); psi = s.psi + dreh; ve = s.U * Math.sin(psi) + w.e; vn = s.U * Math.cos(psi) + w.n; }
       la += vn * 60 / 111320; lo += ve * 60 / (111320 * Math.cos(la * RAD));
       pts.push([la, lo]);
     }
@@ -507,7 +524,7 @@
   function profil() {
     const box = $('#fProf'); if (!box || box.classList.contains('zu')) return;
     const s = Z.F.s, K = Z.F.K, W = Z.W, tMs = W.startMs + s.t * 1000;
-    LSProfil.zeichne($('#fProfC'), { bei: z => LSWetter.bei(W.model, tMs, z), h: s.h, grund: Z.elev, prall: C.hOfSigma(Math.min(1, s.Vn / K.Vgas)), soll: s.ap.hoehe });
+    LSProfil.zeichne($('#fProfC'), { bei: z => LSWetter.bei(W.model, tMs, z), h: s.h, grund: Z.grund, prall: C.hOfSigma(Math.min(1, s.Vn / K.Vgas)), soll: s.ap.hoehe });
   }
 
   // ---------- Ortsnamen für den Bericht (OpenStreetMap, Nominatim; höchstens 1 Abfrage je Sekunde) ----------
@@ -525,8 +542,24 @@
   // ---------- CO₂ ----------
   // Verbrenner: 3,18 kg CO₂ je kg Benzin bzw. 3,17 je kg Diesel (EBeV 2022, Anlage 1: 0,0731 t/GJ · 43,5 GJ/t bzw. 0,074 · 42,8)
   // Elektrisch: Strommix Deutschland 2024 363 g CO₂ je kWh (Umweltbundesamt)
-  // Vergleich: A320 Berlin–Hamburg, geschätzt rund 1,8 t Kerosin (Steigflug, kurzer Reiseteil, Sinkflug, Rollen) ⇒ rund 5,7 t CO₂
-  const A320_BER_HAM = 5700;
+  /* Vergleich (Wunsch Nutzer 14.10.2026, statt A320): ein vergleichbares Propellerflugzeug und ein großer
+     Transporthubschrauber, je Tonne Zuladung und Kilometer (t·km), Kerosin 3,16 kg CO₂ je kg (EBeV 2022):
+       Airbus A400M  – Reise rund 3,3 t Kerosin/h bei 780 km/h ⇒ 4,2 kg/km ⇒ 13,4 kg CO₂/km;
+                       mit 20 t Zuladung (üblich, höchstens 37 t) ⇒ 0,67 kg CO₂ je t·km      (Schätzung)
+       Boeing CH-47F Chinook – rund 1,36 t Kraftstoff/h bei 240 km/h ⇒ 5,7 kg/km ⇒ 17,9 kg CO₂/km;
+                       mit 10 t Zuladung ⇒ 1,79 kg CO₂ je t·km                                 (Schätzung)
+     Zuladung des Luftschiffs = Personen + Nutzlast. Ohne Zuladung (z. B. RC, autonom) wird je km verglichen.  */
+  const VGL = [
+    { name: 'Airbus A400M (Propeller-Transportflugzeug)', kgKm: 13.4, t: 20 },
+    { name: 'Boeing CH-47F Chinook (Transporthubschrauber)', kgKm: 17.9, t: 10 },
+  ];
+  function vergleich(kgCO2, km, zuladungKg) {
+    if (!(km > 0.5)) return ['                 Vergleich erst nach einer Strecke über 0,5 km möglich'];
+    const tkm = zuladungKg / 1000 * km, je = tkm > 0 ? kgCO2 / tkm : kgCO2 / km;
+    return [(tkm > 0 ? 'Effizienz:       ' + de(je, je < 1 ? 2 : 1) + ' kg CO₂ je t·km (' + fk(zuladungKg) + ' Zuladung über ' + de(km, 1) + ' km)' : 'Effizienz:       ' + de(je, 2) + ' kg CO₂ je km (ohne Zuladung)')]
+      .concat(VGL.map(v => { const ref = tkm > 0 ? v.kgKm / v.t : v.kgKm, p = (1 - je / ref) * 100;
+        return '                 ' + (p >= 0 ? de(p) + ' % effizienter' : de(-p) + ' % weniger effizient') + ' als ' + v.name + ' (' + de(ref, 2) + ' kg' + (tkm > 0 ? ' je t·km' : ' je km') + ')'; }));
+  }
   function co2(K, s) {
     if (K.verbrenner) { const kg = K.energie0 - s.energie; return { kg: kg * 3.18, text: fk(kg) + ' Kraftstoff' }; }
     const kWh = (K.E0 - s.E) / 3.6e6 / 0.85; return { kg: kWh * 0.363, text: de(kWh, kWh < 10 ? 1 : 0) + ' kWh Strom' };
@@ -648,7 +681,7 @@
     const F = Z.F, s = F.s, K = F.K, W = Z.W, st = Z.stat, ort = i => orte && orte[i] ? ' – nahe ' + orte[i] : orte ? '' : ' – Ort wird gesucht …';   // orte = [] ⇒ ohne Ortsnamen
     const t0 = new Date(W.startMs), t1 = new Date(W.startMs + s.t * 1000);
     const dauer = s.t / 3600, hh = Math.floor(dauer), mm = Math.round((dauer - hh) * 60);
-    const cc = co2(K, s), vgl = cc.kg / A320_BER_HAM;
+    const cc = co2(K, s), zul = K.mPers - (Z.r.zuladung.schlepptau || 0);   // Personen + Nutzlast [kg]
     const z = [
       'Fahrtbericht Luftschiff-Simulator (Build ' + BUILD + ')',
       '==================================================',
@@ -663,7 +696,7 @@
       'Höchste Fahrt:   ' + de(st.vMax * 3.6) + ' km/h TAS',
       (K.verbrenner ? 'Kraftstoff:      ' + fk(K.energie0 - s.energie) + ' verbraucht, ' + fk(s.energie) + ' übrig' : 'Akku:            ' + de((1 - s.E / Math.max(K.E0, 1)) * 100) + ' % verbraucht'),
       'CO₂:             ' + fk(cc.kg) + ' aus ' + cc.text,
-      '                 ' + (vgl >= 1 ? 'das ' + de(vgl, 1) + '-fache' : de(vgl * 100, vgl < 0.1 ? 1 : 0) + ' %') + ' eines A320-Flugs Berlin–Hamburg (Schätzung 5,7 t CO₂)',
+      ...vergleich(cc.kg, st.weg / 1000, zul),
       'Ballast:         ' + fk(s.ballastAbGesamt) + ' abgeworfen, ' + fk(s.ballast) + ' übrig',
       'Gas abgelassen:  ' + de(s.gasAb) + ' m³ (Normvolumen)',
       '',
@@ -674,7 +707,9 @@
       C.encode(S.d),
       '',
       'Quellen: Wetter Open-Meteo (CC BY 4.0); Ortsnamen © OpenStreetMap-Mitwirkende (Nominatim);',
-      'CO₂-Faktoren EBeV 2022 Anl. 1 (Benzin 3,18 kg/kg) bzw. Umweltbundesamt Strommix 2024 (363 g/kWh).',
+      'CO₂-Faktoren EBeV 2022 Anl. 1 (Benzin 3,18 kg/kg, Kerosin 3,16 kg/kg) bzw. Umweltbundesamt Strommix 2024 (363 g/kWh).',
+      'Vergleich je Tonne Zuladung und km (Schätzung): A400M 3,3 t Kerosin/h bei 780 km/h mit 20 t;',
+      'CH-47F 1,36 t/h bei 240 km/h mit 10 t.',
     ];
     return z.join('\n') + '\n';
   }

@@ -203,7 +203,7 @@
   "schiff": "Zeppelin NT 07",
   "groesse": "Speicher-Code: Abweichung freie Nutzlast (% vom Auftrieb)",
   "soll": null,
-  "ist": 0.002852162785577271,
+  "ist": 0.003019789720128713,
   "einheit": "%",
   "abw": null,
   "quelle": "soll unter 0,2 %",

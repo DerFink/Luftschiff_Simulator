@@ -1,3 +1,4 @@
+# 2026-10-14 14:00 · ablauf02.py: Boost nur beim Halten der Taste 8, Höhenmodell als Hang (Gelände unter dem Schiff)
 # 2026-10-14 16:00 · ablauf02.py: Ende-Abfrage, Fahrtenliste, Zeitraffer ×1, Konsole eingeklappt, Bericht als Bild
 # 2026-10-14 14:30 · ablauf02.py: Ortsnamen (Nominatim nachgebildet), Feuchte/Wolken im Wetter, Anzeige einklappen, Vertikalprofil
 # 2026-10-14 12:45 · ablauf02.py: Boost, Tasten-Rückmeldung am Knüppel, Speichern/Fortsetzen, Landung mit Bericht
@@ -32,7 +33,9 @@ def vorhersage(start):
     return {'latitude': 47.67, 'longitude': 9.51, 'elevation': 417, 'hourly': H}
 def wetter(route):
     u = route.request.url
-    if 'elevation' in u: return route.fulfill(status=200, content_type='application/json', body=json.dumps({'elevation': [417.0]}))
+    if 'elevation' in u:   # Höhenmodell: je angefragtem Punkt 417 m (Friedrichshafen); ab 47,72° N sanfter Hang bis 470 m
+        import urllib.parse as up; q = up.parse_qs(up.urlparse(u).query); las = [float(x) for x in q.get('latitude', ['47.67'])[0].split(',')]
+        return route.fulfill(status=200, content_type='application/json', body=json.dumps({'elevation': [417.0 if la < 47.72 else min(470.0, 417 + (la - 47.72) * 2000) for la in las]}))
     if 'archive-api' in u:
         days = ['2025-%02d-%02d' % (1 + i // 28, 1 + i % 28) for i in range(336)]
         return route.fulfill(status=200, content_type='application/json', body=json.dumps({'daily': {'time': days, 'wind_speed_10m_max': [2 + (i * 37 % 100) / 6 for i in range(336)]}}))
@@ -74,7 +77,7 @@ with sync_playwright() as p:
         pg.keyboard.down('ArrowUp'); pg.wait_for_timeout(300)
         print(name, 'Knüppel bei ↑:', pg.eval_on_selector('#fJoy .stick', 'e => e.style.transform')); pg.keyboard.up('ArrowUp')
         # Boost: 3 s ⇒ etwa 24 h
-        u0 = pg.inner_text('#fUhr'); pg.keyboard.press('8'); pg.wait_for_timeout(3000); pg.keyboard.press('3'); u1 = pg.inner_text('#fUhr')
+        u0 = pg.inner_text('#fUhr'); pg.keyboard.down('8'); pg.wait_for_timeout(3000); pg.keyboard.up('8'); pg.keyboard.press('3'); u1 = pg.inner_text('#fUhr')
         print(name, 'Boost: Uhr', u0, '→', u1, '| Anzeigen:', pg.inner_text('#fInst').replace('\n', ' | ')[:200])
         shot('34_boost_%s.png' % name)
         # Verlassen speichert, Fliegen bietet Fortsetzen an

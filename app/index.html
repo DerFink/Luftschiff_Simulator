@@ -1,3 +1,4 @@
+<!-- 2026-10-14 14:30 · Build 2026-10-14.7: neue Felder Längsträger/Gaszellen/Kiel/Ballonets/Gondelmaße und Aufhängung, Gelände entlang der Fahrt (gelaende.js), Höhe halten mit Gas und Ballast, Boost nur beim Halten, Vorschau gedämpft, Vergleich A400M/CH-47F -->
 <!-- 2026-10-14 16:00 · Build 2026-10-14.6: Auswahl mit Seitenbildern aus dem 3D-Modell; Fahrten-Liste, Fahrt beenden jederzeit, Schub exponentiell, Konsole einklappbar u. a.
      2026-10-14 14:30 · Build 2026-10-14.5: Fahrt: Anzeige wie Gasballon (einklappbar, TAS/GS/HDG/TRK), Vertikalprofil, Spur und Vorschau 1 h, Seitenansicht mit 3D-Modell, Schiffsumriss, Bericht mit Orten und CO₂
      2026-10-14 12:00 · Build 2026-10-14.4: Ruder (Größe, Pendelleitwerk), Speicher-Code als Text/Datei, Erbauer, eingetragene Luftschiffe (flotte.txt)
@@ -147,6 +148,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 <script src="flug.js"></script>
 <script src="wetter.js"></script>
 <script src="profil.js"></script>
+<script src="gelaende.js"></script>
 <script src="fahrt.js"></script>
 
 <script>
@@ -156,7 +158,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-14.6';
+const BUILD = '2026-10-14.7';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -286,7 +288,20 @@ const STEPS = [
     ], text: () => 'Die Kontur folgt dem Polynom 6. Grades nach Gertler (Series 58). Die Albacore-Form hat die Schlankheit des U-Boots USS Albacore (7,5).' },
   { id: 'bauweise', titel: 'Bauweise', frage: 'Welche Bauweise?', fields: [
       { typ: 'seg', key: 'bauweise', label: '', opts: [['S', 'Starr'], ['H', 'Halbstarr'], ['P', 'Prall (Blimp)'], ['O', 'Offen']] },
-    ], text: d => ({ S: 'Gerüst aus Ringen und Längsträgern, Gas in Zellen; Form unabhängig vom Gasdruck. Burgess: erst ab rund 28.000 m³ sinnvoll.', H: 'Prallhülle mit tragendem Kiel bzw. Innengerüst (Norge, Zeppelin NT). Ballonets halten den Überdruck.', P: 'Die Form hält allein der Überdruck; Ballonets mit Gebläse gleichen Höhenänderungen aus.', O: 'Unten offen mit kurzem Appendix wie ein Gasballon: kein Ballonet, Innendruck nur aus der Gassäule. Steigt das Schiff, entweicht Gas.' })[d.bauweise] },
+      // --- Gerüst und Innenaufbau (Entwurf „Neue Felder“, freigegeben 14.10.2026); ohne Wahl gilt der Vorschlag ---
+      // Starr: Zahl der Längsträger (Striche auf der Hülle) und der Gaszellen (Hauptringe = Zellen + 1)
+      { typ: 'num', key: 'traeger', label: 'Längsträger (Burgess: 17–25)', unit: 'Anzahl', min: 9, max: 40, step: 1, k: 0, when: d => d.bauweise === 'S', def: () => S.r.struktur.traeger, vorschlag: (d, r) => r.struktur.traeger0 },
+      { typ: 'num', key: 'zellen', label: 'Gaszellen (= Hauptringe − 1)', unit: 'Anzahl', min: 3, max: 30, step: 1, k: 0, when: d => d.bauweise === 'S', def: () => S.r.struktur.zellen, vorschlag: (d, r) => r.struktur.zellen0 },
+      // Halbstarr: Kiel außen (Norge), Kiel innen oder Innengerüst (Zeppelin NT), Werkstoff, Länge
+      { typ: 'seg', key: 'kiel', label: 'Kiel / Gerüst', when: d => d.bauweise === 'H', def: () => 'A', opts: [['A', 'Kiel außen'], ['I', 'Kiel innen'], ['G', 'Innengerüst']] },
+      { typ: 'seg', key: 'kwerk', label: 'Werkstoff', when: d => d.bauweise === 'H', def: () => 'S', opts: [['S', 'Stahlrohr'], ['A', 'Aluminium'], ['C', 'CFK']] },
+      { typ: 'num', key: 'kiellaenge', label: 'Kiellänge (Anteil der Schiffslänge)', min: 0.3, max: 1, step: 0.01, k: 0, pct: true, when: d => d.bauweise === 'H', def: () => 0.7, vorschlag: () => 0.7 },
+      // Prall und halbstarr: Zahl und Volumen der Ballonets
+      { typ: 'num', key: 'ballonets', label: 'Ballonets', unit: 'Anzahl', min: 1, max: 6, step: 1, k: 0, when: d => d.bauweise === 'P' || d.bauweise === 'H', def: () => 2, vorschlag: () => 2 },
+      { typ: 'num', key: 'ballonet', label: 'Ballonet-Volumen (alle zusammen)', unit: '%', min: 0, max: 50, step: 1, k: 0, when: d => d.bauweise === 'P' || d.bauweise === 'H', vorschlag: (d, r) => Math.ceil((1 - r.fill) * 100 + 5) },
+      // Prall: Gondel innen aufgehängt (Lastgurt, Katenarie; Gondel direkt an der Hülle) oder außen an Seilen
+      { typ: 'seg', key: '_aufh', label: 'Aufhängung der Gondel', when: d => d.bauweise === 'P' && (d.gondel === 'F' || d.gondel === 'K'), opts: [['I', 'Innen (Lastgurt)'], ['A', 'Außen (Seile)']] },
+    ], text: (d, r) => strukturText(d, r) + ({ S: 'Gerüst aus Ringen und Längsträgern, Gas in Zellen; Form unabhängig vom Gasdruck. Burgess: erst ab rund 28.000 m³ sinnvoll.', H: 'Prallhülle mit tragendem Kiel bzw. Innengerüst (Norge, Zeppelin NT). Ballonets halten den Überdruck.', P: 'Die Form hält allein der Überdruck; Ballonets mit Gebläse gleichen Höhenänderungen aus.', O: 'Unten offen mit kurzem Appendix wie ein Gasballon: kein Ballonet, Innendruck nur aus der Gassäule. Steigt das Schiff, entweicht Gas.' })[d.bauweise] },
   { id: 'ltw', titel: 'Leitwerk', frage: 'Wie viele Flossen bekommt das Leitwerk?', fields: [
       { typ: 'seg', key: 'ltw.n', label: 'Zahl der Flossen (Anzahl)', opts: [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6'], [7, '7'], [8, '8']], num: true },
       { typ: 'seg', key: 'ltw.anord', label: 'Anordnung', opts: d => ({ 1: [['|', 'oben'], ['u', 'unten']], 2: [['|', 'oben/unten'], ['V', 'V'], ['A', 'umgek. V']], 3: [['Y', 'Y'], ['L', 'umgek. Y']] }[d.ltw.n] || [['+', '+ Kreuz'], ['X', 'X']]) },
@@ -309,7 +324,6 @@ const STEPS = [
   { id: 'volumen', titel: 'Volumen', frage: 'Wie groß wird das Luftschiff?', fields: [
       { typ: 'num', key: 'V', label: 'Volumen', unit: 'm³', min: 0.25, max: 250000, log: true, k: 0 },
       { typ: 'num', key: 'prallhoehe', label: 'Prallhöhe (Gas füllt die Hülle ganz)', unit: 'm', min: 0, max: 4000, step: 50, k: 0, when: d => d.bauweise !== 'O', vorschlag: d => d.V < 50 ? 0 : 1000 },
-      { typ: 'num', key: 'ballonet', label: 'Ballonet', unit: '%', min: 0, max: 50, step: 1, k: 0, when: d => d.bauweise === 'P' || d.bauweise === 'H', vorschlag: (d, r) => Math.ceil((1 - r.fill) * 100 + 5) },
     ], text: (d, r) => `Länge ${de(r.geo.L, r.geo.L < 10 ? 2 : 1)} m, Durchmesser ${de(r.geo.D, r.geo.D < 10 ? 2 : 1)} m, Oberfläche ${de(r.geo.S, r.geo.S < 10 ? 1 : 0)} m². Füllung am Boden ${de(r.fill * 100)} %, Bruttoauftrieb ${fm(r.lift0)}.` },
   { id: 'huelle', titel: 'Hülle', frage: 'Wie schwer ist der Hüllenstoff?', fields: [
       { typ: 'chips', key: 'huelle_gm2', label: 'Beispiele', opts: [[27, 'Tritax 27'], [150, 'Starr-Außenhülle 150'], [200, 'Laminat 200'], [300, 'Ballonstoff 300'], [475, 'Stoff 1927 475']] },
@@ -321,7 +335,14 @@ const STEPS = [
       { typ: 'seg', key: 'gondel', label: '', opts: [['K', 'Korb'], ['F', 'Fest am Rumpf'], ['I', 'Im Rumpf'], ['R', 'RC-Kapsel'], ['N', 'Keine']] },
       // Lage der Gondelmitte (bei „Im Rumpf“: Lage der Räume); Vorschlag = Lage für Trimm (Schwerpunkt unter der Auftriebsmitte)
       { typ: 'num', key: 'gx', label: d => d.gondel === 'I' ? 'Lage der Räume im Rumpf (Mitte)' : 'Lage der Gondel (Mitte)', lfrac: true, min: 0.05, max: 0.9, step: 0.001, k: 3, when: d => d.gondel !== 'N', def: () => S.r.trim.gx, vorschlag: (d, r) => r.trim.xReq },
-    ], text: (d, r) => trimText(r) + `Masse der Gondel: ${fm(r.leer.gondel)}. ` + ({ K: 'Offener Korb an Seilen, wie beim Gasballon; großer Luftwiderstand.', F: 'Geschlossene Gondel direkt unter dem Rumpf.', T: 'Tropfenform wie im Windkanal entwickelt (Jaray): kleinster Widerstand.', I: `Fahrgast- und Mannschaftsräume im Rumpf (sie nehmen ${de(r.Vraum)} m³ Gasraum weg), außen nur eine 4-Mann-Steuergondel in Stromlinienform.`, R: 'Kleine Kapsel für Empfänger und Regler (RC-Blimp).', N: 'Keine Gondel, z. B. für autonome Schiffe.' })[d.gondel] },
+      // Form und Maße der Kabine (Vorschlag aus der Personenzahl, änderbar), Abstand zur Hülle und Zahl der Seile
+      { typ: 'seg', key: 'gform', label: 'Form der Kabine', when: d => d.gondel === 'F', def: () => 'E', opts: [['E', 'Eckig'], ['S', 'Stromlinie'], ['T', 'Tropfen']] },
+      { typ: 'num', key: 'gl', label: 'Länge der Gondel', unit: 'm', min: 0.5, max: 40, log: true, k: 2, when: d => d.gondel === 'F' || d.gondel === 'K', def: () => S.r.gondel.l, vorschlag: (d, r) => r.gondelVorschlag.l },
+      { typ: 'num', key: 'gb', label: 'Breite', unit: 'm', min: 0.3, max: 6, step: 0.05, k: 2, when: d => d.gondel === 'F' || d.gondel === 'K', def: () => S.r.gondel.b, vorschlag: (d, r) => r.gondelVorschlag.b },
+      { typ: 'num', key: 'gh', label: 'Höhe', unit: 'm', min: 0.3, max: 4, step: 0.05, k: 2, when: d => d.gondel === 'F' || d.gondel === 'K', def: () => S.r.gondel.h, vorschlag: (d, r) => r.gondelVorschlag.h },
+      { typ: 'num', key: 'gabstand', label: 'Abstand zur Hülle (0 = direkt anliegend)', unit: 'm', min: 0, max: 15, step: 0.1, k: 1, when: d => d.bauweise !== 'S' && (d.gondel === 'F' || d.gondel === 'K'), def: () => S.r.gondel.ga || 0, vorschlag: d => d.gondel === 'K' ? 2.5 : null },
+      { typ: 'num', key: 'gseile', label: 'Zahl der Seile', unit: 'Anzahl', min: 2, max: 40, step: 2, k: 0, when: d => d.bauweise !== 'S' && (d.gondel === 'F' || d.gondel === 'K') && (S.r.gondel.ga || 0) > 0, def: () => S.r.gondel.ropes ? S.r.gondel.ropes.n : 4, vorschlag: (d, r) => r.gondelVorschlag.seile },
+    ], text: (d, r) => trimText(r) + `Masse der Gondel: ${fm(r.leer.gondel)}. ` + (r.gondel.ropes ? `${r.gondel.ropes.n} Seile, Ø ${de(r.gondel.ropes.dmm)} mm (aus der hängenden Last), ${fm(r.gondel.ropes.m)}. ` : '') + ({ K: 'Offener Korb an Seilen, wie beim Gasballon; großer Luftwiderstand.', F: 'Geschlossene Gondel direkt unter dem Rumpf.', T: 'Tropfenform wie im Windkanal entwickelt (Jaray): kleinster Widerstand.', I: `Fahrgast- und Mannschaftsräume im Rumpf (sie nehmen ${de(r.Vraum)} m³ Gasraum weg), außen nur eine 4-Mann-Steuergondel in Stromlinienform.`, R: 'Kleine Kapsel für Empfänger und Regler (RC-Blimp).', N: 'Keine Gondel, z. B. für autonome Schiffe.' })[d.gondel] },
   { id: 'pax', titel: 'Personen', frage: 'Wer und was fährt mit?', fields: [
       { typ: 'num', key: 'crew', label: 'Besatzung (0 = autonom)', unit: 'Anzahl', min: 0, max: 80, step: 1, k: 0 },
       { typ: 'num', key: 'pax', label: 'Fahrgäste', unit: 'Anzahl', min: 0, max: 80, step: 1, k: 0 },
@@ -412,7 +433,7 @@ function renderBody() {
     if (f.label && f.typ !== 'num') h += `<div class="lab">${f.label}</div>`;   // Zahlenfelder: Überschrift steht in der Wertzeile
     if (f.typ === 'seg' || f.typ === 'chips') {
       const opts = typeof f.opts === 'function' ? f.opts(d) : f.opts;
-      const cur = f.key === '_form' ? formKey(d.form) : f.key === '_mpaar' ? (C.nacelles(d.antrieb).mitte === 2 ? '1' : '0') : f.key === 'antrieb.ungerade' ? (d.antrieb.ungerade || 'U') : f.key === '_ruder' ? (d.ltw.pendel ? 'P' : 'K') : getByPath(d, f.key);
+      const cur = f.key === '_form' ? formKey(d.form) : f.key === '_mpaar' ? (C.nacelles(d.antrieb).mitte === 2 ? '1' : '0') : f.key === 'antrieb.ungerade' ? (d.antrieb.ungerade || 'U') : f.key === '_ruder' ? (d.ltw.pendel ? 'P' : 'K') : f.key === '_aufh' ? ((r.gondel.ga || 0) > 0 ? 'A' : 'I') : (getByPath(d, f.key) ?? (f.def ? f.def(d) : undefined));
       h += `<div class="${f.typ === 'seg' ? 'seg' : 'chips'}">` + opts.map(([v, t, dis]) => `<button data-f="${i}" data-v="${v}"${(f.typ === 'seg' && String(cur) === String(v)) ? ' class="on"' : ''}${dis ? ' disabled title="folgt"' : ''}>${t}</button>`).join('') + '</div>';
     } else if (f.typ === 'num') {
       const v = getByPath(d, f.key) ?? (f.def ? f.def() : 0), sv = f.vorschlag ? f.vorschlag(d, r) : null;
@@ -436,6 +457,8 @@ function renderBody() {
     if (f.key === '_form') { if (v !== 'eigen') Object.assign(d.form, clone(C.FORMS[v]), { name: undefined }); change(); return; }
     // Sonderfall Motorpaar in der Mittelgondel: gespeichert als Zahl der Gondeln = Motoren − 1
     if (f.key === '_ruder') { if (v === 'P') d.ltw.pendel = true; else delete d.ltw.pendel; change(); return; }
+    // Aufhängung innen ⇒ Gondel direkt an der Hülle (Abstand 0); außen ⇒ an Seilen mit Vorschlagsabstand 0,3 · Ø (mind. 2 m)
+    if (f.key === '_aufh') { d.gabstand = v === 'I' ? 0 : Math.max(2, Math.round(0.3 * r.geo.D * 10) / 10); change(); return; }
     if (f.key === '_mpaar') { if (v === '1') d.antrieb.gondeln = d.antrieb.n - 1; else delete d.antrieb.gondeln; change(); return; }
     if (f.num || f.typ === 'chips') v = +v;
     setByPath(d, f.key, v);
@@ -486,6 +509,14 @@ function applySuggestions() {
   change(); toast(n ? 'Vorschlag übernommen' : 'Kein Vorschlag in diesem Schritt');
 }
 
+// Gerüst und Innenaufbau in Worten (Schritt Bauweise)
+function strukturText(d, r) {
+  const st = r.struktur, L = r.geo.L, l = r.leer;
+  if (d.bauweise === 'S') return `<b>Gerüst:</b> ${st.traeger} Längsträger (Feldbreite ${de(Math.PI * r.geo.D / st.traeger, 1)} m), ${st.zellen} Gaszellen (Ringabstand ${de(L / st.zellen, 1)} m) ⇒ Träger ${fm(l.laengstraeger)}, Ringe und Netze ${fm(l.ringe)}, Zellen ${fm(l.zellen)}. Mehr Längsträger: schmalere Felder, leichtere Netze, weniger Ausbeulen der Außenhülle, aber mehr Knoten. Mehr Zellen: kürzere Felder zwischen den Ringen, ein Zellenausfall kostet weniger (1 von ${st.zellen} = ${de(100 / st.zellen)} % Auftrieb).<br>`;
+  if (d.bauweise === 'H') return `<b>Kiel:</b> ${({ A: 'außen unter der Hülle', I: 'innen in der Hülle', G: 'Innengerüst aus Dreiecksrahmen' })[st.kiel]}, ${({ S: 'Stahlrohr', A: 'Aluminium', C: 'CFK' })[st.kwerk]}, ${de(st.kiellaenge * 100)} % der Länge ⇒ ${fm(l.kiel)}. ${st.nB} Ballonets ${fm(l.ballonet || 0)}${st.nB >= 2 ? ' – vorn und hinten getrennt füllbar: so lässt sich das Schiff im Flug trimmen' : ''}.<br>`;
+  if (d.bauweise === 'P') return `<b>Ballonets:</b> ${st.nB} Stück, zusammen ${de(d.ballonet ?? 25)} % des Volumens, ${fm(l.ballonet || 0)}${st.nB >= 2 ? '. Vorn und hinten getrennt füllbar: Trimm im Flug (Bug hoch/tief ohne Ruder)' : ''}. Gondel ${(r.gondel.ga || 0) > 0 ? 'außen an ' + (r.gondel.ropes ? r.gondel.ropes.n : '') + ' Seilen' : 'innen an Lastgurten (Katenarie) aufgehängt, direkt an der Hülle'}.<br>`;
+  return '';
+}
 // Trimm in einem Satz: Lage von Schwerpunkt und Auftriebsmitte, Winkel ohne Ruder
 function trimText(r) {
   const t = r.trim, L = r.geo.L, m = x => de(x * L, 1) + ' m';

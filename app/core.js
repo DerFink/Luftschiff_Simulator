@@ -1,3 +1,4 @@
+// 2026-10-14 13:10 · core.js 0.15: Gerüst und Innenaufbau wählbar (Längsträger, Gaszellen, Kielart/-werkstoff/-länge, Zahl der Ballonets; Code GZ, KI, NB), Vorschlag der Gondelmaße
 // 2026-10-14 11:00 · core.js 0.14: Ruder (Anteil der Flossenfläche, Pendelleitwerk), Speicher-Code zukunftssicher (eingefrorene Grundwerte LS1, Text drumherum erlaubt), Erbauer (U)
 // 2026-10-14 05:00 · core.js 0.13: Trimmwiderstand aus der Schublinie unter der Achse (Höhenruder gleicht das aufnickende Moment aus)
 // 2026-10-14 02:30 · core.js 0.12: Lage des Leitwerks (ltw.xTE) und der Tanks/Akkus (xtank) wählbar
@@ -244,15 +245,61 @@
      ----------------------------------------------------------------------------------------------- */
   const L49 = { L: 196.0, D: 23.98, v: 26.82, Vs: Math.pow(60830, 2 / 3) };
 
+  /* GERÜST UND INNENAUFBAU (Felder vom Nutzer freigegeben am 14.10.2026, Entwurf „Neue Felder“)
+     Ohne eigene Wahl gelten die Vorschläge; bei den Vorschlägen bleibt die Masse genau wie bisher
+     (alle Faktoren = 1), damit alte Speicher-Codes dieselben Ergebnisse liefern.
+     Starr:
+       Längsträger nT: Vorschlag = Umfang / 3,4 m Feldbreite (LZ 120: 17, LZ 126: 25; Burgess: 17–25)
+         Längsträger  × (0,85 + 0,15 · nT/nT0)                 mehr Knoten und Beschläge
+         Ringe/Netze  × (0,7 + 0,15 · nT0/nT + 0,15 · nT/nT0)   schmalere Felder ⇒ leichtere Netze, aber mehr Drähte
+         Rumpfwiderstand × (1 + 0,03 · (nT0/nT − 1))            breite Felder ⇒ Außenhülle beult zwischen den Trägern
+       Gaszellen nZ (Hauptringe = nZ + 1): Vorschlag = L / Ringabstand, Ringabstand 0,52 · D (8 … 15 m)
+         (LZ 120: 12, LZ 126: 14, LZ 129: 16)
+         Zellenenden  20,7 · D² × (nZ + 1)/(nZ0 + 1)
+         Ringe        × (0,6 + 0,4 · (nZ + 1)/(nZ0 + 1))       Hauptringe
+         Längsträger  × (0,8 + 0,2 · (nZ0 + 1)/(nZ + 1))       kürzere Felder ⇒ weniger Knicklänge
+         Ausfall einer Zelle kostet 1/nZ des Auftriebs (Hinweis)
+     Halbstarr:
+       Kiel: A außen (Norge, Standard) × 1,0 · I innen × 0,9 · G Innengerüst (Zeppelin NT) × 1,6
+       Werkstoff: Stahlrohr × 1,0 (Standard) · Aluminium × 0,65 · CFK × 0,45
+       Kiellänge kl (Anteil von L, Vorschlag 0,7): × (0,4 + 0,6 · kl / 0,7)
+     Prall und halbstarr:
+       Ballonets nB (Standard 2): Stoffmasse ~ nB^(1/3) bei gleichem Gesamtvolumen (kleinere Säcke, mehr Fläche)
+       Ab 2 Ballonets: Trimm im Flug durch Umpumpen der Luft zwischen vorderem und hinterem Ballonet
+     Prall: Aufhängung der Gondel innen (Lastgurt/Katenarie, Gondel direkt an der Hülle, Abstand 0) oder
+       außen an Seilen (Abstand > 0). Die Masse der Aufhängung (4 % des Bruttoauftriebs) gilt für beide;
+       außen kommen die Seile mit Masse und Widerstand dazu (siehe Gondel).                           */
+  function strukturVorschlag(geo) {
+    const traeger0 = Math.max(9, Math.round(Math.PI * geo.D / 3.4));
+    const abst = Math.min(15, Math.max(8, 0.52 * geo.D));
+    const zellen0 = Math.max(3, Math.round(geo.L / abst));
+    return { traeger0, zellen0, kiellaenge0: 0.7, ballonets0: 2 };
+  }
+  function struktur(d, geo) {
+    const v = strukturVorschlag(geo);
+    const traeger = d.traeger || v.traeger0, zellen = d.zellen || v.zellen0;
+    const nB = d.ballonets || 2;
+    return Object.assign(v, {
+      traeger, zellen, nB,
+      kiel: d.kiel || 'A', kwerk: d.kwerk || 'S', kiellaenge: d.kiellaenge || 0.7,
+      aufh: d.bauweise === 'P' ? ((d.gabstand ?? 0) > 0 ? 'A' : 'I') : null,
+      fT: traeger / v.traeger0, fZ: (zellen + 1) / (v.zellen0 + 1),
+    });
+  }
+  const KIEL_ART = { A: 1, I: 0.9, G: 1.6 }, KIEL_WERK = { S: 1, A: 0.65, C: 0.45 };
+
   function massRigid(d, geo, vmax, tl) {
     const w = d.werkstoff || 1;
     const sL = geo.L / L49.L, sD = geo.D / L49.D, sv = vmax / L49.v;
+    const st = struktur(d, geo), fT = st.fT, fZ = st.fZ;
     const m = {};
     m.huelle = geo.S * d.huelle_gm2 / 1000;                                   // Außenhülle (L-49: 1.769 kg ⇒ 150 g/m²)
-    m.zellen = (geo.S + 20.7 * geo.D * geo.D) * (d.zellen_gm2 || 170) / 1000;   // Gaszellen: Mantel ~S, Enden ~D² (Burgess)
+    m.zellen = (geo.S + 20.7 * geo.D * geo.D * fZ) * (d.zellen_gm2 || 170) / 1000;   // Gaszellen: Mantel ~S, Enden ~D² je Zelle (Burgess)
     m.laengstraeger = w * (3778 * sL * sL * sL * sD                            // statische Biegung und Laufgang ~ L³·D
-                          + 1211 * Math.pow(sL, 8 / 3) * Math.cbrt(sD) * sv * sv); // aerodynamische Biegung ~ L^(8/3)·D^(1/3)·v²
-    m.ringe = w * 5511 * sL * sD * sD * sD;                                    // Ringe, Scherdrähte, Netze ~ L·D³
+                          + 1211 * Math.pow(sL, 8 / 3) * Math.cbrt(sD) * sv * sv)  // aerodynamische Biegung ~ L^(8/3)·D^(1/3)·v²
+                      * (0.85 + 0.15 * fT) * (0.8 + 0.2 / fZ);                 // Zahl der Träger, Knicklänge zwischen den Ringen
+    m.ringe = w * 5511 * sL * sD * sD * sD                                     // Ringe, Scherdrähte, Netze ~ L·D³
+              * (0.7 + 0.15 / fT + 0.15 * fT) * (0.6 + 0.4 * fZ);              // Feldbreite der Netze, Zahl der Hauptringe
     m.leitwerk = w * tl.Atot * Math.max(2.03 * sL * Math.max(sv, 0.5), 2 * d.huelle_gm2 / 1000);
     m.armaturen = 0.0708 * geo.V * (w + 1) / 2;                                // Ventile, Ballastanlagen, Steuerung ~ V
     m.elektrik = 0.71 * geo.Vs;                                                 // Elektrik, Ausrüstung ~ V^(2/3)
@@ -264,14 +311,19 @@
     m.huelle = geo.S * d.huelle_gm2 / 1000 * 1.25;                             // +25 % Nähte, Gurte, Lastbänder, Patches
     if (d.bauweise !== 'O') {
       const bo = (d.ballonet ?? 25) / 100;                                      // Ballonets aus leichterem Stoff (60 %)
-      m.ballonet = bo > 0 ? 2.2 * Math.pow(bo * geo.V, 2 / 3) * d.huelle_gm2 / 1000 * 0.6 * 2 : 0;
+      const nB = d.ballonets || 2;                                               // Zahl der Ballonets (Standard 2)
+      // nB Säcke mit je bo·V/nB: Fläche ~ nB · (bo·V/nB)^(2/3); bei nB = 2 wie bisher 2 · 2,2 · (bo·V)^(2/3)
+      m.ballonet = bo > 0 ? 2.2 * Math.pow(bo * geo.V, 2 / 3) * d.huelle_gm2 / 1000 * 0.6 * 2 * Math.cbrt(nB / 2) : 0;
       m.geblaese = (bo > 0 && geo.V > 50) ? 0.002 * geo.V + 2 : 0;                // Ballonet-Gebläse und Klappen (ab 50 m³)
     }
     // Leitwerk: Stoff über Rohrgerüst; flächenbezogene Masse wächst mit Größe (Last ~ V^(2/3)·v²)
     m.leitwerk = tl.Atot * (3 * d.huelle_gm2 / 1000 + 0.012 * Math.sqrt(geo.V) * Math.max(vmax / 20, 0.3));
     m.aufhaengung = 0.04 * lift0;                                                // Aufhängung, Seile, Lastgurte ~ Bruttoauftrieb
     m.armaturen = geo.V > 50 ? 0.01 * geo.V + 15 : 0.004 * geo.V + 0.01;         // Ventile, Reißbahn, Füllansatz, Steuerseile
-    if (d.bauweise === 'H') m.kiel = 0.045 * lift0 * Math.pow(geo.L / 60, 0.5);  // Kiel trägt Lasten über die Länge
+    if (d.bauweise === 'H') {                                                    // Kiel trägt Lasten über die Länge
+      const kf = (KIEL_ART[d.kiel || 'A'] || 1) * (KIEL_WERK[d.kwerk || 'S'] || 1) * (0.4 + 0.6 * (d.kiellaenge || 0.7) / 0.7);
+      m.kiel = 0.045 * lift0 * Math.pow(geo.L / 60, 0.5) * kf;
+    }
     if (d.bauweise === 'P' || d.bauweise === 'H') m.nasenlatten = geo.V > 50 ? 0.004 * geo.V : 0;
     if (d.bauweise === 'O' && d.latten && d.latten.len > 0) m.nasenlatten = d.latten.n * d.latten.len * lattenKgM(geo);
     return m;
@@ -369,7 +421,9 @@
   function dragCoeff(d, geo, tl, v, rho) {
     const Re = Math.max(v, 0.5) * geo.L / NU0 * (rho / 1.225);
     const cf = cfOf(Re), LD = geo.L / geo.D;
-    const hull = cf * (4 * Math.cbrt(LD) + 6 * Math.pow(LD, -1.2) + 24 * Math.pow(LD, -2.7));   // Hoerner (1965) Kap. 6
+    let hull = cf * (4 * Math.cbrt(LD) + 6 * Math.pow(LD, -1.2) + 24 * Math.pow(LD, -2.7));   // Hoerner (1965) Kap. 6
+    // Starr: Außenhülle beult zwischen den Längsträgern aus; breitere Felder (weniger Träger) ⇒ etwas mehr Widerstand
+    if (d.bauweise === 'S' && d.traeger) hull *= Math.max(0.97, 1 + 0.03 * (strukturVorschlag(geo).traeger0 / d.traeger - 1));
     const fins = 2 * tl.Atot * cfOf(Re * 0.15) * 1.25 / geo.Vs;                 // beidseitig benetzt, Profildicke
     const g = gondola(d, geo, d._hang, v);
     const gon = g.CdA / geo.Vs;
@@ -648,10 +702,13 @@
     }
     if (!tl.elevator) warn.push('Nur ' + d.ltw.n + ' Finne(n): kein Höhenruder. Höhe nur über Schub, Ballast und Gas.');
     if (frei < 0) warn.push(`Zu schwer: Es fehlen ${fmtMass(-frei)} Auftrieb.`);
+    if (d.bauweise === 'S' && d.zellen && geo.L / d.zellen > 20) warn.push(`Gaszellen: ${Math.round(geo.L / d.zellen)} m Ringabstand. Fällt eine Zelle aus, fehlen ${Math.round(100 / d.zellen)} % Auftrieb (${fmtMass(lift0 / d.zellen)}); lange Felder belasten die Längsträger.`);
     if (d.bauweise === 'S' && d.V < 28300) warn.push('Burgess: Starrluftschiffe unter rund 28.000 m³ sind nicht effizient. Prall oder halbstarr prüfen.');
 
     return {
-      d, geo, tail: tl, lift0, lpm, fill, prallhoehe, gasShare, Vraum, Vgas,
+      d, geo, tail: tl, lift0, lpm, fill, prallhoehe, gasShare, Vraum, Vgas, struktur: struktur(d, geo),
+      // Vorschlag der Gondelmaße (ohne eigene Länge/Breite/Höhe) für die Regler im Baukasten
+      gondelVorschlag: (() => { const g = gondola(Object.assign({}, d, { gl: 0, gb: 0, gh: 0, gseile: 0 }), geo, d._hang, 25); return { l: g.l, b: g.b, h: g.h, seile: g.ropes ? g.ropes.n : null }; })(),
       leer, mLeer, zuladung, mGesamt, frei,
       vmax, vmax_kmh: vmax * 3.6, v_reise_kmh: vr * 3.6, Preise, dauer_h, reichweite_km, gipfel,
       drag: dragCoeff(d, geo, tl, vmax, 1.225), gondel: gondola(d, geo, d._hang, vmax), K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
@@ -830,6 +887,10 @@
     if (d.bauweise === 'S') p.push('Z:' + num(d.zellen_gm2), 'W:' + num(d.werkstoff));
     if (d.bauweise !== 'O') p.push('HP:' + num(d.prallhoehe));          // Prallhöhe für Starr, Prall und Halbstarr
     if (d.bauweise === 'P' || d.bauweise === 'H') p.push('BO:' + num(d.ballonet));
+    // Gerüst und Innenaufbau (14.10.2026): nur wenn vom Vorschlag abweichend gewählt
+    if (d.bauweise === 'S' && (d.traeger || d.zellen)) p.push('GZ:' + (d.traeger || '') + ',' + (d.zellen || ''));
+    if (d.bauweise === 'H' && (d.kiel || d.kwerk || d.kiellaenge)) p.push('KI:' + (d.kiel || '') + ',' + (d.kwerk || '') + ',' + (d.kiellaenge ? num(d.kiellaenge) : ''));
+    if ((d.bauweise === 'P' || d.bauweise === 'H') && d.ballonets) p.push('NB:' + d.ballonets);
     p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : '', d.ltw.gm2 ? num(d.ltw.gm2) : '', d.ltw.xTE != null ? num(d.ltw.xTE) : '', d.ltw.ruder != null ? num(d.ltw.ruder) : '', d.ltw.pendel ? 'P' : ''].join(',').replace(/,+$/, ''));
     p.push(('K:' + [d.gondel, d.gform || '', d.gabstand != null ? num(d.gabstand) : '', d.gseile || '', d.gx != null ? num(d.gx) : ''].join(',')).replace(/,+$/, ''), 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
@@ -871,6 +932,9 @@
         case 'W': d.werkstoff = +v; break;
         case 'HP': d.prallhoehe = +v; break;
         case 'BO': d.ballonet = +v; break;
+        case 'GZ': if (n[0]) d.traeger = +n[0]; if (n[1]) d.zellen = +n[1]; break;          // Längsträger, Gaszellen (Anzahl)
+        case 'KI': if (n[0]) d.kiel = n[0]; if (n[1]) d.kwerk = n[1]; if (n[2]) d.kiellaenge = +n[2]; break;   // Kielart, Werkstoff, Länge
+        case 'NB': d.ballonets = +v; break;                                                 // Zahl der Ballonets
         case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; if (n[7]) d.ltw.gm2 = +n[7]; if (n[8]) d.ltw.xTE = +n[8]; if (n[9]) d.ltw.ruder = +n[9]; if (n[10] === 'P') d.ltw.pendel = true; break;
         case 'K': d.gondel = n[0]; if (n[1]) d.gform = n[1]; if (n[2] !== undefined && n[2] !== '') d.gabstand = +n[2]; if (n[3]) d.gseile = +n[3]; if (n[4]) d.gx = +n[4]; break;
         case 'C': d.crew = +v; break;
@@ -921,9 +985,9 @@
   }
 
   const LSCore = {
-    VERSION: '0.12', G0, LB, FT, HP,
+    VERSION: '0.15', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nacelles, nose, noseNeed,
-    dragCoeff, trimDrag, schubHebel, ruder, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
+    strukturVorschlag, struktur, dragCoeff, trimDrag, schubHebel, ruder, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSCore;
   else root.LSCore = LSCore;

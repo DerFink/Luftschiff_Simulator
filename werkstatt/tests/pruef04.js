@@ -1,3 +1,4 @@
+// 2026-10-14 13:40 · pruef04.js: Höhe halten mit Gas und Ballast (3 % zu schwer, ohne Schub)
 // 2026-10-14 04:30 · pruef04.js: Nickstabilität mit/ohne Höhensteuerer, Gipfel als höchster Punkt
 // 2026-10-14 03:30 · pruef04.js: Prüfungen des Flugmodells (flug.js) gegen die Auslegung
 /* =================================================================================================
@@ -46,6 +47,10 @@ for (const id of ['lz120', 'nt07', 'c7']) {
   // 7 Höhe halten: von 300 auf 400 m in Reisefahrt
   { const Fl = luft(r, 300, r.v_reise_kmh / 3.6, 0.003); Fl.s.ap.fahrt = r.v_reise_kmh / 3.6; Fl.s.ap.hoehe = 400; F.lauf(Fl, 600);
     row(n, 'Höhe halten 400 m (nach 10 min)', 400, Fl.s.h, 'm', 'leicht 0,3 %, Nickwinkel ' + (Fl.s.th * 180 / Math.PI).toFixed(1) + '°'); }
+  // 7b Höhe halten mit Gas und Ballast: 3 % des Auftriebs zu schwer, ohne Schub (Höhenruder wirkungslos), 15 min
+  { const Fl = luft(r, 300, 0, 0); Fl.s.ballast += 0.03 * r.lift0; Fl.s.ap.hoehe = 300; const b0 = Fl.s.ballast; let hmin = 1e9;
+    for (let i = 0; i < 900; i++) { F.lauf(Fl, 1); hmin = Math.min(hmin, Fl.s.h); }
+    row(n, 'Höhe halten ohne Schub, 3 % zu schwer: Höhe nach 15 min (m)', 300, Fl.s.h, 'm', 'tiefster Punkt ' + Math.round(hmin) + ' m, Ballast abgeworfen ' + Math.round(b0 - Fl.s.ballast) + ' kg (3 % = ' + Math.round(0.03 * r.lift0) + ' kg)'); }
   // 8 Position halten bei 5 m/s Wind aus West, 30 min
   { const Fl = luft(r, 300, 0, 0); Fl.s.ap.hoehe = 300; Fl.s.ap.pos = { x: 0, y: 0 }; F.lauf(Fl, 1800, () => ({ e: 5, n: 0 }));
     row(n, 'Position halten bei 5 m/s Wind: Abstand nach 30 min (m)', 0, Math.hypot(Fl.s.x, Fl.s.y), 'm', 'Schub ' + Math.round(Fl.s.schub * 100) + ' %'); }

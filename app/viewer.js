@@ -1,3 +1,4 @@
+// 2026-10-14 13:20 · viewer.js 0.14: Längsträger und Gaszellen nach Wahl (Zellengrenzen gestrichelt), Kiel außen/innen/Innengerüst mit Kiellänge, 1–6 Ballonets, innen aufgehängte Gondel (Lastgurt) im Schnitt
 // 2026-10-14 12:05 · viewer.js 0.13: Gondelleinen (Blimp, z. B. C-7) paarweise an der Hülle von 25 % bis 75 % der Länge gespreizt;
 //                    Vorschau zeichnet nur, wenn sichtbar (behebt Hänger nach langer Fahrt)
 // 2026-10-14 17:00 · viewer.js 0.12: Teilbild wahlweise als Schnittansicht (Innenleben sichtbar)
@@ -120,15 +121,33 @@ export function createViewer(host) {
     return grp;
   }
 
+  /* Längsbereich des Kiels: Kiellänge (Anteil der Länge) mittig um 0,47 L, innerhalb 3 … 97 % */
+  function kielBereich(st) {
+    const kl = st.kiellaenge || 0.7, xa = Math.max(0.03, 0.47 - kl / 2), xb = Math.min(0.97, xa + kl);
+    return [xa, xb];
+  }
+  /* ---------- Kiel außen (Halbstarr, z. B. Norge): Dreiecksfachwerk unter der Hülle, auch ohne Schnitt sichtbar ---------- */
+  function kielAussen(g, st, R, rad, X) {
+    const [xa, xb] = kielBereich(st), nF = 30, km = new THREE.LineBasicMaterial({ color: 0x3d4652 }), A = [], B = [], C = [];
+    for (let i = 0; i <= nF; i++) {
+      const t = i / nF, x = xa + (xb - xa) * t, rr = rad(x), kh = 0.14 * R * Math.pow(Math.sin(Math.PI * t), 0.3);   // Enden laufen aus
+      A.push(new THREE.Vector3(X(x), -rr * 0.99, -0.12 * R)); B.push(new THREE.Vector3(X(x), -rr * 0.99, 0.12 * R)); C.push(new THREE.Vector3(X(x), -rr * 0.99 - kh, 0));
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([A[i], C[i], B[i]]), km));
+    }
+    for (const P of [A, B, C]) g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(P), km));
+    // Verkleidung als dunkle Leiste am Untergurt
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(C), 60, 0.025 * R, 6), new THREE.MeshStandardMaterial({ color: 0x5b6470 })));
+  }
+
   /* ---------- Schnittansicht: Innenleben ----------
      Starr:     Ringe (Vieleck) und Längsträger, Laufgang unten, Gaszellen zwischen den Ringen
      Halbstarr: Kiel als Dreiecksfachwerk unten, Ballonets vorn und hinten
      Prall:     Ballonets vorn und hinten (Volumen aus dem Ballonet-Anteil)                               */
-  function innenleben(g, d, geo, R, Ls, rad, X) {
+  function innenleben(g, d, geo, R, Ls, rad, X, st) {
     const L = geo.L;
     if (d.bauweise === 'S') {
-      const nZ = d.zellen || Math.max(4, Math.min(20, Math.round(L / 10)));      // Gaszellen, sonst etwa alle 10 m ein Ring
-      const nE = d.traeger || 17;                                                // Längsträger (Ecken des Ringvielecks)
+      const nZ = st.zellen;                                                      // Gaszellen (gewählt oder Vorschlag aus dem Rechenkern)
+      const nE = st.traeger;                                                     // Längsträger (Ecken des Ringvielecks)
       const x0 = 0.03, x1 = 0.97, xs = Array.from({ length: nZ + 1 }, (_, i) => x0 + (x1 - x0) * i / nZ);
       const gm = new THREE.LineBasicMaterial({ color: 0x4f5a68 });
       for (const x of xs) {                                                      // Ringe als Vieleck
@@ -153,24 +172,40 @@ export function createViewer(host) {
       g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lp), 80, 0.035 * R, 6), new THREE.MeshStandardMaterial({ color: 0x8a6d4a })));
       return;
     }
-    if (d.bauweise === 'H') {                                                    // Kiel: Dreiecksfachwerk
-      const km = new THREE.LineBasicMaterial({ color: 0x4f5a68 }), xa = 0.08, xb = 0.85, nF = 30, ptsA = [], ptsB = [], ptsC = [];
-      for (let i = 0; i <= nF; i++) {
-        const x = xa + (xb - xa) * i / nF, rr = rad(x), yb = -rr * 0.97, kh = Math.min(0.18 * R, rr * 0.4);
-        ptsA.push(new THREE.Vector3(X(x), yb, -kh * 0.6)); ptsB.push(new THREE.Vector3(X(x), yb, kh * 0.6)); ptsC.push(new THREE.Vector3(X(x), yb + kh, 0));
-        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([ptsA[i], ptsB[i], ptsC[i], ptsA[i]]), km));
+    // Halbstarr: Kiel innen (Dreiecksfachwerk in der Hülle) oder Innengerüst (Dreiecksrahmen mit 3 Längsträgern, Zeppelin NT);
+    // der Kiel außen wird in kielAussen() auch ohne Schnitt gezeichnet
+    if (d.bauweise === 'H' && st.kiel !== 'A') {
+      const km = new THREE.LineBasicMaterial({ color: 0x4f5a68 });
+      const [xa, xb] = kielBereich(st);
+      if (st.kiel === 'I') {
+        const nF = 30, ptsA = [], ptsB = [], ptsC = [];
+        for (let i = 0; i <= nF; i++) {
+          const x = xa + (xb - xa) * i / nF, rr = rad(x), yb = -rr * 0.97, kh = Math.min(0.18 * R, rr * 0.4);
+          ptsA.push(new THREE.Vector3(X(x), yb, -kh * 0.6)); ptsB.push(new THREE.Vector3(X(x), yb, kh * 0.6)); ptsC.push(new THREE.Vector3(X(x), yb + kh, 0));
+          g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([ptsA[i], ptsB[i], ptsC[i], ptsA[i]]), km));
+        }
+        for (const P of [ptsA, ptsB, ptsC]) g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(P), km));
+      } else {                                                                     // Innengerüst: Dreiecksrahmen in der Hülle
+        const nF = 12, ecken = [[], [], []];
+        for (let i = 0; i <= nF; i++) {
+          const x = xa + (xb - xa) * i / nF, rr = rad(x) * 0.93, tri = [];
+          for (let k = 0; k < 3; k++) { const th = Math.PI / 2 + k * 2 * Math.PI / 3, P = new THREE.Vector3(X(x), rr * Math.sin(th), rr * Math.cos(th)); tri.push(P); ecken[k].push(P); }
+          tri.push(tri[0]); g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(tri), km));
+        }
+        for (const P of ecken) g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(P), km));
       }
-      for (const P of [ptsA, ptsB, ptsC]) g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(P), km));
     }
-    // Ballonets vorn und hinten: unterer Kreisabschnitt, Volumen = Ballonet-Anteil · V
+    // Ballonets: nB Stück hintereinander (Standard 2: vorn und hinten), unterer Kreisabschnitt, zusammen Ballonet-Anteil · V
     const bo = (d.ballonet ?? 25) / 100; if (!(bo > 0) || d.bauweise === 'O') return;
+    const nB = st.nB || 2, spalt = 0.04, breit = (0.73 - spalt * (nB - 1)) / nB;
+    const lagen = Array.from({ length: nB }, (_, i) => [0.12 + i * (breit + spalt), 0.12 + i * (breit + spalt) + breit]);
     const segFrac = al => (2 * al - Math.sin(2 * al)) / (2 * Math.PI);           // Flächenanteil des Kreisabschnitts
     const alpha = f => { let lo = 0, hi = Math.PI; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; segFrac(m) < f ? lo = m : hi = m; } return lo; };
     const bm = new THREE.MeshStandardMaterial({ color: 0x9cc3e8, roughness: 0.8, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
-    for (const [a, b] of [[0.12, 0.42], [0.55, 0.85]]) {
-      // Füllgrad f0 so, dass das Ballonet die Hälfte des Ballonet-Volumens hat (Enden laufen weich aus)
+    for (const [a, b] of lagen) {
+      // Füllgrad f0 so, dass jedes Ballonet seinen Anteil des Ballonet-Volumens hat (Enden laufen weich aus)
       let I = 0; const NI = 50; for (let i = 0; i < NI; i++) { const t = (i + 0.5) / NI, x = a + (b - a) * t; I += Math.pow(Math.sin(Math.PI * t), 0.5) * Math.PI * Math.pow(rad(x) * L / Ls / 2 * 2, 2) / 1 * (b - a) * L / NI; }
-      const f0 = Math.min(0.9, bo * geo.V / 2 / I);
+      const f0 = Math.min(0.9, bo * geo.V / nB / I);
       const NS = 30, NK = 20, pos = [], idx = [];
       for (let i = 0; i <= NS; i++) {
         const t = i / NS, x = a + (b - a) * t, rr = rad(x) * 0.97, al = alpha(Math.max(1e-4, f0 * Math.pow(Math.sin(Math.PI * t), 0.5)));
@@ -188,6 +223,7 @@ export function createViewer(host) {
      Maßstab: Rumpflänge = 10 Einheiten; x-Achse = Längsachse (Nase bei −5), y nach oben.          */
   function build(r) {
     const d = r.d, geo = r.geo, Ls = 10, R = Ls / 2 / (geo.L / geo.D), s = Ls / geo.L;  // s: Meter → Einheiten
+    const st = r.struktur || LSCore.struktur(d, geo);   // Gerüst und Innenaufbau (Längsträger, Zellen, Kiel, Ballonets)
     const g = new THREE.Group();
     const rad = x => R * Math.sqrt(Math.max(0, LSCore.y2(geo.a, Math.min(1, Math.max(0, x)))));
     const X = x => (x - 0.5) * Ls;
@@ -207,20 +243,23 @@ export function createViewer(host) {
     // Nur Starrschiffe: Längsträger zeichnen sich als Striche auf der Hülle ab, dazu Hauptringe
     if (rigid && !cut) {
       const mat = new THREE.LineBasicMaterial({ color: COL.gerippe, transparent: true, opacity: 0.55 });
-      const nLong = 18;
+      const nLong = st.traeger;                     // Zahl der Längsträger (gewählt oder Vorschlag)
       for (let k = 0; k < nLong; k++) {
         const th = k / nLong * Math.PI * 2, line = [];
         for (let i = 1; i < N; i++) { const x = i / N, rr = rad(x) * 1.004; line.push(new THREE.Vector3(X(x), rr * Math.cos(th), rr * Math.sin(th))); }
         g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(line), mat));
       }
-      for (let i = 1; i < 14; i++) {
-        const x = i / 14, rr = rad(x) * 1.004, ring = [];
+      // Hauptringe an den Grenzen der Gaszellen, gestrichelt (wie im Entwurf)
+      const dmat = new THREE.LineDashedMaterial({ color: COL.gerippe, transparent: true, opacity: 0.55, dashSize: 0.06, gapSize: 0.05 });
+      for (let i = 1; i < st.zellen; i++) {
+        const x = 0.03 + 0.94 * i / st.zellen, rr = rad(x) * 1.004, ring = [];
         for (let k = 0; k <= 48; k++) { const th = k / 48 * Math.PI * 2; ring.push(new THREE.Vector3(X(x), rr * Math.cos(th), rr * Math.sin(th))); }
-        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ring), mat));
+        const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(ring), dmat); ln.computeLineDistances(); g.add(ln);
       }
     }
 
-    if (cut) innenleben(g, d, geo, R, Ls, rad, X);
+    if (cut) innenleben(g, d, geo, R, Ls, rad, X, st);
+    if (d.bauweise === 'H' && st.kiel === 'A') kielAussen(g, st, R, rad, X);
 
     // Leitwerk: Winkel der Flossen (0 = oben, gegen den Uhrzeigersinn von hinten gesehen)
     const n = d.ltw.n, an = d.ltw.anord;
@@ -284,6 +323,17 @@ export function createViewer(host) {
           const xh = X(0.25 + 0.5 * t), rh = rad(0.25 + 0.5 * t);  // Punkt an der Hülle
           g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(xs, top - ga, side * w * 0.4), new THREE.Vector3(xh, -rh * 0.85, side * rh * 0.5)]), sm));
+        }
+      } else if (cut && d.bauweise === 'P' && d.gondel === 'F') {
+        // Innen aufgehängt (Blimp ohne Seile): Lastgurt oben in der Hülle (Katenarie, gestrichelt) und
+        // Tragseile durch das Gas hinunter zur Gondel, auf der abgewandten Hälfte der Hülle (Schnitt)
+        const dm = new THREE.LineDashedMaterial({ color: 0x4f5a68, dashSize: 0.07, gapSize: 0.05 });
+        const xa = Math.max(0.15, xf - 0.2), xb = Math.min(0.85, xf + 0.2), kat = [];
+        for (let i = 0; i <= 30; i++) { const x = xa + (xb - xa) * i / 30, rr = rad(x); kat.push(new THREE.Vector3(X(x), rr * (0.62 + 0.25 * Math.pow(2 * i / 30 - 1, 2)), -rr * 0.35)); }
+        const kl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(kat), dm); kl.computeLineDistances(); g.add(kl);
+        for (let i = 3; i <= 27; i += 4) {             // Tragseile vom Lastgurt zur Gondeloberkante
+          const P = kat[i], xs = xc - len * 0.45 + len * 0.9 * (i - 3) / 24;
+          const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([P, new THREE.Vector3(xs, top, -w * 0.3)]), dm); ln.computeLineDistances(); g.add(ln);
         }
       }
       g.userData.motorY = top - ga - h * 0.5; g.userData.motorX = xc; g.userData.motorZ = w / 2 + 0.6 * s;

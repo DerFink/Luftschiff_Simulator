@@ -1,3 +1,4 @@
+// 2026-10-14 13:30 · flug.js 0.7: Höhe halten mit Gas und Ballast, Trimm über Ballonets (ab 2), Ruder bei kleiner Fahrt schwächer
 // 2026-10-14 13:00 · flug.js 0.6: Vertikalbeschleunigung für die Anzeige
 // 2026-10-14 11:30 · flug.js 0.5: Ruder nach Größe bzw. Pendelleitwerk (τ, Ausschlag, Widerstand), Kurs halten = Kurs über Grund mit Vorhaltewinkel, Wenderadius nach Ruderwirkung
 // 2026-10-14 06:45 · flug.js 0.4: Landung erst nach dem Abheben (nicht schon beim Loslassen am Boden)
@@ -78,6 +79,7 @@
       mLeer: r.mLeer, mPers: z.personen + z.nutzlast + z.schlepptau, ballast0: z.ballast, energie0: r.propulsion.mEnergie, E0: r.propulsion.E_J,
       Vgas: r.Vgas, lpm0: r.lpm, dx: r.trim.dx, BG: r.trim.BG, vmax: r.vmax,
       prall: d.bauweise === 'P' || d.bauweise === 'H', ballonet: (d.ballonet ?? 25) / 100, offen: d.bauweise === 'O',
+      nB: (d.bauweise === 'P' || d.bauweise === 'H') ? (d.ballonets || 2) : 0,      // Zahl der Ballonets (ab 2: Trimm durch Umpumpen)
     };
   }
   function cdAt(K, v) {                         // lineare Auswertung der Widerstandstabelle
@@ -126,7 +128,8 @@
     const Vmax = K.Vgas;
     let Vh = s.Vn * rho0 / rho * (1 + s.dT / atm.T);       // Volumen bei Außendruck (Überhitzung dT)
     if (Vh > Vmax) { const ab = (Vh - Vmax) / Vh * s.Vn; s.Vn -= ab; s.gasAb += ab; Vh = Vmax; }
-    if (s.ventil > 0) { const ab = Math.min(s.Vn, s.ventil * 0.001 * Vmax * dt); s.Vn -= ab; s.gasAb += ab; Vh = s.Vn * rho0 / rho * (1 + s.dT / atm.T); }
+    const ventil = Math.max(s.ventil, s.apVentil || 0);                    // Fahrer oder Assistent „Höhe halten“
+    if (ventil > 0) { const ab = Math.min(s.Vn, ventil * 0.001 * Vmax * dt); s.Vn -= ab; s.gasAb += ab; Vh = s.Vn * rho0 / rho * (1 + s.dT / atm.T); }
     // statischer Auftrieb: Luft verdrängt minus Gas (Gasdichte folgt der Luftdichte)
     // Normvolumen · Auftrieb je m³ (am Boden) bleibt unterhalb der Prallhöhe gleich; Überhitzung dT erhöht den Auftrieb
     // um Luftdichte · Volumen · dT/T
@@ -134,7 +137,8 @@
     const schlaff = K.prall && Vh < Vmax * (1 - K.ballonet) - 1e-6;   // Ballonet leer ⇒ Hülle verliert Form
 
     // --- Ballast ---
-    if (s.ballastAb > 0 && s.ballast > 0) { const m = Math.min(s.ballast, s.ballastAb * dt); s.ballast -= m; s.ballastAbGesamt += m; }
+    const ballastAb = s.ballastAb + (s.apBallast || 0);                       // Fahrer plus Assistent „Höhe halten“
+    if (ballastAb > 0 && s.ballast > 0) { const m = Math.min(s.ballast, ballastAb * dt); s.ballast -= m; s.ballastAbGesamt += m; }
 
     // --- Massen ---
     const mGas = s.Vn * (rho0 - K.lpm0);                       // Gasmasse = Normvolumen · (Luftdichte − Auftrieb je m³)
@@ -178,7 +182,10 @@
 
     // --- Momente um die Auftriebsmitte (Bug hoch = positiv) ---
     const Mfl = -Zf * K.lt;                                                        // Flossenkraft am Hebelarm hinten
-    const Mst = M * G * ((K.dx + s.trimm * 0.01 * K.L) * c - K.BG * sn);          // Pendel und Trimm (Trimm verschiebt Ballast ±1 % L)
+    // Trimm: verschiebt Ballast um ±1 % L; mit 2 und mehr Ballonets wird zusätzlich Luft zwischen vorderem und
+    // hinterem Ballonet umgepumpt (bis zur Hälfte der Ballonetluft um je 1/4 L) – so trimmten die Blimps im Flug
+    const mLuft = K.nB >= 2 ? Math.max(0, Vmax - Vh) * rho : 0;                  // Luft in den Ballonets [kg]
+    const Mst = M * G * (K.dx * c - K.BG * sn) + G * s.trimm * (0.01 * K.L * M + 0.125 * K.L * mLuft) * c;   // Pendel und Trimm
     const Mschub = K.zT * T;                                                       // Schub unter der Achse hebt den Bug
     const Msum = Mh + Mfl + Mst + Mschub;
 
@@ -195,7 +202,10 @@
     }
 
     // --- Kurs: Seitenruder ⇒ Drehgeschwindigkeit mit Verzögerung (Wenderadius K.Rturn bei vollem Ruder) ---
-    const rSoll = s.sr * Math.abs(s.U) / K.Rturn, tau = 1.5 * K.L / Math.max(Math.abs(s.U), 1);
+    // Bei kleiner Fahrt wirken die Ruder schwächer (Grenzschicht, Böen, kein Fahrtwind am Ruder):
+    // Wirkung f = U² / (U² + U0²), U0 = 12 % der Höchstgeschwindigkeit (mind. 2 m/s) ⇒ Wenderadius Rturn / f
+    const U0 = Math.max(2, 0.12 * K.vmax), fRud = s.U * s.U / (s.U * s.U + U0 * U0);
+    const rSoll = s.sr * Math.abs(s.U) * fRud / K.Rturn, tau = 1.5 * K.L / Math.max(Math.abs(s.U), 1);
     s.r += (rSoll - s.r) * Math.min(1, dt / tau);
     s.psi = (s.psi + s.r * dt + 2 * Math.PI) % (2 * Math.PI);
 
@@ -225,7 +235,7 @@
   /* -----------------------------------------------------------------------------------------------
      4. ASSISTENTEN
      Greifen nur auf die Bedienelemente zu, wie ein Mensch am Steuer. Bei kleiner Fahrt wirkt das
-     Höhenruder kaum: dann hält „Höhe halten“ die Höhe nicht (Gas und Ballast bleiben beim Fahrer).
+     Höhenruder kaum: dann hilft „Höhe halten“ mit Ballast und Gas nach (siehe unten).
      ----------------------------------------------------------------------------------------------- */
   function assistenten(F, dt, wind) {
     const s = F.s, ap = s.ap, K = F.K;
@@ -268,6 +278,21 @@
     }
     // Höhe halten: gibt dem Höhensteuerer einen Nickwinkel vor (Steigen über dynamischen Auftrieb)
     if (ap.hoehe != null) ap.nick = clamp(0.004 * (ap.hoehe - s.h) - 0.05 * s.w, -0.15, 0.15);
+    // Höhe halten mit Gas und Ballast (Freigabe des Nutzers 14.10.2026): Reicht der dynamische Auftrieb nicht,
+    // um Schwere oder Leichte auszugleichen (kleine Fahrt, kein Höhenruder, großer Unterschied), wirft der
+    // Assistent Ballast ab bzw. lässt Gas ab – nur so viel, bis der Rest wieder dynamisch zu tragen ist.
+    //   dynamisch tragbar ≈ ½ ρ U² · V^(2/3) · 0,04 / g   (Rumpf bei rund 6° Anstellwinkel)
+    s.apBallast = 0; s.apVentil = 0;
+    if (ap.hoehe != null && s.anz && !s.amBoden) {
+      const e = ap.hoehe - s.h, frei = s.anz.frei, rho = s.anz.rho || 1.2, Mg = s.anz.M;         // frei > 0: leicht [kg]
+      const dyn = K.Ah > 0 ? 0.5 * rho * s.U * s.U * K.Vs * 0.04 / G : 0;
+      const grenze = Math.max(0.5 * dyn, 0.002 * Mg);                                            // Rest, der bleiben darf
+      // gewünschte statische Bilanz: etwas leicht, wenn das Schiff unter dem Soll ist oder sinkt (und umgekehrt)
+      const fSoll = clamp(0.004 * Mg * (0.02 * e - 0.5 * s.w), -0.01 * Mg, 0.01 * Mg);
+      const diff = frei - fSoll;
+      if (diff < -grenze && s.ballast > 0) s.apBallast = clamp((-diff - grenze) * 0.05, 0.0005 * Mg, 0.003 * Mg);   // kg/s
+      else if (diff > grenze) s.apVentil = clamp((diff - grenze) / K.lpm0 / (0.001 * K.Vgas) * 0.05, 0.02, 1);         // Ventilöffnung
+    }
     // Höhensteuerer (wie der Mann am Höhenruder der Zeppeline): hält den vorgegebenen Nickwinkel ap.nick.
     // Luftschiffe mit Flossen unter dem Jones-Kriterium sind im Nicken leicht instabil; ohne ihn muss man
     // selbst dauernd nachsteuern. Bei kleiner Fahrt wirkt das Ruder kaum.
@@ -284,7 +309,7 @@
     return F.s;
   }
 
-  const LSFlug = { VERSION: '0.4', kennwerte, start, schritt, lauf };
+  const LSFlug = { VERSION: '0.7', kennwerte, start, schritt, lauf };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSFlug;
   else root.LSFlug = LSFlug;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1,3 +1,4 @@
+<!-- 2026-10-15 21:40 · Build 2026-10-15.1: keine falsche Landung beim Start (Abhebephase), Gelände ohne Sprünge, Korb mit Abstand und Seilen aus der Rechnung, Höhe halten löst erst ab 30 % Knüppel, kein Kopiermenü am Handy, Personen bis zur Tragfähigkeit, Prallhöhe bleibt stehen, Formverlust-Abbruch -->
 <!-- 2026-10-14 15:15 · Build 2026-10-14.11: keine Landungsmeldung beim Start (erst 10 s nach dem Abheben und 5 m frei), Gelände am Startplatz angeglichen -->
 <!-- 2026-10-14 15:05 · Build 2026-10-14.10: Schubhebel mit weniger Expo (halber Weg ≈ 40 % Schub) -->
 <!-- 2026-10-14 15:00 · Build 2026-10-14.9: neues App-Symbol „Abendfahrt“ (LZ 120 aus dem 3D-Modell im Steigflug) -->
@@ -162,7 +163,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-14.11';
+const BUILD = '2026-10-15.1';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -184,7 +185,8 @@ const fp = W => W < 1000 ? de(W) + ' W' : W < 1e6 ? de(W / 1000, W < 1e4 ? 1 : 0
 const fv = V => V < 10 ? de(V, 2) + ' m³' : de(V) + ' m³';
 const fh = h => h >= 100 ? de(h) + ' h' : de(h, 1) + ' h';
 const fkm = k => k < 10 ? de(k, 1) + ' km' : de(k) + ' km';
-function toast(t) { const e = $('#toast'); e.textContent = t; e.classList.add('on'); setTimeout(() => e.classList.remove('on'), 1800); }
+// Kurzmeldung unten; ms = Anzeigedauer (Standard 1,8 s, Meldungen aus der Fahrt länger)
+function toast(t, ms) { const e = $('#toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('on'), ms || 1800); }
 // Längslagen der Motorpaare: Liste aus den aktuellen Lagen anlegen, bevor ein einzelner Wert gesetzt wird
 function ensurePath(d, p) { if (p.startsWith('antrieb.xs.') && !Array.isArray(d.antrieb.xs)) d.antrieb.xs = S.r.nac.xp.slice(); }
 function setByPath(o, p, v) { if (o === S.d) ensurePath(o, p); const k = p.split('.'); let x = o; for (let i = 0; i < k.length - 1; i++) x = x[k[i]]; x[k[k.length - 1]] = v; }
@@ -281,6 +283,8 @@ function startDesign(d, origin, bau) { S.d = C.merge(C.DEFAULTS, d); S.origin = 
    „vorschlag(d, r)“ liefert den empfohlenen Wert; er wird auf dem Regler markiert und mit
    „Vorschlag“ übernommen. Die Reihenfolge folgt den Stichpunkten des Nutzers.               */
 const lift0 = () => S.r ? S.r.lift0 : 1000;
+// Höchstzahl Personen (Anzahl) für die Regler: was der Bruttoauftrieb tragen könnte, mindestens 80 (Wunsch Nutzer 15.10.: LZ 129 nicht auf 80 begrenzen)
+const maxPers = (d, r) => Math.max(80, Math.ceil((r ? r.lift0 : 1000) / (d.m_person || 80) / 10) * 10);
 const STEPS = [
   { id: 'form', titel: 'Form', frage: 'Welche Rumpfform nach Gertler?', fields: [
       { typ: 'seg', key: '_form', label: 'Grundform', opts: [['albacore', 'Albacore'], ['zeppelin', 'Zeppelin'], ['blimp', 'Blimp'], ['eigen', 'Eigene']] },
@@ -348,8 +352,8 @@ const STEPS = [
       { typ: 'num', key: 'gseile', label: 'Zahl der Seile', unit: 'Anzahl', min: 2, max: 40, step: 2, k: 0, when: d => d.bauweise !== 'S' && (d.gondel === 'F' || d.gondel === 'K') && (S.r.gondel.ga || 0) > 0, def: () => S.r.gondel.ropes ? S.r.gondel.ropes.n : 4, vorschlag: (d, r) => r.gondelVorschlag.seile },
     ], text: (d, r) => trimText(r) + `Masse der Gondel: ${fm(r.leer.gondel)}. ` + (r.gondel.ropes ? `${r.gondel.ropes.n} Seile, Ø ${de(r.gondel.ropes.dmm)} mm (aus der hängenden Last), ${fm(r.gondel.ropes.m)}. ` : '') + ({ K: 'Offener Korb an Seilen, wie beim Gasballon; großer Luftwiderstand.', F: 'Geschlossene Gondel direkt unter dem Rumpf.', T: 'Tropfenform wie im Windkanal entwickelt (Jaray): kleinster Widerstand.', I: `Fahrgast- und Mannschaftsräume im Rumpf (sie nehmen ${de(r.Vraum)} m³ Gasraum weg), außen nur eine 4-Mann-Steuergondel in Stromlinienform.`, R: 'Kleine Kapsel für Empfänger und Regler (RC-Blimp).', N: 'Keine Gondel, z. B. für autonome Schiffe.' })[d.gondel] },
   { id: 'pax', titel: 'Personen', frage: 'Wer und was fährt mit?', fields: [
-      { typ: 'num', key: 'crew', label: 'Besatzung (0 = autonom)', unit: 'Anzahl', min: 0, max: 80, step: 1, k: 0 },
-      { typ: 'num', key: 'pax', label: 'Fahrgäste', unit: 'Anzahl', min: 0, max: 80, step: 1, k: 0 },
+      { typ: 'num', key: 'crew', label: 'Besatzung (0 = autonom)', unit: 'Anzahl', min: 0, max: maxPers, step: 1, k: 0 },
+      { typ: 'num', key: 'pax', label: 'Fahrgäste', unit: 'Anzahl', min: 0, max: maxPers, step: 1, k: 0 },
       { typ: 'num', key: 'm_person', label: 'Masse je Person', unit: 'kg', min: 50, max: 120, step: 1, k: 0, vorschlag: () => 80 },
       { typ: 'num', key: 'nutzlast', label: 'Nutzlast (z. B. Kamera)', unit: 'kg', min: 0, max: 20000, log0: true, k: 1 },
       { typ: 'num', key: 'avionik', label: 'Avionik / Steuerung', unit: 'kg', min: 0, max: 500, log0: true, k: 2 },
@@ -446,7 +450,7 @@ function renderBody() {
       const show = f.pct ? de(v * 100, f.k) : f.lfrac ? de(v * Lm, 1) : fmtNum(v, f);
       h += `<div class="num"><div class="hd"><span class="lab">${(typeof f.label === 'function' ? f.label(d) : f.label) || ''}</span><span><input type="text" inputmode="decimal" data-f="${i}" value="${show}"><span class="u">${f.pct ? '%' : f.lfrac ? 'm ab Bug' : (f.unit || '')}</span></span></div>
         <div class="rg"><input type="range" min="0" max="1000" step="1" data-f="${i}" value="${toSlider(v, f)}">${sv != null && isFinite(sv) ? `<div class="mark" style="left:${toSlider(sv, f) / 10}%" title="Vorschlag"></div>` : ''}</div>
-        <div class="sl"><span>${sh(f.min)}</span><span>${sv != null && isFinite(sv) ? '▲ Vorschlag ' + sh(sv) + (f.pct || f.lfrac ? '' : ' ' + (f.unit || '')) : ''}</span><span>${sh(f.max)}</span></div></div>`;
+        <div class="sl"><span>${sh(f.min)}</span><span>${sv != null && isFinite(sv) ? '▲ Vorschlag ' + sh(sv) + (f.pct || f.lfrac ? '' : ' ' + (f.unit || '')) : ''}</span><span>${sh(fMax(f))}</span></div></div>`;
     }
   });
   if (st.text) h += `<div class="${st.id === 'antrieb' || st.id === 'ltw' ? 'sug' : 'info'}">${st.text(d, r)}</div>`;
@@ -479,19 +483,21 @@ function renderBody() {
     if (f.pct) v /= 100;
     if (f.lfrac) v /= S.r.geo.L;          // Eingabe in m ab Bug ⇒ Anteil der Länge
     if (f.key === 'ltw.faktor') delete d.ltw.A_ebene;
-    setByPath(d, f.key, Math.max(f.min, Math.min(f.max, v))); change();
+    setByPath(d, f.key, Math.max(f.min, Math.min(fMax(f), v))); change();
   });
 }
+// Obergrenze eines Reglers: fest oder aus dem Rechenergebnis (z. B. Personen nach Auftrieb)
+function fMax(f) { return typeof f.max === 'function' ? f.max(S.d, S.r) : f.max; }
 // Regler: linear, logarithmisch (log) oder logarithmisch mit Null (log0)
 function toSlider(v, f) {
-  if (f.log) return Math.round(1000 * Math.log(Math.max(v, f.min) / f.min) / Math.log(f.max / f.min));
-  if (f.log0) { if (v <= 0) return 0; const lo = Math.max(f.max / 1e5, 0.01); return Math.round(50 + 950 * Math.log(Math.max(v, lo) / lo) / Math.log(f.max / lo)); }
-  return Math.round(1000 * (v - f.min) / (f.max - f.min));
+  if (f.log) return Math.round(1000 * Math.log(Math.max(v, f.min) / f.min) / Math.log(fMax(f) / f.min));
+  if (f.log0) { if (v <= 0) return 0; const lo = Math.max(fMax(f) / 1e5, 0.01); return Math.round(50 + 950 * Math.log(Math.max(v, lo) / lo) / Math.log(fMax(f) / lo)); }
+  return Math.round(1000 * (v - f.min) / (fMax(f) - f.min));
 }
 function fromSlider(s, f) {
-  if (f.log) return f.min * Math.pow(f.max / f.min, s / 1000);
-  if (f.log0) { if (s < 50) return 0; const lo = Math.max(f.max / 1e5, 0.01); return lo * Math.pow(f.max / lo, (s - 50) / 950); }
-  return f.min + (f.max - f.min) * s / 1000;
+  if (f.log) return f.min * Math.pow(fMax(f) / f.min, s / 1000);
+  if (f.log0) { if (s < 50) return 0; const lo = Math.max(fMax(f) / 1e5, 0.01); return lo * Math.pow(fMax(f) / lo, (s - 50) / 950); }
+  return f.min + (fMax(f) - f.min) * s / 1000;
 }
 function roundTo(v, f) { if (f.step) return Math.round(v / f.step) * f.step; const p = Math.pow(10, Math.floor(Math.log10(Math.max(Math.abs(v), 1e-9))) - 2); return Math.round(v / p) * p; }
 function fmtNum(v, f) { if (f.step && f.step >= 1) return de(v); const a = Math.abs(v); return de(v, a >= 100 ? 0 : a >= 10 ? 1 : a >= 1 ? 2 : 3); }

@@ -1,3 +1,4 @@
+/* 2026-10-15 10:10 · fahrt.css 0.6: Flugbildschirm ohne Textauswahl und Kopiermenü (Handy) */
 /* 2026-10-14 16:00 · fahrt.css 0.5: Konsole einklappbar (dunkel), TAS groß neben AGL, Beschleunigungsbalken, Fahrtenliste, Knopf Seitenansicht
    2026-10-14 14:30 · fahrt.css 0.4: Anzeige einklappbar mit Flugbegriffen, Vertikalprofil (dunkle Karte links, wie Gasballon), Prallhöhe NN und über Grund
    2026-10-14 13:00 · fahrt.css 0.3: Anzeige auf der Karte wie im Gasballon-Simulator, Leiste darunter
@@ -146,3 +147,7 @@
 .fl{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:6px 8px}
 .fl>div{flex:1;min-width:0}.fl b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fl span{font-size:11.5px;color:var(--mut)}
 .fl .btn{flex:none;padding:7px 9px;font-size:12px}
+
+/* Kein Markieren, kein Kopieren/Ausschneiden-Menü beim Halten der Bedienelemente (iOS: touch-callout) */
+.fz { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.fz input, .fz textarea { -webkit-user-select: text; user-select: text; }

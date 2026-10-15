@@ -1,3 +1,5 @@
+// 2026-10-15 10:25 · fahrt.js 1.2: Prallhöhe aus dem Flugmodell (bleibt stehen), Meldungen Abblasen/Formgebung, Abbruch-Dialog
+// 2026-10-15 10:10 · fahrt.js 1.1: Höhe halten löst erst ab 30 % Knüppel, kein Kontextmenü beim Steuern
 // 2026-10-14 15:10 · fahrt.js 1.0: Gelände am Startplatz an die Starthöhe angeglichen (kein Sprung beim Abheben)
 // 2026-10-14 15:05 · fahrt.js 0.9: Schubhebel mit weniger Expo (halber Weg ≈ 40 % Schub)
 // 2026-10-14 14:40 · fahrt.js 0.8: Windanzeige mit Bodengrenzschicht (am Boden kein Wind)
@@ -118,6 +120,8 @@
     S.screen = 'fahrt';
     const r = S.r, F = LSFlug.start(r, { h0: elev, hGrund: elev });
     if (alt) Object.assign(F.s, alt.s);                       // gespeicherte Fahrt: Zustand übernehmen
+    if (F.s.prallAnz == null) F.s.prallAnz = C.hOfSigma(Math.min(1, F.s.Vn / F.K.Vgas));   // ältere Speicherstände
+    if (!F.s.meldungen) F.s.meldungen = [];
     const lift = F.K.Vgas * r.fill * F.K.lpm0;
     Z = {
       r, F, W, lat: VB.lat, lon: VB.lon, lx: 0, ly: 0, elev, grund: elev, zr: 5, pause: false, keys: {}, joy: { x: 0, y: 0, an: false },   // elev: Höhe am Start, grund: Gelände unter dem Schiff
@@ -180,6 +184,8 @@
       <div class="rp" id="fRp"><div class="sec">Tastatur</div><div class="keys">${tasten.map(([k, t]) => `<span>${k ? k.split(' ').map(x => x === '…' || x === '·' ? x : '<kbd>' + x + '</kbd>').join(' ') : ''}</span><span>${t}</span>`).join('')}</div></div>
     </div>`;
     anordnen(); Z.rs = anordnen; window.addEventListener('resize', Z.rs);
+    // Handy: kein Kopieren/Ausschneiden-Menü und keine Textauswahl beim Steuern (langes Drücken)
+    $('.fz').addEventListener('contextmenu', e => e.preventDefault());
     // Karte
     if (window.L) {
       Z.map = L.map('fMap', { zoomControl: false }).setView([Z.lat, Z.lon], 12); osm().addTo(Z.map);
@@ -325,7 +331,8 @@
     if (!j.an) { const jb = document.getElementById('fJoy'), st = document.querySelector('#fJoy .stick'), R = jb ? (jb.clientWidth - st.offsetWidth) / 2 - 2 : 38, kx = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), ky = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0);
       if (st) st.style.transform = (kx || ky) ? `translate(${kx * R}px,${ky * R}px)` : ''; }
     for (const [id, an] of [['fBal', k.b], ['fGas', k.g], ['fTu', k.q], ['fTd', k.e]]) { const b = document.getElementById(id); if (b && !b.dataset.halten) b.classList.toggle('akt', !!an); }
-    if (Math.abs(ny) > 0.05 && ap.hoehe != null) { ap.hoehe = null; apAnzeigen(); }
+    // Höhe halten löst sich erst bei deutlichem Eingriff: mindestens 30 % Knüppel nach vorn oder hinten (Wunsch Nutzer 15.10.)
+    if (Math.abs(ny) >= 0.3 && ap.hoehe != null) { ap.hoehe = null; apAnzeigen(); }
     if (ap.hoehe == null) { if (Z.hs) ap.nick = Math.max(-1, Math.min(1, ny)) * 8 * RAD; else { ap.nick = null; s.hr = -Math.max(-1, Math.min(1, ny)); } }
     s.ventil = (k.g || Z.gasKnopf) ? 1 : 0;
     // Taste B: tippen = ein Stoß (beim Drücken), länger als 0,35 s halten = laufend 2 Stöße je Sekunde
@@ -370,6 +377,9 @@
         if (s.landung && s.landung !== Z.letzteLandung) { Z.letzteLandung = s.landung; Z.stat.landungen.push(Object.assign({ lat: Z.lat, lon: Z.lon }, s.landung)); landung(s.landung); }
       }
       Z.wJetzt = LSWetter.bei(W.model, W.startMs + s.t * 1000, s.h);
+      // Meldungen des Flugmodells (Abblasen, Formgebung) anzeigen; Abbruch, wenn das Schiff nicht mehr steuerbar ist
+      while (s.meldungen.length) toast(s.meldungen.shift(), 5000);
+      if (s.abbruch && !Z.abbruchGezeigt) { Z.abbruchGezeigt = true; abbruch(s.abbruch); }
       { const fw = LSFlug.windFaktor ? LSFlug.windFaktor(s.h - s.hGrund) : 1; if (fw < 1) Z.wJetzt = Object.assign({}, Z.wJetzt, { e: Z.wJetzt.e * fw, n: Z.wJetzt.n * fw }); }   // am Boden kein Wind
       // Landeanflug: unter 100 m über Grund und sinkend ⇒ Seitenansicht einblenden (einmal je Anflug)
       const agl = s.h - Z.grund;
@@ -432,7 +442,7 @@
     const vg = s.amBoden ? 0 : Math.hypot(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n);   // am Boden steht das Schiff
     const verbrauch = K.verbrenner ? K.sfc * (a.P || 0) / 3.6e6 : (a.P || 0);   // kg/s bzw. W
     const rest = K.verbrenner ? (verbrauch > 0 ? s.energie / verbrauch / 3600 : null) : (verbrauch > 0 ? s.E / verbrauch / 3600 : null);
-    const frei = a.frei || 0, prall = C.hOfSigma(Math.min(1, s.Vn / K.Vgas));
+    const frei = a.frei || 0, prall = s.prallAnz;          // Prallhöhe: bleibt stehen, bis das Schiff sie überschreitet
     const kurs = String(Math.round(s.psi / RAD + 360) % 360).padStart(3, '0') + '°';
     const kgr = Math.atan2(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n), kog = vg > 1 ? String(Math.round(kgr / RAD + 360) % 360).padStart(3, '0') + '°' : '–';
     // Anzeige auf der Karte (wie im Gasballon-Simulator): oben groß AGL und TAS, grau darunter MSL und GS; links der
@@ -533,7 +543,7 @@
   function profil() {
     const box = $('#fProf'); if (!box || box.classList.contains('zu')) return;
     const s = Z.F.s, K = Z.F.K, W = Z.W, tMs = W.startMs + s.t * 1000;
-    LSProfil.zeichne($('#fProfC'), { bei: z => LSWetter.bei(W.model, tMs, z), h: s.h, grund: Z.grund, prall: C.hOfSigma(Math.min(1, s.Vn / K.Vgas)), soll: s.ap.hoehe });
+    LSProfil.zeichne($('#fProfC'), { bei: z => LSWetter.bei(W.model, tMs, z), h: s.h, grund: Z.grund, prall: s.prallAnz, soll: s.ap.hoehe });
   }
 
   // ---------- Ortsnamen für den Bericht (OpenStreetMap, Nominatim; höchstens 1 Abfrage je Sekunde) ----------
@@ -744,6 +754,15 @@
       if (Z !== Zb) return;
       txt = bericht(orte); const pre = document.getElementById('ePre'); if (pre) pre.textContent = txt; ablegen(txt);
     })();
+  }
+
+  // ---------- Abbruch: Schiff nicht mehr steuerbar (Hülle hat die Form verloren) ----------
+  function abbruch(text) {
+    const box = document.createElement('div'); box.className = 'ende';
+    box.innerHTML = `<div class="box"><b>⚠ Fahrt abgebrochen</b><div class="desc">${escapeHtml(text)}</div>
+      <div style="display:flex;gap:8px"><button class="btn p" id="eEnde">Fahrt beenden</button></div></div>`;
+    $('#app').appendChild(box); Z.pause = true; zrAnzeigen();
+    box.querySelector('#eEnde').onclick = () => { box.remove(); beenden(); };
   }
 
   // ---------- Landung ----------

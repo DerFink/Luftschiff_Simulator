@@ -1,3 +1,4 @@
+// 2026-10-15 21:30 · gelaende.js 0.2: teilweise geladene Umgebung liefert keinen Wert mehr (kein Sprung der Bodenhöhe)
 // 2026-10-14 13:50 · gelaende.js 0.1: lokale Geländehöhen entlang der Fahrt (Open-Meteo Höhenmodell) in Kacheln, Höhe unter dem Schiff und Höhenprofil
 /* =================================================================================================
    GELÄNDE DES LUFTSCHIFF-SIMULATORS
@@ -58,8 +59,9 @@
     const fi = lat / RASTER, fj = lon / RASTER, i = Math.floor(fi), j = Math.floor(fj), u = fi - i, v = fj - j;
     const a = punkt(i, j), b = punkt(i + 1, j), c = punkt(i, j + 1), d = punkt(i + 1, j + 1);
     if (a === undefined || b === undefined || c === undefined || d === undefined) {
-      const da = [a, b, c, d].filter(x => x !== undefined);              // teilweise geladen: Mittel der bekannten
-      return da.length ? da.reduce((s, x) => s + x, 0) / da.length : null;
+      // teilweise geladen: noch keinen Wert liefern (ein Mittel aus einzelnen Ecken springt, sobald die Nachbarkachel
+      // kommt, und täuschte beim Start eine Landung vor – Fehler 15.10.2026); der Aufrufer behält den letzten Wert
+      return null;
     }
     return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
   }

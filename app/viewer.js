@@ -1,3 +1,5 @@
+// 2026-10-15 21:35 · viewer.js 0.16: Korbseile steil nach oben (Anschlag nur über dem Korb)
+// 2026-10-15 10:05 · viewer.js 0.15: Korb mit Abstand, Maßen und Seilzahl aus der Rechnung
 // 2026-10-14 13:20 · viewer.js 0.14: Längsträger und Gaszellen nach Wahl (Zellengrenzen gestrichelt), Kiel außen/innen/Innengerüst mit Kiellänge, 1–6 Ballonets, innen aufgehängte Gondel (Lastgurt) im Schnitt
 // 2026-10-14 12:05 · viewer.js 0.13: Gondelleinen (Blimp, z. B. C-7) paarweise an der Hülle von 25 % bis 75 % der Länge gespreizt;
 //                    Vorschau zeichnet nur, wenn sichtbar (behebt Hänger nach langer Fahrt)
@@ -296,15 +298,21 @@ export function createViewer(host) {
     const yb = -R;                     // Unterkante Rumpf (Mitte)
     const xg = X(r.trim ? r.trim.gx : 0.42);   // Korb/Kapsel an der Lage aus dem Trimm
     if (d.gondel === 'K') {            // länglicher Korb an Seilen
-      const len = Math.max(1.4, 1.3 * Math.max(2, pers)) * s, w = 1.3 * s, h = 1.1 * s, drop = Math.max(0.25, 2.5 * s);
+      // Maße, Abstand zur Hülle und Zahl der Seile aus dem Rechenkern (r.gondel), wie bei der Gondel (Fehler 15.10.2026:
+      // vorher feste 4 Seile und fester Abstand). Seile paarweise, an der Hülle von 25 % bis 75 % der Länge gespreizt.
+      const G = r.gondel, len = (G.l || 1.4) * s, w = (G.b || 1.2) * s, h = (G.h || 1.1) * s, drop = Math.max(0.02, (G.ga ?? 2.5) * s);
+      const xf = r.trim ? r.trim.gx : 0.42, xk = X(xf), top = -rad(xf);
       const korb = new THREE.Mesh(new THREE.BoxGeometry(len, h, w), new THREE.MeshStandardMaterial({ color: COL.korb, roughness: 0.9 }));
-      korb.position.set(xg, yb - drop - h / 2, 0); g.add(korb);
-      const sm = new THREE.LineBasicMaterial({ color: COL.seil });
-      for (const [dx, dz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
-        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(xg + dx * len / 2, yb - drop, dz * w / 2), new THREE.Vector3(xg + dx * len * 1.2, yb + 0.15 * R, dz * R * 0.45)]), sm));
+      korb.position.set(xk, top - drop - h / 2, 0); g.add(korb);
+      const sm = new THREE.LineBasicMaterial({ color: COL.seil }), nS = (G.ropes && G.ropes.n) || 4, paare = Math.max(2, Math.round(nS / 2));
+      for (let k = 0; k < 2 * paare; k++) {
+        const j = Math.floor(k / 2), t = paare > 1 ? j / (paare - 1) : 0.5, side = k % 2 ? 1 : -1;
+        // Korb (wie beim Gasballon): Seile gehen steil nach oben; Anschlag an der Hülle über der Korblänge plus je
+        // 1,2 × Abstand nach vorn und hinten (nicht über die ganze Hülle wie bei der Blimp-Gondel)
+        const xs = xk - len * 0.45 + t * len * 0.9, spr = len * 0.5 + 1.2 * drop, xhf = Math.min(0.85, Math.max(0.15, (xk - spr + 2 * spr * t) / Ls + 0.5)), xh = X(xhf), rh = rad(xhf);
+        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(xs, top - drop, side * w / 2), new THREE.Vector3(xh, -rh * 0.85, side * rh * 0.5)]), sm));
       }
-      g.userData.motorY = yb - drop - h * 0.4; g.userData.motorX = xg - len * 0.3; g.userData.motorZ = w / 2 + 0.5 * s;
+      g.userData.motorY = top - drop - h * 0.4; g.userData.motorX = xk - len * 0.3; g.userData.motorZ = w / 2 + 0.5 * s;
     } else if (d.gondel === 'F' || d.gondel === 'I') {   // Gondel fest am Rumpf bzw. kleine Führergondel
       // Maße aus dem Rechenkern (r.gondel: Länge, Breite, Höhe, Abstand zur Hülle in m)
       const G = r.gondel, len = G.l * s, w = G.b * s, h = G.h * s, ga = (G.ga || 0) * s;

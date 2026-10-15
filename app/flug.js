@@ -1,3 +1,5 @@
+// 2026-10-15 10:20 · flug.js 1.1: Prallhöhe bleibt bis zum Erreichen stehen, Meldung Abblasen, Formgebung, Abbruch bei > 10 % fehlendem Volumen
+// 2026-10-15 10:00 · flug.js 1.0: Aufsetzen unter 30 m Höhe nach dem Abheben gilt nicht als Landung; Startfüllung über der Prallhöhe
 // 2026-10-14 15:10 · flug.js 0.9: Landung erst 10 s nach dem Abheben möglich
 // 2026-10-14 14:40 · flug.js 0.8: kein Wind am Boden (Grenzschicht unter 10 m), Landung zählt erst nach 5 m Abheben
 // 2026-10-14 13:30 · flug.js 0.7: Höhe halten mit Gas und Ballast, Trimm über Ballonets (ab 2), Ruder bei kleiner Fahrt schwächer
@@ -100,7 +102,9 @@
   function start(r, opt) {
     opt = opt || {};
     const K = kennwerte(r);
-    const VnStart = r.Vgas * r.fill;                      // Normvolumen Gas beim Start (Füllung am Boden)
+    // Normvolumen Gas beim Start: Füllung aus der Auslegung (bezogen auf Meereshöhe); liegt der Startplatz über der
+    // Prallhöhe (z. B. offenes Schiff in Friedrichshafen, 417 m), ist die Hülle dort schon voll ⇒ höchstens Vgas · σ(h0)
+    const VnStart = r.Vgas * Math.min(r.fill, C.atmos(opt.h0 || 0).sigma);
     const lift = VnStart * K.lpm0;                        // Bruttoauftrieb am Boden [kg]
     const leicht = (opt.leicht ?? 0.005) * lift;          // Startüberschuss
     const ohneBallast = K.mLeer + K.mPers + K.energie0;
@@ -111,6 +115,8 @@
       Vn: VnStart, ballast: Math.max(0, ballast), energie: K.energie0, E: K.E0, dT: 0,
       schub: 0, hr: 0, sr: 0, trimm: 0, ventil: 0, ballastAb: 0,   // Bedienung: Schub 0…1, Ruder −1…+1, Trimm −1…+1, Ventil 0…1, Ballast kg/s
       amBoden: true, landung: null, meldungen: [], gasAb: 0, ballastAbGesamt: 0,
+      // Angezeigte Prallhöhe (Wunsch Nutzer 15.10.2026): bleibt beim Startwert, bis das Schiff sie wirklich überschreitet
+      prallAnz: C.hOfSigma(Math.min(1, VnStart / r.Vgas)), abblasen: false, formWeg: false, abbruch: null,
       zuSchwer: ballast < 0 ? -ballast : 0,
       ap: { hoehe: null, kurs: null, fahrt: null, pos: null, nick: opt.hoehensteuerer === false ? null : 0 },
     };
@@ -135,14 +141,29 @@
     // --- Gas: Volumen in der Höhe; über der Prallhöhe bläst ab, Ventil lässt Gas ab ---
     const Vmax = K.Vgas;
     let Vh = s.Vn * rho0 / rho * (1 + s.dT / atm.T);       // Volumen bei Außendruck (Überhitzung dT)
-    if (Vh > Vmax) { const ab = (Vh - Vmax) / Vh * s.Vn; s.Vn -= ab; s.gasAb += ab; Vh = Vmax; }
+    if (Vh > Vmax) {
+      const ab = (Vh - Vmax) / Vh * s.Vn; s.Vn -= ab; s.gasAb += ab; Vh = Vmax;
+      // Über der Prallhöhe: Gas bläst über die Überdruckventile (offen: über den Appendix) ab; die Prallhöhe ist dann die
+      // höchste erreichte Höhe. Meldung einmal je Überschreiten.
+      if (s.h > s.prallAnz) s.prallAnz = s.h;
+      if (!s.abblasen && ab > 1e-6) { s.abblasen = true; s.meldungen.push(K.offen ? 'Prallhöhe erreicht: Traggas entweicht aus dem Appendix.' : 'Prallhöhe erreicht: Traggas entweicht aus den Überdruckventilen.'); }
+    } else if (Vh < Vmax * 0.995) s.abblasen = false;
     const ventil = Math.max(s.ventil, s.apVentil || 0);                    // Fahrer oder Assistent „Höhe halten“
     if (ventil > 0) { const ab = Math.min(s.Vn, ventil * 0.001 * Vmax * dt); s.Vn -= ab; s.gasAb += ab; Vh = s.Vn * rho0 / rho * (1 + s.dT / atm.T); }
     // statischer Auftrieb: Luft verdrängt minus Gas (Gasdichte folgt der Luftdichte)
     // Normvolumen · Auftrieb je m³ (am Boden) bleibt unterhalb der Prallhöhe gleich; Überhitzung dT erhöht den Auftrieb
     // um Luftdichte · Volumen · dT/T
     const B = (s.Vn * K.lpm0 + s.Vn * rho0 * s.dT / atm.T) * G;        // [N]
-    const schlaff = K.prall && Vh < Vmax * (1 - K.ballonet) - 1e-6;   // Ballonet leer ⇒ Hülle verliert Form
+    const schlaff = K.prall && Vh < Vmax * (1 - K.ballonet) - 1e-6;   // Ballonets voll, Hülle trotzdem nicht prall ⇒ verliert Form
+    // Formgebung (Prall, halbstarr): fehlt mehr Volumen, als die Ballonets ausgleichen können, ist die Hülle nicht mehr prall
+    // (Hinweis); fehlen darüber hinaus mehr als 10 % des Hüllenvolumens, ist das Schiff nicht mehr steuerbar ⇒ Abbruch.
+    // Offene Schiffe (Appendix) dürfen unprall fahren und bleiben steuerbar (wie Gasballon-Simulator).
+    if (K.prall) {
+      const fehlt = Vmax * (1 - K.ballonet) - Vh;                     // m³ über die Ballonets hinaus
+      if (fehlt > 0 && !s.formWeg) { s.formWeg = true; s.meldungen.push('Formgebung ist nicht mehr gegeben: die Ballonets sind voll, die Hülle ist nicht mehr prall. Ballast abwerfen oder steigen.'); }
+      if (fehlt <= 0) s.formWeg = false;
+      if (fehlt > 0.10 * Vmax && !s.abbruch) s.abbruch = 'Luftschiff ist nicht mehr steuerbar: Es fehlen ' + Math.round(fehlt / Vmax * 100) + ' % des Hüllenvolumens, die Hülle hat ihre Form verloren (zu viel Traggas abgeblasen oder abgelassen).';
+    }
 
     // --- Ballast ---
     const ballastAb = s.ballastAb + (s.apBallast || 0);                       // Fahrer plus Assistent „Höhe halten“
@@ -202,7 +223,7 @@
     if (s.amBoden) {
       // am Boden: hält die Mannschaft bzw. das Fahrwerk; abheben, sobald die Kräfte nach oben zeigen
       s.U = 0; s.w = 0; s.q = 0; s.th *= 0.9;
-      if (Fup > 0) { s.amBoden = false; s.landung = null; s.tAb = s.t; }          // Zeitpunkt des Abhebens
+      if (Fup > 0) { s.amBoden = false; s.landung = null; s.tAb = s.t; s.aglMax = 0; }          // Zeitpunkt des Abhebens
     } else {
       s.U += Ffwd / Mx * dt; s.w += Fup / Mz * dt;
       s.acc = Fup / Mz;                                                            // Vertikalbeschleunigung (Anzeige am Vario)
@@ -229,8 +250,11 @@
     // --- Boden ---
     // Landung zählt erst, wenn das Schiff nach dem Abheben 5 m frei war UND seit dem Abheben 10 s vergangen sind
     // (Wunsch Nutzer 14.10.2026: beim Start wurde sonst „Gelandet“ gemeldet). Vorher bleibt es nur am Boden stehen.
+    if (!s.amBoden) s.aglMax = Math.max(s.aglMax || 0, s.h - s.hGrund);       // höchster Abstand zum Boden seit dem Abheben
     if (!s.amBoden && s.h > s.hGrund + 5) s.warOben = true;
-    const startPhase = !s.warOben || s.t - (s.tAb ?? -1e9) < 10;
+    // Abhebephase: in den ersten 10 s, oder solange das Schiff seit dem Abheben nie höher als 30 m über Grund war und
+    // nur sanft (unter 0,5 m/s) wieder aufsetzt – das gilt als „noch beim Abheben“, nicht als Landung (Wunsch Nutzer 15.10.)
+    const startPhase = !s.warOben || s.t - (s.tAb ?? -1e9) < 10 || ((s.aglMax || 0) < 30 && s.w > -0.5);
     if (!s.amBoden && s.h <= s.hGrund && startPhase) { s.h = s.hGrund; s.w = Math.max(s.w, 0); }   // noch beim Abheben
     else if (!s.amBoden && s.h <= s.hGrund) {
       const vg = Math.hypot(s.U * Math.sin(s.psi) + wind.e, s.U * Math.cos(s.psi) + wind.n);

@@ -1,3 +1,4 @@
+// 2026-10-15 23:10 · flug.js 1.3: Umkehrschub (bis 40 %, halber Wirkungsgrad), Vektorsteuerung mit schwenkbaren Motorgruppen
 // 2026-10-15 21:50 · flug.js 1.2: Prall/halbstarr über der Prallhöhe: Innendruck nach Gasgleichung, Hüllenspannung, Platzen ⇒ Abbruch
 // 2026-10-15 10:20 · flug.js 1.1: Prallhöhe bleibt bis zum Erreichen stehen, Meldung Abblasen, Formgebung, Abbruch bei > 10 % fehlendem Volumen
 // 2026-10-15 10:00 · flug.js 1.0: Aufsetzen unter 30 m Höhe nach dem Abheben gilt nicht als Landung; Startfüllung über der Prallhöhe
@@ -85,7 +86,8 @@
       Vgas: r.Vgas, lpm0: r.lpm, dx: r.trim.dx, BG: r.trim.BG, vmax: r.vmax,
       prall: d.bauweise === 'P' || d.bauweise === 'H', ballonet: (d.ballonet ?? 25) / 100, offen: d.bauweise === 'O',
       nB: (d.bauweise === 'P' || d.bauweise === 'H') ? (d.ballonets || 2) : 0,
-      fest: d.huelle_gm2 * (d.festigkeit_Nm_je_gm2 || 60),                     // Reißfestigkeit der Hülle [N/m] (wie Auslegung)      // Zahl der Ballonets (ab 2: Trimm durch Umpumpen)
+      fest: d.huelle_gm2 * (d.festigkeit_Nm_je_gm2 || 60),
+      gruppen: (r.gruppen || []).some(g => g.schwenk.a !== 'N') ? r.gruppen : null,   // schwenkbare Motorgruppen (Vektorsteuerung)                     // Reißfestigkeit der Hülle [N/m] (wie Auslegung)      // Zahl der Ballonets (ab 2: Trimm durch Umpumpen)
     };
   }
   function cdAt(K, v) {                         // lineare Auswertung der Widerstandstabelle
@@ -205,13 +207,30 @@
 
     // --- Schub: Leistung · η / Fahrt, höchstens Standschub ---
     const leer = K.verbrenner ? s.energie <= 0 : s.E <= 0;
-    const P = leer ? 0 : s.schub * K.P;
+    // Umkehrschub (Knopf „Umkehr“, Wunsch Nutzer 15.10.2026): höchstens 40 % der Leistung, Wirkungsgrad rückwärts halb so groß
+    const P = leer ? 0 : s.schub * K.P * (s.umkehr ? 0.4 : 1);
     const Tstand = 0.8 * Math.cbrt(2 * rho * K.Aprop) * Math.pow(P * K.eta, 2 / 3);
-    const T = Math.min(P * K.eta / Math.max(Math.abs(va), 0.1), Tstand);
+    const T = Math.min(P * K.eta / Math.max(Math.abs(va), 0.1), Tstand) * (s.umkehr ? -0.5 : 1);
+    /* Vektorsteuerung (Wunsch Nutzer 15.10.2026): schwenkbare Motorgruppen. Knüppel vq (vor/zurück, −1…1) schwenkt
+       Gruppen mit Querachse (Q) und 45°-Achse (S) nach oben/unten, vh (links/rechts) Gruppen mit Hochachse (H) seitlich.
+       Winkel δ = Knüppel × Schwenkbereich (max bzw. |min|). Je Gruppe: Längsschub T·cos δ, Hochschub T·sin δ (S: · 1/√2),
+       Seitenschub T·sin δ (H). Hochschub vor/hinter der Auftriebsmitte nickt, Seitenschub dreht (Gieren).            */
+    let Tx = T, Tz = 0, Mvz = 0, Mgier = 0;
+    if (K.gruppen && (s.vq || s.vh)) {
+      Tx = 0;
+      for (const g of K.gruppen) {
+        const Tg = T * g.anteil, q = g.schwenk, v = q.a === 'H' ? (s.vh || 0) : (s.vq || 0);
+        const del = (q.a === 'N' ? 0 : v >= 0 ? v * q.max : -v * q.min) * Math.PI / 180;
+        Tx += Tg * Math.cos(del);
+        if (q.a === 'Q' || q.a === 'S') { const tz = Tg * Math.sin(del) * (q.a === 'S' ? Math.SQRT1_2 : 1); Tz += tz; Mvz += tz * (K.xB - g.x * K.L); }
+        if (q.a === 'H') { const ty = Tg * Math.sin(Math.abs(del)) * Math.sign(v); Mgier += ty * Math.abs(g.x * K.L - K.xB); }   // Knüppel rechts ⇒ Bug nach rechts
+      }
+    }
+    s.vTz = Tz;                                                                   // für Anzeige/Prüfung
 
     // --- Luftkräfte ---
     const cd = cdAt(K, Math.abs(va)) * (schlaff ? 1.3 : 1);
-    let X = T - 0.5 * rho * K.Vs * cd * va * Math.abs(va);                         // längs
+    let X = Tx - 0.5 * rho * K.Vs * cd * va * Math.abs(va);                        // längs
     // Flossen: Anstellwinkel am Leitwerk −vnt/va; Höhenruder: + = Kraft nach oben am Heck ⇒ Bug tief,
     // Ruderwirkung 45 % der Flossenwirkung je Einheit Ausschlag (Ruder etwa ein Drittel der Flossentiefe)
     // Ausschlag: hr = ±1 entspricht dem größten Ausschlag (Klappe 25°, Pendel 15°); Ruderwirkung τ aus der Rudergröße
@@ -228,7 +247,7 @@
       if (e.x < K.x0) f += rho * (K.k2 - K.k1) * va * (-vl) * e.dA;                // Potentialanteil bis zur Ablösung
       Zh += f * e.dx; Mh += f * e.dx * (K.xB - e.x);
     }
-    const Z = Zf + Zh;
+    const Z = Zf + Zh + Tz;                                                       // Hochschub der geschwenkten Motoren
     X -= Drud * Math.sign(va);                                                    // Ruder- und induzierter Widerstand
 
     // --- Momente um die Auftriebsmitte (Bug hoch = positiv) ---
@@ -237,7 +256,7 @@
     // hinterem Ballonet umgepumpt (bis zur Hälfte der Ballonetluft um je 1/4 L) – so trimmten die Blimps im Flug
     const mLuft = K.nB >= 2 ? Math.max(0, Vmax - Vh) * rho : 0;                  // Luft in den Ballonets [kg]
     const Mst = M * G * (K.dx * c - K.BG * sn) + G * s.trimm * (0.01 * K.L * M + 0.125 * K.L * mLuft) * c;   // Pendel und Trimm
-    const Mschub = K.zT * T;                                                       // Schub unter der Achse hebt den Bug
+    const Mschub = K.zT * Tx + Mvz;                                                // Schub unter der Achse hebt den Bug; Hochschub nickt
     const Msum = Mh + Mfl + Mst + Mschub;
 
     // --- Bewegung (Erde: vorwärts entlang Kurs, aufwärts) ---
@@ -256,7 +275,14 @@
     // Bei kleiner Fahrt wirken die Ruder schwächer (Grenzschicht, Böen, kein Fahrtwind am Ruder):
     // Wirkung f = U² / (U² + U0²), U0 = 12 % der Höchstgeschwindigkeit (mind. 2 m/s) ⇒ Wenderadius Rturn / f
     const U0 = Math.max(2, 0.12 * K.vmax), fRud = s.U * s.U / (s.U * s.U + U0 * U0);
-    const rSoll = s.sr * Math.abs(s.U) * fRud / K.Rturn, tau = 1.5 * K.L / Math.max(Math.abs(s.U), 1);
+    let rSoll = s.sr * Math.abs(s.U) * fRud / K.Rturn;
+    const tau = 1.5 * K.L / Math.max(Math.abs(s.U), 1);
+    // Gieren durch seitlichen Schub (Vektorsteuerung): Gleichgewicht mit der Dämpfung der Hülle (Querströmung, ~ r²) und
+    // der Flossen (~ U · r):  M = c1 · r·|r| + c2 · r  ⇒  r
+    if (Mgier) {
+      const c1 = 0.5 * rho * K.Cdc * K.D * Math.pow(K.L, 4) / 32, c2 = 0.5 * rho * Math.abs(s.U) * K.aeff * K.Av * K.lt * K.lt, m = Math.abs(Mgier);
+      rSoll += Math.sign(Mgier) * (-c2 + Math.sqrt(c2 * c2 + 4 * c1 * m)) / (2 * c1);
+    }
     s.r += (rSoll - s.r) * Math.min(1, dt / tau);
     s.psi = (s.psi + s.r * dt + 2 * Math.PI) % (2 * Math.PI);
 

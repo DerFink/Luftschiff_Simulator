@@ -1,3 +1,5 @@
+// 2026-10-15 23:00 · core.js 0.17: Motorgruppen mit Schwenk (Vektorsteuerung), Code SW
+// 2026-10-15 22:40 · core.js 0.16: Trimmzustand (buglastig/hecklastig/ausgetrimmt ±3°) statt Gondel-Vorschlägen
 // 2026-10-14 13:10 · core.js 0.15: Gerüst und Innenaufbau wählbar (Längsträger, Gaszellen, Kielart/-werkstoff/-länge, Zahl der Ballonets; Code GZ, KI, NB), Vorschlag der Gondelmaße
 // 2026-10-14 11:00 · core.js 0.14: Ruder (Anteil der Flossenfläche, Pendelleitwerk), Speicher-Code zukunftssicher (eingefrorene Grundwerte LS1, Text drumherum erlaubt), Erbauer (U)
 // 2026-10-14 05:00 · core.js 0.13: Trimmwiderstand aus der Schublinie unter der Achse (Höhenruder gleicht das aufnickende Moment aus)
@@ -418,6 +420,27 @@
     return { g: 2 * paare + (mitte ? 1 : 0), paare, mitte, heck, xp, xm,
              lSeite: lg(Pm), lMitte: lg(Pm * Math.max(mitte, 1)) };
   }
+  /* MOTORGRUPPEN UND VEKTORSTEUERUNG (Vorgabe Nutzer 15.10.2026)
+     Je Motor bzw. Motorpaar lässt sich festlegen, ob er schwenkbar ist:
+       N  nicht schwenkbar
+       Q  um die Querachse (Y): Schub kippt nach oben/unten (wie Zeppelin NT)
+       H  um die Hochachse (Z): Schub nach links/rechts
+       S  um eine 45° nach unten geneigte Achse: Schub schräg (bei Paaren heben sich die Seitenanteile auf ⇒ wirkt nach oben/unten,
+          mit dem Faktor 1/√2)
+     Paare schwenken gleichsinnig. Schwenkbereich in Grad: max (nach oben bzw. rechts) und min (nach unten bzw. links, negativ).
+     Gruppen: Motorpaare am Rumpf, Mittel- bzw. Heckmotor, alle Motoren an der Gondel, Motoren am Heck.
+     Rückgabe je Gruppe: Name, Anteil am Gesamtschub, Längslage x (Anteil ab Bug), Schwenk {a, min, max}.             */
+  function motorGruppen(d, nac, gx) {
+    const a = d.antrieb, n = Math.max(1, a.n | 0), sw = a.schwenk || [], G = [];
+    const mit = (i) => { const q = sw[i] || {}; return { a: q.a || 'N', min: q.min ?? (q.a === 'H' ? -60 : -20), max: q.max ?? (q.a === 'H' ? 60 : 90) }; };
+    if (a.lage === 'R') {
+      nac.xp.forEach((x, i) => G.push({ name: 'Motorpaar ' + (i + 1), anteil: 2 / n, x, paar: true }));
+      if (nac.mitte) G.push({ name: nac.heck ? 'Heckmotor' : nac.mitte === 2 ? 'Mittelgondel (2 Motoren)' : 'Mittelgondel', anteil: nac.mitte / n, x: nac.xm, paar: false });
+    } else if (a.lage === 'G') G.push({ name: n > 1 ? 'Motoren an der Gondel' : 'Motor an der Gondel', anteil: 1, x: gx, paar: n > 1 });
+    else G.push({ name: n > 1 ? 'Motoren am Heck' : 'Motor am Heck', anteil: 1, x: 0.99, paar: n > 1 });
+    G.forEach((g, i) => g.schwenk = mit(i));
+    return G;
+  }
   function dragCoeff(d, geo, tl, v, rho) {
     const Re = Math.max(v, 0.5) * geo.L / NU0 * (rho / 1.225);
     const cf = cfOf(Re), LD = geo.L / geo.D;
@@ -692,14 +715,10 @@
     // --- Trimm ---
     const N = nacelles(d.antrieb), tr = trim(d, geo, tl, leer, zuladung, gon, N);
     const fm1 = x => (x * geo.L).toFixed(1).replace('.', ',') + ' m';
-    if (Math.abs(tr.theta) > 1) {
-      if (tr.xReq != null && (tr.xReq > tr.hi || tr.xReq < tr.lo))
-        warn.push(`Trimm: Die Gondel müsste bei ${fm1(tr.xReq)} ab Bug liegen – so weit nach ${tr.xReq > tr.hi ? 'hinten' : 'vorn'} geht nicht, sonst gibt es keinen Trimm. Schwerpunkt ${fm1(Math.abs(tr.dx) / geo.L)} ${tr.dx > 0 ? 'hinter' : 'vor'} der Auftriebsmitte ⇒ ${Math.abs(tr.theta).toFixed(0)}° Bug ${tr.dx > 0 ? 'hoch' : 'tief'}. Motoren ${tr.dx > 0 ? 'weiter nach vorn' : 'weiter nach hinten'} setzen oder Trimmballast vorsehen.`);
-      else if (d.gx != null && tr.xReq != null) {
-        warn.push(`Trimm: Gondel bei ${fm1(d.gx)}, für Gleichgewicht wären ${fm1(tr.xReq)} nötig ⇒ ${Math.abs(tr.theta).toFixed(0)}° Bug ${tr.dx > 0 ? 'hoch' : 'tief'}.`);
-        vorschlaege.push({ text: `Gondel für Trimm auf ${fm1(tr.xReq)} ab Bug setzen`, set: { gx: Math.round(tr.xReq * 1000) / 1000 } });
-      } else if (tr.xReq == null) warn.push(`Trimm: Schwerpunkt ${fm1(Math.abs(tr.dx) / geo.L)} ${tr.dx > 0 ? 'hinter' : 'vor'} der Auftriebsmitte ⇒ ${Math.abs(tr.theta).toFixed(0)}° Bug ${tr.dx > 0 ? 'hoch' : 'tief'}.`);
-    }
+    /* Trimmzustand (Vorgabe Nutzer 15.10.2026): nur sagen, ob das Schiff buglastig oder hecklastig ist und in welche
+       Richtung Gewicht verlegt werden muss – wohin (Gondel, Tanks, Motoren, Nutzlast), entscheidet der Nutzer.
+       Bis ±3° gilt es als ausgetrimmt. theta > 0: Bug hoch (Schwerpunkt hinter der Auftriebsmitte) = hecklastig. */
+    const trimZustand = { theta: tr.theta, art: Math.abs(tr.theta) <= 3 ? 'ok' : tr.theta > 0 ? 'heck' : 'bug', dx: tr.dx };
     if (!tl.elevator) warn.push('Nur ' + d.ltw.n + ' Finne(n): kein Höhenruder. Höhe nur über Schub, Ballast und Gas.');
     if (frei < 0) warn.push(`Zu schwer: Es fehlen ${fmtMass(-frei)} Auftrieb.`);
     if (d.bauweise === 'S' && d.zellen && geo.L / d.zellen > 20) warn.push(`Gaszellen: ${Math.round(geo.L / d.zellen)} m Ringabstand. Fällt eine Zelle aus, fehlen ${Math.round(100 / d.zellen)} % Auftrieb (${fmtMass(lift0 / d.zellen)}); lange Felder belasten die Längsträger.`);
@@ -709,7 +728,7 @@
       d, geo, tail: tl, lift0, lpm, fill, prallhoehe, gasShare, Vraum, Vgas, struktur: struktur(d, geo),
       // Vorschlag der Gondelmaße (ohne eigene Länge/Breite/Höhe) für die Regler im Baukasten
       gondelVorschlag: (() => { const g = gondola(Object.assign({}, d, { gl: 0, gb: 0, gh: 0, gseile: 0 }), geo, d._hang, 25); return { l: g.l, b: g.b, h: g.h, seile: g.ropes ? g.ropes.n : null }; })(),
-      leer, mLeer, zuladung, mGesamt, frei,
+      leer, mLeer, zuladung, mGesamt, frei, trimZustand, gruppen: motorGruppen(d, N, tr.gx),
       vmax, vmax_kmh: vmax * 3.6, v_reise_kmh: vr * 3.6, Preise, dauer_h, reichweite_km, gipfel,
       drag: dragCoeff(d, geo, tl, vmax, 1.225), gondel: gondola(d, geo, d._hang, vmax), K_eff: 1.225 * Math.pow(vmax, 3) * geo.Vs / (d.antrieb.n * d.antrieb.kW * 1000),
       P_burgess, v_beulen, latten, huelleAuslastung, propulsion: pr, warn, vorschlaege, ltw_gm2_calc, trim: tr, nac: N, trimV: (() => { const rh = 1.225, cd0 = dragCoeff(d, geo, tl, vmax, rh).total, D0 = 0.5 * rh * vmax * vmax * cd0 * geo.Vs; let T = D0, td; for (let i = 0; i < 4; i++) { td = trimDrag(d, geo, tl, vmax, rh, T); T = D0 + td.D; } return Object.assign(td, { D0, zT: schubHebel(d, geo) }); })(),
@@ -897,6 +916,8 @@
     // Antrieb: Art, Zahl, kW je Motor, Lage, η, Energie (kWh, Wh/kg bzw. kg Kraftstoff, sfc), Motorgondeln, kg/kW
     p.push(('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (nacelles(a).g !== a.n ? nacelles(a).g : '') + ',' + (a.kgkW ? num(a.kgkW) : '') + ',' + (a.mg === 'O' ? 'O' : '') + ',' + (a.ungerade === 'H' ? 'H' : '') + ',' + (a.xs ? a.xs.map(num).join(';') : '') + ',' + (a.xm != null ? num(a.xm) : '')).replace(/,+$/, ''));
     if (d.latten && d.latten.len) p.push('LA:' + d.latten.n + ',' + num(d.latten.len));
+    // Schwenkbare Motoren je Gruppe: Achse, min, max in Grad (nur wenn mindestens eine Gruppe schwenkbar ist)
+    if (a.schwenk && a.schwenk.some(q => q && q.a && q.a !== 'N')) p.push('SW:' + a.schwenk.map(q => !q || !q.a || q.a === 'N' ? 'N' : [q.a, q.min != null ? num(q.min) : '', q.max != null ? num(q.max) : ''].join(',').replace(/,+$/, '')).join(';'));
     p.push('S:' + num(d.v_reise), 'BL:' + num(d.ballast));
     if (d.nutzlast) p.push('NL:' + num(d.nutzlast));
     if (d.avionik) p.push('AV:' + num(d.avionik));
@@ -957,6 +978,7 @@
         case 'GA': d.gasanteil = +v; break;
         case 'XT': d.xtank = +v; break;
         case 'LA': d.latten = { n: +n[0], len: +n[1] }; break;
+        case 'SW': d.antrieb.schwenk = v.split(';').map(t => { const q = t.split(','); const o = { a: q[0] || 'N' }; if (q[1]) o.min = +q[1]; if (q[2]) o.max = +q[2]; return o; }); break;   // Schwenk je Motorgruppe
         case 'MP': d.m_person = +v; break;
         case 'GD': if (n[0]) d.gl = +n[0]; if (n[1]) d.gb = +n[1]; if (n[2]) d.gh = +n[2]; break;
       }
@@ -987,7 +1009,7 @@
   const LSCore = {
     VERSION: '0.15', G0, LB, FT, HP,
     atmos, hOfSigma, liftPerM3, gertlerCoeffs, y2, shape, FORMS, tail, lamb, helmbold, LTW_ANNAHMEN, NACELLE, nacelles, nose, noseNeed,
-    strukturVorschlag, struktur, dragCoeff, trimDrag, schubHebel, ruder, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
+    strukturVorschlag, struktur, motorGruppen, dragCoeff, trimDrag, schubHebel, ruder, powerAt, solveV, propulsion, compute, rechenweg, encode, decode, DEFAULTS, merge, fmtMass,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = LSCore;
   else root.LSCore = LSCore;

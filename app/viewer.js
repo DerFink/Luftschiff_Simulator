@@ -1,3 +1,4 @@
+// 2026-10-15 22:50 · viewer.js 0.17: Vorschau kippt um den Trimmwinkel (buglastig/hecklastig), Bugkappe für den Ankermast (Starr)
 // 2026-10-15 21:35 · viewer.js 0.16: Korbseile steil nach oben (Anschlag nur über dem Korb)
 // 2026-10-15 10:05 · viewer.js 0.15: Korb mit Abstand, Maßen und Seilzahl aus der Rechnung
 // 2026-10-14 13:20 · viewer.js 0.14: Längsträger und Gaszellen nach Wahl (Zellengrenzen gestrichelt), Kiel außen/innen/Innengerüst mit Kiellänge, 1–6 Ballonets, innen aufgehängte Gondel (Lastgurt) im Schnitt
@@ -261,6 +262,17 @@ export function createViewer(host) {
     }
 
     if (cut) innenleben(g, d, geo, R, Ls, rad, X, st);
+    // Bugkappe für den Ankermast (Starrluftschiffe, Wunsch Nutzer 15.10.2026): versteifte Nasenkappe mit Kupplungskegel
+    // und Ring an der Spitze; Länge rund 1,2 % der Schiffslänge, Durchmesser aus der Kontur an dieser Stelle
+    if (rigid) {
+      const xk = 0.012, rk = Math.max(rad(xk), 0.05 * R), km = new THREE.MeshStandardMaterial({ color: 0x5b6470, metalness: 0.4, roughness: 0.5 });
+      const kappe = new THREE.Mesh(new THREE.SphereGeometry(rk * 1.02, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), km);   // Kappe über der Spitze
+      kappe.rotation.z = Math.PI / 2; kappe.scale.set(1, (xk * Ls) / rk * 1.1, 1); kappe.position.set(X(xk), 0, 0); g.add(kappe);
+      const kegel = new THREE.Mesh(new THREE.ConeGeometry(rk * 0.35, 0.012 * Ls, 16), new THREE.MeshStandardMaterial({ color: 0x3a4048, metalness: 0.6, roughness: 0.4 }));
+      kegel.rotation.z = Math.PI / 2; kegel.position.set(X(0) - 0.004 * Ls, 0, 0); g.add(kegel);                       // Kupplung zum Mast
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(rad(xk * 1.6) * 1.01, 0.012 * R, 8, 32), km);
+      ring.rotation.y = Math.PI / 2; ring.position.set(X(xk * 1.6), 0, 0); g.add(ring);
+    }
     if (d.bauweise === 'H' && st.kiel === 'A') kielAussen(g, st, R, rad, X);
 
     // Leitwerk: Winkel der Flossen (0 = oben, gegen den Uhrzeigersinn von hinten gesehen)
@@ -447,6 +459,10 @@ export function createViewer(host) {
     update(result) {
       if (ship) { scene.remove(ship); ship.traverse(o => { o.geometry && o.geometry.dispose(); }); }
       last = result; ship = build(result); scene.add(ship);
+      // Trimm (Vorgabe Nutzer 15.10.2026): Vorschau kippt das Schiff um den Trimmwinkel zur schweren Seite
+      // (theta > 0 = Bug hoch; der Bug liegt bei −x, daher Drehung um −theta), höchstens ±25°
+      const th = result.trimZustand ? result.trimZustand.theta : 0;
+      ship.rotation.z = -Math.max(-25, Math.min(25, th)) * Math.PI / 180;
     },
     snapshot() { return renderer.domElement.toDataURL('image/png'); },
     // Selbstdrehung ein- oder ausschalten; von Hand drehen und zoomen geht immer

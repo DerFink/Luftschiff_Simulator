@@ -1,3 +1,5 @@
+// 2026-10-15 23:20 · fahrt.js 1.6: Umkehrschub-Knopf, Vektorknüppel (zweiter Knüppel, ⇧+Pfeile), Ton (Motor tief, Wind), Taste R/M
+// 2026-10-15 22:55 · fahrt.js 1.5: Ortssuche nach Namen beim Fahrt vorbereiten (Nominatim)
 // 2026-10-15 22:10 · fahrt.js 1.4: 15 min zurückspielen nach der Landung, Vorschau stärker gedämpft (±45°), Seitenansicht zoomt beim Landen heran
 // 2026-10-15 22:00 · fahrt.js 1.3: Effizienz mit Payload = Personen + Nutzlast + Versorgung/Fracht (freie Tragkraft beim Start)
 // 2026-10-15 10:25 · fahrt.js 1.2: Prallhöhe aus dem Flugmodell (bleibt stehen), Meldungen Abblasen/Formgebung, Abbruch-Dialog
@@ -55,7 +57,8 @@
         <div class="q">${escapeHtml(S.d.name)}</div>
         <div id="vbListe"></div>
         <div class="lab">Startort</div>
-        ${wahl('sOrt', [['fn', 'Friedrichshafen'], ['gps', 'Mein Standort'], ['karte', 'Auf der Karte']], VB.ort)}
+        ${wahl('sOrt', [['fn', 'Friedrichshafen'], ['gps', 'Mein Standort'], ['karte', 'Karte / Suche']], VB.ort)}
+        <div id="vbSuche" style="display:${VB.ort === 'karte' ? 'block' : 'none'}"><div class="such"><input type="search" id="vbQ" placeholder="Ort suchen, z. B. Berlin, Hamburg …" autocomplete="off"><button class="btn s" id="vbQb">🔍</button></div><div class="sres" id="vbRes"></div></div>
         <div class="vbmap" id="vbMap"></div>
         <div class="desc" id="vbOrt"></div>
         <div class="lab">Wetter</div>
@@ -79,7 +82,7 @@
       m.on('click', e => { if (VB.ort !== 'karte') return; VB.lat = e.latlng.lat; VB.lon = e.latlng.lng; VB.name = 'Punkt auf der Karte'; mk.setLatLng(e.latlng); ortText(); });
     } else $('#vbMap').innerHTML = '<div class="desc" style="padding:10px">Karte nicht geladen (offline?). Startort Friedrichshafen.</div>';
     const setze = (lat, lon, name) => { VB.lat = lat; VB.lon = lon; VB.name = name; if (m) { m.setView([lat, lon], 9); mk.setLatLng([lat, lon]); } ortText(); };
-    function ortText() { $('#vbOrt').textContent = VB.name + ' · ' + VB.lat.toFixed(4).replace('.', ',') + '° N, ' + VB.lon.toFixed(4).replace('.', ',') + '° O' + (VB.ort === 'karte' ? ' · Punkt auf der Karte antippen' : ''); }
+    function ortText() { $('#vbOrt').textContent = VB.name + ' · ' + VB.lat.toFixed(4).replace('.', ',') + '° N, ' + VB.lon.toFixed(4).replace('.', ',') + '° O' + (VB.ort === 'karte' ? ' · Ort suchen oder Punkt auf der Karte antippen' : ''); }
     function wetterText() {
       $('#vbWet').innerHTML = ({
         ruhig: 'Ein <b>ruhiger Tag</b> aus dem Jahr 2025 an diesem Ort (einer der windschwächsten 10 %).',
@@ -89,8 +92,23 @@
         datum: 'Wetter am <b>gewählten Tag</b>. Vor 2022 gibt es keine Höhenwinde: dann gilt derselbe Kalendertag 2025.',
       })[VB.wetter] + ' Quelle: Open-Meteo. Das Wetter folgt dem Schiff; ohne Netz gibt es Ersatzwetter.';
     }
+    /* Ortssuche nach Namen (Wunsch Nutzer 15.10.2026): OpenStreetMap Nominatim, bis 6 Treffer; Antippen setzt den Startort.
+       Suche beim Drücken von Enter bzw. der Lupe (Nominatim erlaubt höchstens eine Abfrage je Sekunde). */
+    async function suche() {
+      const q = $('#vbQ').value.trim(), box = $('#vbRes'); if (q.length < 2) return;
+      box.innerHTML = '<div class="desc">Suche …</div>';
+      try {
+        const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=de&q=' + encodeURIComponent(q), { signal: AbortSignal.timeout(8000) });
+        const l = await r.json();
+        if (!l.length) { box.innerHTML = '<div class="desc">Nichts gefunden.</div>'; return; }
+        box.innerHTML = l.map((t, i) => `<button data-i="${i}"><b>${escapeHtml(t.name || t.display_name.split(',')[0])}</b><small>${escapeHtml(t.display_name.split(',').slice(1, 3).join(',').trim())}${t.type ? ' · ' + escapeHtml(t.type) : ''}</small></button>`).join('');
+        box.querySelectorAll('button').forEach(b => b.onclick = () => { const t = l[+b.dataset.i]; setze(+t.lat, +t.lon, t.name || t.display_name.split(',')[0]); box.innerHTML = ''; });
+      } catch (e) { box.innerHTML = '<div class="desc">Suche nicht möglich (offline?). Punkt auf der Karte antippen.</div>'; }
+    }
+    $('#vbQb').onclick = suche; $('#vbQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); suche(); } };
     document.querySelectorAll('#sOrt button').forEach(b => b.onclick = () => {
       VB.ort = b.dataset.v; document.querySelectorAll('#sOrt button').forEach(x => x.classList.toggle('on', x === b));
+      $('#vbSuche').style.display = VB.ort === 'karte' ? 'block' : 'none';
       if (VB.ort === 'fn') setze(FN.lat, FN.lon, FN.name);
       else if (VB.ort === 'gps') {
         if (!navigator.geolocation) { toast('Kein GPS verfügbar'); return; }
@@ -103,6 +121,7 @@
     });
     ortText(); wetterText();
     $('#bLos').onclick = async () => {
+      tonFreigeben();                                            // Ton: AudioContext jetzt anlegen (Berührung nötig)
       $('#bLos').disabled = true; $('#bLos').textContent = 'Gelände und Wetter werden geladen …';
       const elev = await gelaende(VB.lat, VB.lon);
       const W = await LSWetter.laden(VB.lat, VB.lon, VB.wetter, VB.datum, elev ?? (VB.ort === 'fn' ? FN.elev : 0));
@@ -142,7 +161,7 @@
   }
   // „runde“ Ballaststöße: 1, 2, 5 · 10^n kg
   function rund(x) { const p = Math.pow(10, Math.floor(Math.log10(Math.max(x, 1e-4)))), f = x / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
-  function stopFahrt() { if (Z) { cancelAnimationFrame(Z.raf); window.removeEventListener('keydown', Z.kd); window.removeEventListener('keyup', Z.ku); window.removeEventListener('resize', Z.rs); window.removeEventListener('pagehide', Z.ph); document.removeEventListener('visibilitychange', Z.ph); Z = null; } }
+  function stopFahrt() { tonAus(); if (Z) { cancelAnimationFrame(Z.raf); window.removeEventListener('keydown', Z.kd); window.removeEventListener('keyup', Z.ku); window.removeEventListener('resize', Z.rs); window.removeEventListener('pagehide', Z.ph); document.removeEventListener('visibilitychange', Z.ph); Z = null; } }
   window.stopFahrt = stopFahrt;
   window.LSFahrtZustand = () => Z;   // nur für die Prüfungen (werkstatt/tests)
 
@@ -152,11 +171,11 @@
     const zrB = ZR.map((z, i) => `<button data-z="${z}"${z === Z.zr ? ' class="on"' : ''}>×${z}</button>`).join('') + `<button data-z="${BOOST}" id="fBoost" title="Boost: gedrückt halten (24 h in etwa 3 s)">⚡</button>`;
     // Höhensteuerer und „Fahrt halten“ sind vorerst ausgeblendet (Wunsch Nutzer 14.10.2026); der Höhensteuerer arbeitet weiter
     const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Knüppel vor = sinken, zurück = steigen'], ['W S', 'Schub + / − (unten etwas feiner)  ·  X Schub aus'],
-      ['B', 'Ballast: tippen = ' + fm(Z.stoss) + ', halten = laufend'], ['G', 'Gas ablassen (solange gedrückt)'], ['Q E', 'Trimm Heck / Trimm Bug'],
+      ['B', 'Ballast: tippen = ' + fm(Z.stoss) + ', halten = laufend'], ['G', 'Gas ablassen (solange gedrückt)'], ['Q E', 'Trimm Heck / Trimm Bug'], ['R', 'Umkehrschub ein/aus'], ['⇧ + Pfeile', 'Vektorknüppel (wenn „Vektor“ an)'], ['M', 'Ton ein/aus'],
       ['H K P', 'Höhe · Kurs · Position halten'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 halten: Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus'],
       ['', 'Beim Steuern, Gas oder Ballast läuft ein Zeitraffer über ×10 kurz mit ×10']];
     app.innerHTML = `<div class="fz">
-      <div class="top"><button class="lnk" id="fBack">■ Ende</button><b class="t">${escapeHtml(S.d.name)}</b><span id="fUhr" style="white-space:nowrap"></span></div>
+      <div class="top"><button class="lnk" id="fBack">■ Ende</button><b class="t">${escapeHtml(S.d.name)}</b><span style="display:flex;gap:8px;align-items:center"><button class="lnk" id="fTon" title="Ton ein/aus">🔊</button><span id="fUhr" style="white-space:nowrap"></span></span></div>
       <div class="zr"><span class="zrl">Zeitraffer</span>${zrB}<button data-z="0" id="fPause">❚❚</button></div>
       <div class="fmap"><div class="lmap" id="fMap"></div>
         <div class="badge" id="fWind" style="display:none"></div>
@@ -177,8 +196,11 @@
           <button class="gas" id="fGas">Gas ablassen<small>halten</small></button>
           <button id="fTu">Trimm Heck<small>Bug hebt sich</small></button>
           <button id="fTd">Trimm Bug<small>Bug senkt sich</small></button>
+          <button id="fUmk">Umkehr<small>Schub rückwärts</small></button>
+          <button id="fVek"${Z.F.K.gruppen ? '' : ' style="visibility:hidden"'}>Vektor<small>2. Knüppel</small></button>
         </div>
         <div class="joy" id="fJoy"><div class="stick"></div><span class="l" style="left:50%;top:1px;transform:translateX(-50%)">sinken</span><span class="l" style="left:50%;bottom:1px;transform:translateX(-50%)">steigen</span><span class="l" style="left:3px;top:50%;transform:translateY(-120%)">links</span><span class="l" style="right:3px;top:50%;transform:translateY(-120%)">rechts</span></div>
+        <div class="joy joy2" id="fJoy2" style="display:none"><div class="stick"></div>${vektorBeschriftung()}</div>
       </div>
       <div class="apsrow" id="fApRow">
         <button data-a="hoehe">Höhe halten</button><button data-a="kurs">Kurs halten</button><button data-a="pos">Position halten</button>
@@ -268,6 +290,7 @@
       if (k === 'q') s.trimm = Math.min(1, s.trimm + 0.25); if (k === 'e') s.trimm = Math.max(-1, s.trimm - 0.25);
       if (k === 'h') assist('hoehe'); if (k === 'k') assist('kurs'); if (k === 'p') assist('pos');
       if (k === 'v') Z.seiteAn = !seiteSichtbar();
+      if (k === 'r') umkehr(); if (k === 'm') tonSchalten();
       if (k === ' ') { Z.pause = !Z.pause; zrAnzeigen(); }
       if (k >= '1' && k <= '7') { Z.zr = ZR[+k - 1]; Z.pause = false; zrAnzeigen(); }
       if (k === '8') { Z.boost = true; Z.pause = false; zrAnzeigen(); }            // Boost nur solange die Taste gedrückt ist
@@ -285,6 +308,15 @@
     halten($('#fGas'), null, on => { Z.gasKnopf = on; });
     $('#fTu').onclick = () => { s.trimm = Math.min(1, s.trimm + 0.25); };
     $('#fTd').onclick = () => { s.trimm = Math.max(-1, s.trimm - 0.25); };
+    // Umkehrschub (eigener Knopf, Wunsch Nutzer 15.10.2026): Schubhebel wirkt rückwärts, höchstens 40 % Leistung
+    $('#fUmk').onclick = umkehr;
+    // Vektorknüppel ein/aus; beim Ausschalten schwenken die Motoren zurück auf 0°
+    $('#fVek').onclick = vektor;
+    $('#fTon').onclick = () => tonSchalten();
+    const joy2 = $('#fJoy2'), st2 = joy2.querySelector('.stick');
+    const jm2 = e => { const b = joy2.getBoundingClientRect(), R = (b.width - st2.offsetWidth) / 2; let x = (e.clientX - b.left - b.width / 2) / R, y = (e.clientY - b.top - b.height / 2) / R; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } Z.joy2 = { x, y: -y, an: true }; st2.style.transform = `translate(${x * R}px,${y * R}px)`; };
+    joy2.onpointerdown = e => { joy2.setPointerCapture(e.pointerId); jm2(e); joy2.onpointermove = jm2; };
+    joy2.onpointerup = joy2.onpointercancel = () => { joy2.onpointermove = null; Z.joy2 = { x: 0, y: 0, an: false }; st2.style.transform = ''; };   // loslassen ⇒ zurück auf 0°
     // Steuerknüppel: x = Seitenruder, y = Nicklage (bzw. Höhenruder ohne Höhensteuerer); loslassen ⇒ Mitte
     const joy = $('#fJoy'), st = joy.querySelector('.stick');
     const jm = e => { const b = joy.getBoundingClientRect(), R = (b.width - st.offsetWidth) / 2; let x = (e.clientX - b.left - b.width / 2) / R, y = (e.clientY - b.top - b.height / 2) / R; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } Z.joy = { x, y: -y, an: true }; st.style.transform = `translate(${x * R}px,${y * R}px)`; };
@@ -323,12 +355,17 @@
   function eingaben() {
     const s = Z.F.s, ap = s.ap, k = Z.keys, j = Z.joy;
     // Seitenruder: Pfeile bzw. Knüppel; eigener Eingriff beendet Kurs- und Positionshalten
-    const sr = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0) + (j.an ? j.x : 0);
+    // Vektorknüppel: Zeigerknüppel bzw. Umschalt + Pfeile (dann wirken die Pfeile nicht auf Ruder und Nicken)
+    const vk = Z.vektor && k.Shift, j2 = Z.joy2 || { x: 0, y: 0, an: false };
+    s.vq = Z.vektor ? Math.max(-1, Math.min(1, (j2.an ? j2.y : 0) + (vk ? (k.ArrowUp ? 1 : 0) - (k.ArrowDown ? 1 : 0) : 0))) : 0;
+    s.vh = Z.vektor ? Math.max(-1, Math.min(1, (j2.an ? j2.x : 0) + (vk ? (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0) : 0))) : 0;
+    if (Z.vektor && !j2.an) { const st2 = document.querySelector('#fJoy2 .stick'), jb2 = document.getElementById('fJoy2'); if (st2 && jb2) { const R2 = (jb2.clientWidth - st2.offsetWidth) / 2 - 2; st2.style.transform = (s.vq || s.vh) ? `translate(${s.vh * R2}px,${-s.vq * R2}px)` : ''; } }
+    const sr = vk ? (j.an ? j.x : 0) : (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0) + (j.an ? j.x : 0);
     if (Math.abs(sr) > 0.05 && (ap.kurs != null || ap.pos)) { if (ap.pos) ap.fahrt = null; ap.kurs = null; ap.pos = null; apAnzeigen(); }
     if (ap.kurs == null && !ap.pos) s.sr = Math.max(-1, Math.min(1, sr));
     // Nicken: mit Höhensteuerer gibt man die Nicklage vor (±8°), sonst direkt das Höhenruder (↑ = Bug hoch)
     // Knüppel vor (↑) = Bug tief = sinken, zurück (↓) = Bug hoch = steigen (wie im Flugzeug)
-    const ny = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0) - (j.an ? j.y : 0);
+    const ny = vk ? -(j.an ? j.y : 0) : (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0) - (j.an ? j.y : 0);
     // Rückmeldung: Tasten bewegen den Knüppel und markieren die Knöpfe
     if (!j.an) { const jb = document.getElementById('fJoy'), st = document.querySelector('#fJoy .stick'), R = jb ? (jb.clientWidth - st.offsetWidth) / 2 - 2 : 38, kx = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), ky = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0);
       if (st) st.style.transform = (kx || ky) ? `translate(${kx * R}px,${ky * R}px)` : ''; }
@@ -470,7 +507,9 @@
     if (window.innerWidth >= 900) z.push(['Schub', de(s.schub * 100) + ' %', ''], ['Höhenruder', de(s.hr * 100) + ' %', ''], ['Seitenruder', de(s.sr * 100) + ' %', '']);
     $('#fInst').innerHTML = z.map(([t, v, c]) => `<div><i>${t}</i><b class="${c}">${v}</b></div>`).join('');
     // Schubregler zeigt die Reglerstellung (exponentiell), die Zahl den Schub
-    $('#fThrV').textContent = de(s.schub * 100, s.schub < 0.1 && s.schub > 0 ? 1 : 0) + ' %';
+    $('#fThrV').textContent = (s.umkehr ? '−' : '') + de(s.schub * (s.umkehr ? 40 : 100), s.schub < 0.1 && s.schub > 0 ? 1 : 0) + ' %';
+    $('#fThrV').style.color = s.umkehr ? '#c0392b' : ''; $('#fThr').classList.toggle('umk', !!s.umkehr);
+    tonAktualisieren();
     const pp = schubPos(s.schub), fill = $('#fThr .fill'), kn = $('#fThr .knob'); fill.style.height = pp * 100 + '%'; kn.style.bottom = `calc(${pp * 100}% - 6px)`;
     $('#fSideAn').style.display = seiteSichtbar() ? 'none' : 'block';
     if (s.ap.hoehe != null || s.ap.kurs != null || s.ap.fahrt != null || s.ap.pos) apAnzeigen();
@@ -650,7 +689,7 @@
       `<div class="desc">${lauf >= MAXF ? '<b>Der Speicher für laufende Fahrten ist voll: bitte alte Fahrten löschen.</b> ' : ''}Fahrten bleiben im Browser dieses Geräts, bis du sie löschst oder die Browserdaten gelöscht werden. Am iPhone kann Safari die Daten einer nicht installierten Web-App nach etwa 7 Tagen ohne Nutzung löschen; als installierte App („Zum Home-Bildschirm“) bleiben sie.</div>`;
     box.querySelectorAll('button[data-f]').forEach(b => b.onclick = () => {
       const l2 = fahrtenLaden(), f = l2.find(x => x.id === b.dataset.f); if (!f) return;
-      if (b.dataset.a === 'weiter') fortsetzen(f);
+      if (b.dataset.a === 'weiter') { tonFreigeben(); fortsetzen(f); }
       if (b.dataset.a === 'teilen') berichtTeilen(f.bericht || '', f.code);
       if (b.dataset.a === 'weg' && confirm('Fahrt „' + f.name + '“ löschen?')) { fahrtenSchreiben(l2.filter(x => x.id !== f.id)); fahrtenListe(); }
     });
@@ -777,6 +816,54 @@
     $('#app').appendChild(box); Z.pause = true; zrAnzeigen();
     box.querySelector('#eEnde').onclick = () => { box.remove(); beenden(); };
   }
+
+  // ---------- Umkehrschub und Vektorknüppel ----------
+  function umkehr() { const s = Z.F.s; s.umkehr = !s.umkehr; $('#fUmk').classList.toggle('akt', s.umkehr); toast(s.umkehr ? 'Umkehrschub: Schubhebel wirkt rückwärts (höchstens 40 %)' : 'Umkehrschub aus'); }
+  function vektor() {
+    if (!Z.F.K.gruppen) return;
+    Z.vektor = !Z.vektor; $('#fVek').classList.toggle('akt', Z.vektor);
+    $('#fJoy2').style.display = Z.vektor ? 'block' : 'none'; $('#fCtl').classList.toggle('vek', Z.vektor);
+    if (!Z.vektor) { Z.joy2 = { x: 0, y: 0, an: false }; Z.F.s.vq = 0; Z.F.s.vh = 0; }
+  }
+  // Beschriftung des Vektorknüppels aus den schwenkbaren Gruppen: vor/zurück = Schub hoch/runter, links/rechts = seitlich
+  function vektorBeschriftung() {
+    const G = Z.F.K.gruppen || [], hoch = G.some(g => g.schwenk.a === 'Q' || g.schwenk.a === 'S'), seit = G.some(g => g.schwenk.a === 'H'), l = (t, st) => `<span class="l" style="${st}">${t}</span>`;
+    return (hoch ? l('Schub hoch', 'left:50%;top:1px;transform:translateX(-50%)') + l('runter', 'left:50%;bottom:1px;transform:translateX(-50%)') : '')
+      + (seit ? l('links', 'left:3px;top:50%;transform:translateY(-120%)') + l('rechts', 'right:3px;top:50%;transform:translateY(-120%)') : '');
+  }
+
+  /* ---------- Ton (Wunsch Nutzer 15.10.2026, Vorbild Gasballon-Simulator) ----------
+     Mit der Web-Audio-Schnittstelle erzeugt, keine Tondateien:
+       Motor: Sägezahn + Dreieck in tiefer Lage (Grundton 24 … 60 Hz je nach Leistung), Tiefpass 260 Hz, damit es
+              brummt und nicht pfeift; Lautstärke mit der Wurzel der Leistung
+       Wind:  Rauschen durch einen Bandpass (400 Hz), Lautstärke mit dem Quadrat der Fahrt durch die Luft
+     Beim Start jeder Fahrt an (Vorgabe Nutzer); Knopf 🔊 bzw. Taste M schaltet aus und ein. In der Pause still. */
+  const TON = { ctx: null, k: null, an: true };
+  function tonFreigeben() { try { if (!TON.ctx) TON.ctx = new (window.AudioContext || window.webkitAudioContext)(); TON.ctx.resume(); } catch (e) { TON.ctx = null; } TON.an = true; }
+  function tonAufbauen() {
+    const c = TON.ctx; if (!c || TON.k) return;
+    const haupt = c.createGain(); haupt.gain.value = 0; haupt.connect(c.destination);
+    const tp = c.createBiquadFilter(); tp.type = 'lowpass'; tp.frequency.value = 260; tp.Q.value = 0.7;
+    const gM = c.createGain(); gM.gain.value = 0; tp.connect(gM); gM.connect(haupt);
+    const o1 = c.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 30; o1.connect(tp); o1.start();
+    const o2 = c.createOscillator(); o2.type = 'triangle'; o2.frequency.value = 15; o2.connect(tp); o2.start();
+    const buf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), dd = buf.getChannelData(0); for (let i = 0; i < dd.length; i++) dd[i] = Math.random() * 2 - 1;
+    const rs = c.createBufferSource(); rs.buffer = buf; rs.loop = true;
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 400; bp.Q.value = 0.6;
+    const gW = c.createGain(); gW.gain.value = 0; rs.connect(bp); bp.connect(gW); gW.connect(haupt); rs.start();
+    TON.k = { haupt, gM, gW, o1, o2, rs };
+  }
+  function tonAktualisieren() {
+    if (!TON.ctx || !Z) return; tonAufbauen(); const k = TON.k, t = TON.ctx.currentTime, s = Z.F.s, K = Z.F.K;
+    const laut = TON.an && !Z.pause && !Z.beendet ? 1 : 0, p = s.anz ? Math.min(1, (s.anz.P || 0) / Math.max(K.P, 1)) : 0, va = s.anz ? Math.abs(s.anz.va || 0) : 0;
+    k.haupt.gain.setTargetAtTime(0.5 * laut, t, 0.2);
+    k.gM.gain.setTargetAtTime(p > 0 ? 0.08 + 0.32 * Math.sqrt(p) : 0, t, 0.3);
+    k.o1.frequency.setTargetAtTime(24 + 36 * Math.sqrt(p), t, 0.4); k.o2.frequency.setTargetAtTime(12 + 18 * Math.sqrt(p), t, 0.4);
+    k.gW.gain.setTargetAtTime(0.35 * Math.min(1, Math.pow(va / Math.max(K.vmax, 1), 2)), t, 0.5);
+    const b = document.getElementById('fTon'); if (b) b.textContent = TON.an ? '🔊' : '🔇';
+  }
+  function tonSchalten() { if (!TON.ctx) tonFreigeben(); else TON.an = !TON.an; if (TON.ctx) TON.ctx.resume(); tonAktualisieren(); }
+  function tonAus() { if (TON.k) { const t = TON.ctx.currentTime; TON.k.haupt.gain.setTargetAtTime(0, t, 0.1); } }
 
   // ---------- Zurückspielen (Wunsch Nutzer 15.10.2026) ----------
   // Alle 30 s Fahrtzeit wird ein Zwischenstand gemerkt (Zustand des Schiffs, Ort, Spur, Statistik); 40 Stände = 20 min.

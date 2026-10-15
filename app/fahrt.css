@@ -1,3 +1,5 @@
+/* 2026-10-15 23:25 · fahrt.css 0.9: Vektorknüppel (orange), Umkehr am Schubhebel rot, Knöpfe in drei Reihen */
+/* 2026-10-15 22:55 · fahrt.css 0.8: Ortssuche (Suchfeld, Trefferliste) */
 /* 2026-10-15 22:15 · fahrt.css 0.7: Dialoge über den Kartenknöpfen (z-index 1100) */
 /* 2026-10-15 10:10 · fahrt.css 0.6: Flugbildschirm ohne Textauswahl und Kopiermenü (Handy) */
 /* 2026-10-14 16:00 · fahrt.css 0.5: Konsole einklappbar (dunkel), TAS groß neben AGL, Beschleunigungsbalken, Fahrtenliste, Knopf Seitenansicht
@@ -152,3 +154,24 @@
 /* Kein Markieren, kein Kopieren/Ausschneiden-Menü beim Halten der Bedienelemente (iOS: touch-callout) */
 .fz { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .fz input, .fz textarea { -webkit-user-select: text; user-select: text; }
+
+/* Ortssuche beim Fahrt vorbereiten */
+.such{display:flex;gap:6px;margin:6px 0}.such input{flex:1;min-width:0;border:1px solid #c9d3de;border-radius:8px;padding:9px 10px;font:inherit;font-size:14px}
+.sres button{display:block;width:100%;text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}.sres button small{display:block;color:var(--mut);font-size:11.5px}
+
+/* Vektorknüppel (zweiter Knüppel, orange) und Konsole mit vier Spalten, solange er an ist */
+.ctl.vek{grid-template-columns:56px 1fr 100px 92px;gap:8px}
+.ctl.vek .joy{width:100px;height:100px}.ctl.vek .joy .stick{width:38px;height:38px;left:30px;top:30px}
+.ctl .joy2,.ctl.vek .joy2{width:92px;height:92px;background:radial-gradient(circle,#fff6ea 0,#f5dcc0 70%);border-color:#e7c8a2}
+.ctl .joy2 .stick,.ctl.vek .joy2 .stick{width:34px;height:34px;left:28px;top:28px}
+.joy2 .l{color:#8a5a2a}
+.thr.umk .fill{background:#c0392b !important}
+@media (max-width:899px){ .fz.konsklein .ctl.vek{grid-template-columns:40px 1fr 80px 74px} .fz.konsklein .joy2{width:74px;height:74px} .fz.konsklein .joy2 .stick{width:28px;height:28px;left:22px;top:22px} }
+/* Handy: mit Vektorknüppel alles etwas kleiner, damit beide Knüppel und die Knöpfe nebeneinander passen */
+@media (max-width:899px){
+  .ctl.vek{grid-template-columns:44px 1fr 86px 78px;gap:6px;padding:8px 8px 4px}
+  .ctl.vek .joy{width:86px;height:86px}.ctl.vek .joy .stick{width:32px;height:32px;left:26px;top:26px}
+  .ctl.vek .joy2{width:78px;height:78px}.ctl.vek .joy2 .stick{width:30px;height:30px;left:23px;top:23px}
+  .ctl.vek .joy .l{font-size:8.5px}
+  .ctl.vek .fbtns button{font-size:11.5px;padding:6px 2px}.ctl.vek .fbtns button small{display:none}
+}

@@ -1,3 +1,4 @@
+<!-- 2026-10-15 23:40 · Build 2026-10-15.3: Trimm im Baumenü (Schiff kippt, buglastig/hecklastig/ausgetrimmt), Ortssuche, Umkehrschub-Knopf, Ton, Vektorsteuerung (schwenkbare Motoren, zweiter Knüppel), App-Installation, Bugkappe für den Ankermast -->
 <!-- 2026-10-15 22:20 · Build 2026-10-15.2: Hülle platzt über der Prallhöhe (Innendruck nach Gasgleichung), Payload mit Versorgung/Fracht, 15 min zurückspielen, Vorschau stärker gedämpft, Seitenansicht zoomt beim Landen -->
 <!-- 2026-10-15 21:40 · Build 2026-10-15.1: keine falsche Landung beim Start (Abhebephase), Gelände ohne Sprünge, Korb mit Abstand und Seilen aus der Rechnung, Höhe halten löst erst ab 30 % Knüppel, kein Kopiermenü am Handy, Personen bis zur Tragfähigkeit, Prallhöhe bleibt stehen, Formverlust-Abbruch -->
 <!-- 2026-10-14 15:15 · Build 2026-10-14.11: keine Landungsmeldung beim Start (erst 10 s nach dem Abheben und 5 m frei), Gelände am Startplatz angeglichen -->
@@ -98,6 +99,8 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
 .desc{font-size:12.3px;color:#4a5866;line-height:1.35}
 .sug{background:var(--acc-soft);border-radius:6px;padding:8px 11px;font-size:12.8px;line-height:1.38}.sug b{color:var(--acc)}
 .info{background:#f3f5f8;border-radius:6px;padding:8px 10px;font-size:12.3px;line-height:1.38;color:#3a4a5c}
+.trim{border-radius:6px;padding:8px 10px;margin:8px 0 0;font-size:13px;line-height:1.35}.trim.bad{background:#fff4e5;border-left:4px solid #e08a00}.trim.ok{background:#e8f6ee;border-left:4px solid #1b8a4c;color:#14713d;font-weight:700}
+.instmod{position:fixed;inset:0;z-index:3000;background:rgba(20,30,40,.45);display:flex;align-items:center;justify-content:center;padding:20px}.instmod .box{background:#fff;border-radius:12px;padding:16px;max-width:330px;display:flex;flex-direction:column;gap:9px;font-size:13.5px;line-height:1.4}.instmod .box b{font-size:15px}.instmod .row{display:flex;gap:8px}.instmod .row .btn{flex:1}
 .warn{background:var(--warn-soft);border-left:4px solid var(--warn);border-radius:8px;padding:7px 10px;font-size:12.3px;line-height:1.35}
 .num{display:flex;flex-direction:column;gap:3px}
 .num{margin-top:8px}
@@ -164,7 +167,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-15.2';
+const BUILD = '2026-10-15.3';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -189,7 +192,10 @@ const fkm = k => k < 10 ? de(k, 1) + ' km' : de(k) + ' km';
 // Kurzmeldung unten; ms = Anzeigedauer (Standard 1,8 s, Meldungen aus der Fahrt länger)
 function toast(t, ms) { const e = $('#toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('on'), ms || 1800); }
 // Längslagen der Motorpaare: Liste aus den aktuellen Lagen anlegen, bevor ein einzelner Wert gesetzt wird
-function ensurePath(d, p) { if (p.startsWith('antrieb.xs.') && !Array.isArray(d.antrieb.xs)) d.antrieb.xs = S.r.nac.xp.slice(); }
+function ensurePath(d, p) { if (p.startsWith('antrieb.xs.') && !Array.isArray(d.antrieb.xs)) d.antrieb.xs = S.r.nac.xp.slice();
+  // Schwenk je Motorgruppe: Liste mit einem Eintrag je Gruppe anlegen (Werte aus der Rechnung, d. h. Grundwerte)
+  if (p.startsWith('antrieb.schwenk.')) { const i = +p.split('.')[2]; if (!Array.isArray(d.antrieb.schwenk)) d.antrieb.schwenk = []; while (d.antrieb.schwenk.length <= i) d.antrieb.schwenk.push(null);
+    if (!d.antrieb.schwenk[i]) d.antrieb.schwenk[i] = Object.assign({}, S.r.gruppen[i] ? S.r.gruppen[i].schwenk : { a: 'N' }); } }
 function setByPath(o, p, v) { if (o === S.d) ensurePath(o, p); const k = p.split('.'); let x = o; for (let i = 0; i < k.length - 1; i++) x = x[k[i]]; x[k[k.length - 1]] = v; }
 function getByPath(o, p) { return p.split('.').reduce((x, k) => x == null ? x : x[k], o); }
 function recompute(keepPrev) { if (!keepPrev) S.prev = S.r; S.r = C.compute(S.d); }
@@ -376,8 +382,16 @@ const STEPS = [
       { typ: 'num', key: 'antrieb.kraftstoff', label: 'Kraftstoff', unit: 'kg', min: 0, max: 100000, log0: true, k: 0, when: d => d.antrieb.art === 'V', vorschlag: (d, r) => r.Preise * 24 / 3.6e6 * (d.antrieb.sfc || 0.3) },
       // Lage der Tanks bzw. Akkus (Trimm); ohne Wahl: Starr/Halbstarr neben dem Laufgang verteilt, sonst in der Gondel
       { typ: 'num', key: 'xtank', label: d => d.antrieb.art === 'V' ? 'Lage der Tanks (Mitte)' : 'Lage der Akkus (Mitte)', lfrac: true, min: 0.05, max: 0.95, step: 0.001, k: 3, def: () => S.r.trim.xT },
+      // Vektorsteuerung (Vorgabe Nutzer 15.10.2026): je Motorgruppe schwenkbar um Querachse (Schub hoch/runter), Hochachse
+      // (Schub seitlich) oder eine 45° nach unten geneigte Achse (Schub schräg); Paare schwenken gleichsinnig
+      ...[0, 1, 2, 3, 4].flatMap(i => [
+        { typ: 'seg', key: 'antrieb.schwenk.' + i + '.a', label: d => (S.r.gruppen[i] ? S.r.gruppen[i].name + ' (' + de(S.r.gruppen[i].x * S.r.geo.L, 1) + ' m ab Bug)' : '') + ' – schwenkbar', when: d => !!(S.r && S.r.gruppen[i]), def: () => S.r.gruppen[i] ? S.r.gruppen[i].schwenk.a : 'N',
+          opts: [['N', 'nein'], ['Q', 'Querachse'], ['H', 'Hochachse'], ['S', '45° nach unten']] },
+        { typ: 'num', key: 'antrieb.schwenk.' + i + '.max', label: d => ((S.r.gruppen[i] || {}).schwenk || {}).a === 'H' ? 'Schwenk nach rechts' : 'Schwenk nach oben', unit: '°', min: 0, max: 180, step: 1, k: 0, when: d => !!(S.r && S.r.gruppen[i]) && S.r.gruppen[i].schwenk.a !== 'N', def: () => S.r.gruppen[i].schwenk.max },
+        { typ: 'num', key: 'antrieb.schwenk.' + i + '.min', label: d => ((S.r.gruppen[i] || {}).schwenk || {}).a === 'H' ? 'Schwenk nach links (negativ)' : 'Schwenk nach unten (negativ)', unit: '°', min: -180, max: 0, step: 1, k: 0, when: d => !!(S.r && S.r.gruppen[i]) && S.r.gruppen[i].schwenk.a !== 'N', def: () => S.r.gruppen[i].schwenk.min },
+      ]),
       { typ: 'num', key: 'antrieb.eta', label: 'Propellerwirkungsgrad', min: 0.3, max: 0.9, step: 0.01, k: 0, pct: true, vorschlag: d => d.V < 50 ? 0.5 : 0.7 },
-    ], text: (d, r) => `<b>Vorschlag nach Burgess:</b> P = ρ·v³·V<sup>2/3</sup>/K mit K = ${d.bauweise === 'S' ? '63,5' : '40'} für ${de((d.v_ziel || d.v_reise * 1.3))} km/h ⇒ ${fp(r.P_burgess)} gesamt. Antrieb ${fm(r.leer.antrieb)}, Energie ${fm(r.propulsion.mEnergie)}.` + (d.antrieb.lage === 'R' ? (N => `<br>Motorgondeln am Rumpf: ${N.paare ? N.paare + (N.paare > 1 ? ' Paare' : ' Paar') + ' links/rechts auf gleicher Länge' : ''}${N.paare && N.mitte ? ', ' : ''}${N.heck ? 'ein Motor ganz am Heck' : N.mitte ? 'Mittelgondel unter der Hülle mit ' + (N.mitte === 2 ? 'zwei Motoren hintereinander auf einen Propeller' : 'einem Motor') : ''} ⇒ ${N.g} Gondeln.`)(C.nacelles(d.antrieb)) : '') },
+    ], text: (d, r) => `<b>Vorschlag nach Burgess:</b> P = ρ·v³·V<sup>2/3</sup>/K mit K = ${d.bauweise === 'S' ? '63,5' : '40'} für ${de((d.v_ziel || d.v_reise * 1.3))} km/h ⇒ ${fp(r.P_burgess)} gesamt. Antrieb ${fm(r.leer.antrieb)}, Energie ${fm(r.propulsion.mEnergie)}.` + (d.antrieb.lage === 'R' ? (N => `<br>Motorgondeln am Rumpf: ${N.paare ? N.paare + (N.paare > 1 ? ' Paare' : ' Paar') + ' links/rechts auf gleicher Länge' : ''}${N.paare && N.mitte ? ', ' : ''}${N.heck ? 'ein Motor ganz am Heck' : N.mitte ? 'Mittelgondel unter der Hülle mit ' + (N.mitte === 2 ? 'zwei Motoren hintereinander auf einen Propeller' : 'einem Motor') : ''} ⇒ ${N.g} Gondeln.`)(C.nacelles(d.antrieb)) : '') + vektorText(r) },
   { id: 'v', titel: 'Geschwindigkeit', frage: 'Mit welcher Reisegeschwindigkeit fährt es?', fields: [
       { typ: 'num', key: 'v_reise', label: 'Reisegeschwindigkeit', unit: 'km/h', min: 1, max: 160, step: 1, k: 0, vorschlag: (d, r) => Math.round(r.vmax_kmh * 0.7) },
     ], text: (d, r) => `Höchstgeschwindigkeit mit voller Leistung: ${de(r.vmax_kmh)} km/h. Bei ${de(d.v_reise)} km/h braucht es ${fp(r.Preise)} an der Welle.` },
@@ -439,7 +453,7 @@ function renderBody() {
   let h = `<div class="q">${st.frage}</div>`;
   st.fields.forEach((f, i) => {
     if (f.when && !f.when(d)) return;
-    if (f.label && f.typ !== 'num') h += `<div class="lab">${f.label}</div>`;   // Zahlenfelder: Überschrift steht in der Wertzeile
+    if (f.label && f.typ !== 'num') h += `<div class="lab">${typeof f.label === 'function' ? f.label(d) : f.label}</div>`;   // Zahlenfelder: Überschrift steht in der Wertzeile
     if (f.typ === 'seg' || f.typ === 'chips') {
       const opts = typeof f.opts === 'function' ? f.opts(d) : f.opts;
       const cur = f.key === '_form' ? formKey(d.form) : f.key === '_mpaar' ? (C.nacelles(d.antrieb).mitte === 2 ? '1' : '0') : f.key === 'antrieb.ungerade' ? (d.antrieb.ungerade || 'U') : f.key === '_ruder' ? (d.ltw.pendel ? 'P' : 'K') : f.key === '_aufh' ? ((r.gondel.ga || 0) > 0 ? 'A' : 'I') : (getByPath(d, f.key) ?? (f.def ? f.def(d) : undefined));
@@ -455,6 +469,7 @@ function renderBody() {
     }
   });
   if (st.text) h += `<div class="${st.id === 'antrieb' || st.id === 'ltw' ? 'sug' : 'info'}">${st.text(d, r)}</div>`;
+  h += trimKasten(r);
   for (const w of r.warn) h += `<div class="warn">⚠ ${w}</div>`;
   (r.vorschlaege || []).forEach((v, i) => { h += `<button class="btn s" data-vs="${i}">✓ ${v.text}</button>`; });
   $('#body').innerHTML = h;
@@ -520,6 +535,12 @@ function applySuggestions() {
   change(); toast(n ? 'Vorschlag übernommen' : 'Kein Vorschlag in diesem Schritt');
 }
 
+// Belegung des Vektorknüppels aus den schwenkbaren Motorgruppen (Schritt Antrieb)
+function vektorText(r) {
+  const G = (r.gruppen || []).filter(g => g.schwenk.a !== 'N'); if (!G.length) return '';
+  const vz = G.filter(g => g.schwenk.a !== 'H').map(g => g.name).join(', '), sz = G.filter(g => g.schwenk.a === 'H').map(g => g.name).join(', ');
+  return '<br><b>Vektorknüppel im Flug:</b> ' + (vz ? 'vor/zurück = ' + vz + ' Schub hoch/runter' : '') + (vz && sz ? ' · ' : '') + (sz ? 'links/rechts = ' + sz + ' seitlich (Gieren)' : '') + '. Paare schwenken gleichsinnig.';
+}
 // Gerüst und Innenaufbau in Worten (Schritt Bauweise)
 function strukturText(d, r) {
   const st = r.struktur, L = r.geo.L, l = r.leer;
@@ -528,11 +549,19 @@ function strukturText(d, r) {
   if (d.bauweise === 'P') return `<b>Ballonets:</b> ${st.nB} Stück, zusammen ${de(d.ballonet ?? 25)} % des Volumens, ${fm(l.ballonet || 0)}${st.nB >= 2 ? '. Vorn und hinten getrennt füllbar: Trimm im Flug (Bug hoch/tief ohne Ruder)' : ''}. Gondel ${(r.gondel.ga || 0) > 0 ? 'außen an ' + (r.gondel.ropes ? r.gondel.ropes.n : '') + ' Seilen' : 'innen an Lastgurten (Katenarie) aufgehängt, direkt an der Hülle'}.<br>`;
   return '';
 }
-// Trimm in einem Satz: Lage von Schwerpunkt und Auftriebsmitte, Winkel ohne Ruder
+// Trimm in einem Satz: Lage von Schwerpunkt und Auftriebsmitte (Gondelschritt)
 function trimText(r) {
   const t = r.trim, L = r.geo.L, m = x => de(x * L, 1) + ' m';
-  const lage = Math.abs(t.theta) < 0.5 ? 'ausgetrimmt' : `${de(Math.abs(t.theta), 1)}° Bug ${t.dx > 0 ? 'hoch' : 'tief'}`;
-  return `<b>Trimm:</b> Auftriebsmitte bei ${m(t.xB)}, Schwerpunkt bei ${m(t.xG)} ab Bug ⇒ ${lage}.` + (t.xReq != null ? ` Für Gleichgewicht gehört die ${r.d.gondel === 'I' ? 'Raummitte' : 'Gondelmitte'} auf ${m(t.xReq)} (möglich ${m(t.lo)} bis ${m(t.hi)}).` : '') + '<br>';
+  return `<b>Trimm:</b> Auftriebsmitte bei ${m(t.xB)}, Schwerpunkt bei ${m(t.xG)} ab Bug.<br>`;
+}
+/* Trimmzustand als Kasten in jedem Schritt (Vorgabe Nutzer 15.10.2026): buglastig / hecklastig mit der Richtung, in die
+   Gewicht verlegt werden muss (wohin – Gondel, Tanks, Motoren, Nutzlast – entscheidet der Nutzer); bis ±3° grün „Ausgetrimmt“. */
+function trimKasten(r) {
+  const z = r.trimZustand, w = de(Math.abs(z.theta), 1), ab = de(Math.abs(z.dx), 1);
+  if (z.art === 'ok') return `<div class="trim ok">✓ Ausgetrimmt (${w}°)</div>`;
+  return z.art === 'bug'
+    ? `<div class="trim bad"><b>Buglastig (${w}° Bug tief)</b><br>Der Schwerpunkt liegt ${ab} m vor der Auftriebsmitte. Es muss Gewicht nach hinten verlegt werden.</div>`
+    : `<div class="trim bad"><b>Hecklastig (${w}° Bug hoch)</b><br>Der Schwerpunkt liegt ${ab} m hinter der Auftriebsmitte. Es muss Gewicht nach vorn verlegt werden.</div>`;
 }
 
 /* ---------------- 4. Eckdaten-Leiste ---------------- */
@@ -581,6 +610,7 @@ function showErgebnis() {
     <div class="view klein" id="view"><button class="rot" id="bRot"></button><button class="rot rr" id="bCut"></button><div class="pill" style="left:8px;bottom:7px">drehen · zoomen</div><div class="pill" id="dim" style="right:8px;bottom:7px"></div></div>
     <div class="kpis" id="kpis"></div>
     <div class="scroll">
+      <div style="margin:0 14px">${trimKasten(r)}</div>
       ${r.warn.map(w => `<div class="warn" style="margin:8px 14px 0">⚠ ${w}</div>`).join('')}
       ${(r.vorschlaege || []).map((v, i) => `<button class="btn s" data-vs="${i}" style="margin:6px 14px 0;width:calc(100% - 28px)">✓ ${v.text}</button>`).join('')}
       <div class="sec">Massen · Bruttoauftrieb ${fm(L0)}</div>
@@ -685,8 +715,32 @@ fetch('flotte.txt', { cache: 'no-cache' }).then(r => r.ok ? r.text() : '').then(
   if (FLOTTE.length && S.screen === 'auswahl') showAuswahl();
 }).catch(() => {});
 
+/* ---------------- App-Installation (Wunsch Nutzer 15.10.2026, wie Gasballon-Simulator) ----------------
+   Beim Start im Browser (nicht als installierte App) einmal fragen. Android/Chrome: echter „Installieren“-Knopf über das
+   Ereignis beforeinstallprompt. iPhone/iPad: Anleitung (Safari erlaubt keinen Knopf). „Später“ fragt nach 7 Tagen wieder. */
+let installEreignis = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEreignis = e; installFrage(); });
+function istApp() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
+function installFrage() {
+  if (istApp() || document.getElementById('instBox')) return;
+  let spaeter = 0; try { spaeter = +localStorage.getItem('ls_install_spaeter') || 0; } catch (e) {}
+  if (Date.now() - spaeter < 7 * 864e5) return;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!installEreignis && !ios) return;                       // ohne Knopf und nicht iOS: nichts anzubieten
+  const box = document.createElement('div'); box.id = 'instBox'; box.className = 'instmod';
+  box.innerHTML = `<div class="box"><b>Als App installieren?</b><div>Dann startet der Luftschiff-Simulator wie eine App vom Home-Bildschirm, läuft ohne Netz, und deine gespeicherten Fahrten bleiben erhalten.</div>
+    ${ios ? '<div><b>iPhone/iPad:</b> unten auf Teilen <span style="font-size:15px">⬆︎</span> tippen, dann „Zum Home-Bildschirm“.</div>' : ''}
+    <div class="row"><button class="btn s" id="instSp">Später</button>${installEreignis ? '<button class="btn p" id="instJa">Installieren</button>' : '<button class="btn p" id="instOk">Verstanden</button>'}</div></div>`;
+  document.body.appendChild(box);
+  const zu = () => { try { localStorage.setItem('ls_install_spaeter', String(Date.now())); } catch (e) {} box.remove(); };
+  box.querySelector('#instSp').onclick = zu;
+  const ok = box.querySelector('#instOk'); if (ok) ok.onclick = zu;
+  const ja = box.querySelector('#instJa'); if (ja) ja.onclick = async () => { box.remove(); try { installEreignis.prompt(); await installEreignis.userChoice; } catch (e) {} installEreignis = null; };
+}
+
 /* ---------------- 7. Start ---------------- */
 showAuswahl();
+setTimeout(installFrage, 1200);                               // iPhone: nach dem Laden fragen (Android kommt über das Ereignis)
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 <script type="module">

@@ -113,11 +113,11 @@
  ],
  [
   "Zeppelin NT 07",
-  "Gipfel nach Abwurf allen Ballasts: höchster Punkt (m)",
-  3444.4316804861046,
-  3471.4416700276265,
+  "Ballast ganz ab: Hülle platzt über der Prallhöhe bei (m)",
+  null,
+  2966.8055561056876,
   "m",
-  "Überschwingen erlaubt; Gas abgeblasen 554 m³"
+  "Prallhöhe 2600 m, Überdruck 2946 Pa, Platzdruck 2937 Pa (ohne Platzen läge der Gipfel bei 3444 m)"
  ],
  [
   "Zeppelin NT 07",
@@ -193,11 +193,11 @@
  ],
  [
   "US Navy C-7",
-  "Gipfel nach Abwurf allen Ballasts: höchster Punkt (m)",
-  3036.0999156232538,
-  3060.7615340068464,
+  "Ballast ganz ab: Hülle platzt über der Prallhöhe bei (m)",
+  null,
+  1721.716177494558,
   "m",
-  "Überschwingen erlaubt; Gas abgeblasen 764 m³"
+  "Prallhöhe 1219 m, Überdruck 4457 Pa, Platzdruck 4453 Pa (ohne Platzen läge der Gipfel bei 3036 m)"
  ],
  [
   "US Navy C-7",

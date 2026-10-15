@@ -1,3 +1,4 @@
+// 2026-10-15 21:55 · pruef04.js: Prall/halbstarr: Platzen über der Prallhöhe statt Gipfel
 // 2026-10-14 13:40 · pruef04.js: Höhe halten mit Gas und Ballast (3 % zu schwer, ohne Schub)
 // 2026-10-14 04:30 · pruef04.js: Nickstabilität mit/ohne Höhensteuerer, Gipfel als höchster Punkt
 // 2026-10-14 03:30 · pruef04.js: Prüfungen des Flugmodells (flug.js) gegen die Auslegung
@@ -32,9 +33,10 @@ for (const id of ['lz120', 'nt07', 'c7']) {
     row(n, 'Nicken mit Höhensteuerer: Rest 1 min nach 5° Anstoß (°)', 0, (Fl.s.th - th0) * 180 / Math.PI, '°', 'größter Ausschlag ' + (mx * 180 / Math.PI).toFixed(1) + '°'); }
   // 4 Ballast ganz abwerfen, ohne Schub: steigt bis zur Prallhöhe des neuen Gleichgewichts
   { const Fl = luft(r, 300, 0, 0), m0 = Fl.K.mLeer + Fl.K.mPers + Fl.s.energie; Fl.s.ballastAb = 1e6; let hmax = 0;
-    for (let i = 0; i < 5400; i++) { F.lauf(Fl, 1); hmax = Math.max(hmax, Fl.s.h); }
+    for (let i = 0; i < 5400 && !Fl.s.abbruch; i++) { F.lauf(Fl, 1); hmax = Math.max(hmax, Fl.s.h); }
     const soll = C.hOfSigma(m0 / (Fl.K.Vgas * Fl.K.lpm0));
-    row(n, 'Gipfel nach Abwurf allen Ballasts: höchster Punkt (m)', soll, hmax, 'm', 'Überschwingen erlaubt; Gas abgeblasen ' + Math.round(Fl.s.gasAb) + ' m³'); }
+    if (Fl.K.prall) row(n, 'Ballast ganz ab: Hülle platzt über der Prallhöhe bei (m)', null, hmax, 'm', 'Prallhöhe ' + Math.round(Fl.s.prallAnz) + ' m, Überdruck ' + Math.round(Fl.s.dp) + ' Pa, Platzdruck ' + Math.round(Fl.K.fest / Fl.K.R) + ' Pa (ohne Platzen läge der Gipfel bei ' + Math.round(soll) + ' m)');
+    else row(n, 'Gipfel nach Abwurf allen Ballasts: höchster Punkt (m)', soll, hmax, 'm', 'Überschwingen erlaubt; Gas abgeblasen ' + Math.round(Fl.s.gasAb) + ' m³'); }
   // 5 Verbrauch: 1 h Reisefahrt
   { const Fl = luft(r, 500, r.v_reise_kmh / 3.6); Fl.s.ap.fahrt = r.v_reise_kmh / 3.6; Fl.s.ap.hoehe = 500; const e0 = Fl.s.energie, E0 = Fl.s.E; F.lauf(Fl, 3600);
     const verbrenner = r.d.antrieb.art === 'V', soll = r.Preise * 3600 / (verbrenner ? 3.6e6 / r.d.antrieb.sfc : 1);

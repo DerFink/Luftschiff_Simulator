@@ -1,3 +1,4 @@
+// 2026-10-15 21:50 · flug.js 1.2: Prall/halbstarr über der Prallhöhe: Innendruck nach Gasgleichung, Hüllenspannung, Platzen ⇒ Abbruch
 // 2026-10-15 10:20 · flug.js 1.1: Prallhöhe bleibt bis zum Erreichen stehen, Meldung Abblasen, Formgebung, Abbruch bei > 10 % fehlendem Volumen
 // 2026-10-15 10:00 · flug.js 1.0: Aufsetzen unter 30 m Höhe nach dem Abheben gilt nicht als Landung; Startfüllung über der Prallhöhe
 // 2026-10-14 15:10 · flug.js 0.9: Landung erst 10 s nach dem Abheben möglich
@@ -83,7 +84,8 @@
       mLeer: r.mLeer, mPers: z.personen + z.nutzlast + z.schlepptau, ballast0: z.ballast, energie0: r.propulsion.mEnergie, E0: r.propulsion.E_J,
       Vgas: r.Vgas, lpm0: r.lpm, dx: r.trim.dx, BG: r.trim.BG, vmax: r.vmax,
       prall: d.bauweise === 'P' || d.bauweise === 'H', ballonet: (d.ballonet ?? 25) / 100, offen: d.bauweise === 'O',
-      nB: (d.bauweise === 'P' || d.bauweise === 'H') ? (d.ballonets || 2) : 0,      // Zahl der Ballonets (ab 2: Trimm durch Umpumpen)
+      nB: (d.bauweise === 'P' || d.bauweise === 'H') ? (d.ballonets || 2) : 0,
+      fest: d.huelle_gm2 * (d.festigkeit_Nm_je_gm2 || 60),                     // Reißfestigkeit der Hülle [N/m] (wie Auslegung)      // Zahl der Ballonets (ab 2: Trimm durch Umpumpen)
     };
   }
   function cdAt(K, v) {                         // lineare Auswertung der Widerstandstabelle
@@ -141,7 +143,24 @@
     // --- Gas: Volumen in der Höhe; über der Prallhöhe bläst ab, Ventil lässt Gas ab ---
     const Vmax = K.Vgas;
     let Vh = s.Vn * rho0 / rho * (1 + s.dT / atm.T);       // Volumen bei Außendruck (Überhitzung dT)
-    if (Vh > Vmax) {
+    // ÜBER DER PRALLHÖHE BEI PRALL UND HALBSTARR (Wunsch Nutzer 15.10.2026): Die Ballonets sind leer, das Volumen kann
+    // nicht weiter wachsen. Nach der Gasgleichung steigt dann der Innendruck: bei festem Volumen Vmax ist
+    //   p_Gas = p_Luft · Vh / Vmax     (Vh = Volumen, das das Gas beim Außendruck hätte)
+    //   Überdruck Δp = p_Gas − p_Luft + Δp0   (Δp0 = Betriebsdruck der Gebläse beim Erreichen der Prallhöhe, 250 Pa)
+    // Der Überdruck spannt die Hülle in Umfangsrichtung: Spannung T = Δp · R [N/m]. Erreicht T die Reißfestigkeit des
+    // Hüllenstoffs (Flächengewicht × 60 N/m je g/m², wie in der Auslegung), platzt die Hülle ⇒ Abbruch der Fahrt.
+    // Gas entweicht hier nicht von selbst; der Fahrer muss Gas ablassen oder sinken. Starrschiffe (Gaszellen mit
+    // Überdruckventilen) und offene Schiffe (Appendix) blasen weiter von selbst ab.
+    s.dp = 0;
+    if (Vh > Vmax && K.prall) {
+      s.dp = atm.p * (Vh / Vmax - 1) + 250;                                    // Überdruck [Pa]
+      const last = s.dp * K.R / K.fest;                                        // Anteil der Reißfestigkeit
+      for (const stufe of [0.25, 0.5, 0.75]) if (last >= stufe && (s.dpStufe || 0) < stufe) { s.dpStufe = stufe;
+        s.meldungen.push('Überdruck in der Hülle: ' + Math.round(s.dp) + ' Pa, der Stoff ist zu ' + Math.round(last * 100) + ' % seiner Reißfestigkeit belastet. Gas ablassen oder sinken!'); }
+      if (last < 0.2) s.dpStufe = 0;
+      if (last >= 1 && !s.abbruch) { s.abbruch = 'Du bist zu hoch gefahren: Die Hülle ist geplatzt. Über der Prallhöhe (' + Math.round(s.prallAnz) + ' m) stieg der Innendruck auf ' + Math.round(s.dp) + ' Pa (' + Math.round(s.h) + ' m NN); der Hüllenstoff hält höchstens ' + Math.round(K.fest / K.R) + ' Pa.'; s.geplatzt = true; }
+      Vh = Vmax;
+    } else if (Vh > Vmax) {
       const ab = (Vh - Vmax) / Vh * s.Vn; s.Vn -= ab; s.gasAb += ab; Vh = Vmax;
       // Über der Prallhöhe: Gas bläst über die Überdruckventile (offen: über den Appendix) ab; die Prallhöhe ist dann die
       // höchste erreichte Höhe. Meldung einmal je Überschreiten.
@@ -153,7 +172,10 @@
     // statischer Auftrieb: Luft verdrängt minus Gas (Gasdichte folgt der Luftdichte)
     // Normvolumen · Auftrieb je m³ (am Boden) bleibt unterhalb der Prallhöhe gleich; Überhitzung dT erhöht den Auftrieb
     // um Luftdichte · Volumen · dT/T
-    const B = (s.Vn * K.lpm0 + s.Vn * rho0 * s.dT / atm.T) * G;        // [N]
+    let B = (s.Vn * K.lpm0 + s.Vn * rho0 * s.dT / atm.T) * G;          // [N]
+    // Prall über der Prallhöhe: verdrängt wird nur noch Vmax, die Gasmasse bleibt ⇒ B = (ρ · Vmax − m_Gas) · g
+    if (s.dp > 0) B = (rho * Vmax - s.Vn * (rho0 - K.lpm0)) * G;
+    if (s.geplatzt) B = 0;                                                    // Hülle zerrissen: kein Auftrieb mehr
     const schlaff = K.prall && Vh < Vmax * (1 - K.ballonet) - 1e-6;   // Ballonets voll, Hülle trotzdem nicht prall ⇒ verliert Form
     // Formgebung (Prall, halbstarr): fehlt mehr Volumen, als die Ballonets ausgleichen können, ist die Hülle nicht mehr prall
     // (Hinweis); fehlen darüber hinaus mehr als 10 % des Hüllenvolumens, ist das Schiff nicht mehr steuerbar ⇒ Abbruch.

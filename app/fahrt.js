@@ -1,3 +1,5 @@
+// 2026-10-15 22:10 · fahrt.js 1.4: 15 min zurückspielen nach der Landung, Vorschau stärker gedämpft (±45°), Seitenansicht zoomt beim Landen heran
+// 2026-10-15 22:00 · fahrt.js 1.3: Effizienz mit Payload = Personen + Nutzlast + Versorgung/Fracht (freie Tragkraft beim Start)
 // 2026-10-15 10:25 · fahrt.js 1.2: Prallhöhe aus dem Flugmodell (bleibt stehen), Meldungen Abblasen/Formgebung, Abbruch-Dialog
 // 2026-10-15 10:10 · fahrt.js 1.1: Höhe halten löst erst ab 30 % Knüppel, kein Kontextmenü beim Steuern
 // 2026-10-14 15:10 · fahrt.js 1.0: Gelände am Startplatz an die Starthöhe angeglichen (kein Sprung beim Abheben)
@@ -376,6 +378,7 @@
         Z.stat.weg += Math.hypot(s.x - x0, s.y - y0); if (s.h > Z.stat.hMax) Z.stat.hMax = s.h; if (s.U > Z.stat.vMax) Z.stat.vMax = s.U;
         if (s.landung && s.landung !== Z.letzteLandung) { Z.letzteLandung = s.landung; Z.stat.landungen.push(Object.assign({ lat: Z.lat, lon: Z.lon }, s.landung)); landung(s.landung); }
       }
+      if (!s.amBoden) merken();                                    // Zwischenstand für „zurückspielen“
       Z.wJetzt = LSWetter.bei(W.model, W.startMs + s.t * 1000, s.h);
       // Meldungen des Flugmodells (Abblasen, Formgebung) anzeigen; Abbruch, wenn das Schiff nicht mehr steuerbar ist
       while (s.meldungen.length) toast(s.meldungen.shift(), 5000);
@@ -482,10 +485,13 @@
     const c = $('#fSideC'), W = c.clientWidth, H = c.clientHeight; if (!W || !H) return;
     if (c.width !== W * 2) { c.width = W * 2; c.height = H * 2; }
     const g = c.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, W, H);
-    const s = Z.F.s, K = Z.F.K, agl = Math.max(0, s.h - Z.grund), top = Math.max(120, agl * 1.3 + K.D), gy = H - 12, sc = (gy - 6) / top;   // Meter → Pixel (gleich in x und y)
+    const s = Z.F.s, K = Z.F.K, agl = Math.max(0, s.h - Z.grund), gy = H - 12;
+    // Maßstab (Wunsch Nutzer 15.10.2026: kurz vor dem Landen ganz groß): sichtbare Höhe so klein wie möglich, aber das
+    // Schiff höchstens 85 % der Breite lang; mit steigender Höhe zoomt die Ansicht stufenlos heraus
+    const top = Math.max(agl * 1.3 + 1.6 * K.D + (Z.r.gondel.ga || 0), (gy - 6) * K.L / (0.85 * W)), sc = (gy - 6) / top;   // Meter → Pixel (gleich in x und y)
     g.fillStyle = '#9fbf8a'; g.fillRect(0, gy, W, H - gy);
     g.strokeStyle = 'rgba(80,100,120,.25)'; g.fillStyle = '#6b7a8a'; g.font = '10px system-ui';
-    const step = top > 600 ? 200 : top > 250 ? 100 : top > 120 ? 50 : 25;
+    const step = top > 600 ? 200 : top > 250 ? 100 : top > 120 ? 50 : top > 50 ? 25 : 10;
     for (let hh = step; hh < top; hh += step) { const y = gy - hh * sc; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillText(hh + ' m', 4, y - 2); }
     // Schiff im Profil: Bild aus dem 3D-Modell (wie die Vorschau), maßstäblich, mit dem Nickwinkel gedreht.
     // Ohne 3D (noch nicht geladen) die einfache Kontur.
@@ -520,8 +526,8 @@
     if (!Z.vor) return;
     const s = Z.F.s, W = Z.W, ap = s.ap, pts = [[Z.lat, Z.lon]];
     if (s.amBoden || ap.pos) { Z.vor.setLatLngs([]); return; }
-    // Kurve gedämpft (Wunsch Nutzer 14.10.2026, keine „Kringel“): die Drehgeschwindigkeit klingt mit 2 min ab
-    // (der Fahrer nimmt das Ruder zurück), die Kursänderung bleibt höchstens ±90°. Die Drehgeschwindigkeit
+    // Kurve gedämpft (Wunsch Nutzer 14./15.10.2026, keine „Kringel“): die Drehgeschwindigkeit klingt mit 1 min ab
+    // (der Fahrer nimmt das Ruder zurück), die Kursänderung bleibt höchstens ±45°. Die Drehgeschwindigkeit
     // selbst kommt aus dem Flugmodell und berücksichtigt die schwächeren Ruder bei kleiner Fahrt.
     let la = Z.lat, lo = Z.lon, psi = s.psi, dreh = 0;
     for (let k = 1; k <= 60; k++) {
@@ -531,7 +537,7 @@
         const ce = Math.cos(ap.kurs), cn = -Math.sin(ap.kurs), quer = w.e * ce + w.n * cn, U = Math.max(s.U, 0.1);
         const vorh = Math.asin(Math.max(-0.95, Math.min(0.95, -quer / U))), p2 = ap.kurs + vorh;
         ve = U * Math.sin(p2) + w.e; vn = U * Math.cos(p2) + w.n;
-      } else { const d = s.r * 60 * Math.exp(-(k - 0.5) / 2); dreh = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, dreh + d)); psi = s.psi + dreh; ve = s.U * Math.sin(psi) + w.e; vn = s.U * Math.cos(psi) + w.n; }
+      } else { const d = s.r * 60 * Math.exp(-(k - 0.5) / 1); dreh = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, dreh + d)); psi = s.psi + dreh; ve = s.U * Math.sin(psi) + w.e; vn = s.U * Math.cos(psi) + w.n; }
       la += vn * 60 / 111320; lo += ve * 60 / (111320 * Math.cos(la * RAD));
       pts.push([la, lo]);
     }
@@ -567,7 +573,11 @@
                        mit 20 t Zuladung (üblich, höchstens 37 t) ⇒ 0,67 kg CO₂ je t·km      (Schätzung)
        Boeing CH-47F Chinook – rund 1,36 t Kraftstoff/h bei 240 km/h ⇒ 5,7 kg/km ⇒ 17,9 kg CO₂/km;
                        mit 10 t Zuladung ⇒ 1,79 kg CO₂ je t·km                                 (Schätzung)
-     Zuladung des Luftschiffs = Personen + Nutzlast. Ohne Zuladung (z. B. RC, autonom) wird je km verglichen.  */
+     Payload des Luftschiffs (Vorgabe Nutzer 15.10.2026: Passagiere, Crew, Nutzlast, Versorgungsgüter):
+       Personen (Besatzung + Fahrgäste) + Nutzlast + Versorgung/Fracht. Versorgung/Fracht = freie Tragkraft beim Start,
+       also was beim Abwiegen über den eingeplanten Ballast hinaus an Bord genommen wird (statt Ballast könnten das
+       Vorräte oder Fracht sein). Kraftstoff und eingeplanter Ballast zählen nicht dazu.
+       Ohne Payload (z. B. RC, autonom) wird je km verglichen.                                                  */
   const VGL = [
     { name: 'Airbus A400M (Propeller-Transportflugzeug)', kgKm: 13.4, t: 20 },
     { name: 'Boeing CH-47F Chinook (Transporthubschrauber)', kgKm: 17.9, t: 10 },
@@ -575,7 +585,7 @@
   function vergleich(kgCO2, km, zuladungKg) {
     if (!(km > 0.5)) return ['                 Vergleich erst nach einer Strecke über 0,5 km möglich'];
     const tkm = zuladungKg / 1000 * km, je = tkm > 0 ? kgCO2 / tkm : kgCO2 / km;
-    return [(tkm > 0 ? 'Effizienz:       ' + de(je, je < 1 ? 2 : 1) + ' kg CO₂ je t·km (' + fk(zuladungKg) + ' Zuladung über ' + de(km, 1) + ' km)' : 'Effizienz:       ' + de(je, 2) + ' kg CO₂ je km (ohne Zuladung)')]
+    return [(tkm > 0 ? 'Effizienz:       ' + de(je, je < 1 ? 2 : 1) + ' kg CO₂ je t·km (' + fk(zuladungKg) + ' Payload über ' + de(km, 1) + ' km)' : 'Effizienz:       ' + de(je, 2) + ' kg CO₂ je km (ohne Payload)')]
       .concat(VGL.map(v => { const ref = tkm > 0 ? v.kgKm / v.t : v.kgKm, p = (1 - je / ref) * 100;
         return '                 ' + (p >= 0 ? de(p) + ' % effizienter' : de(-p) + ' % weniger effizient') + ' als ' + v.name + ' (' + de(ref, 2) + ' kg' + (tkm > 0 ? ' je t·km' : ' je km') + ')'; }));
   }
@@ -702,7 +712,9 @@
     const F = Z.F, s = F.s, K = F.K, W = Z.W, st = Z.stat, ort = i => orte && orte[i] ? ' – nahe ' + orte[i] : orte ? '' : ' – Ort wird gesucht …';   // orte = [] ⇒ ohne Ortsnamen
     const t0 = new Date(W.startMs), t1 = new Date(W.startMs + s.t * 1000);
     const dauer = s.t / 3600, hh = Math.floor(dauer), mm = Math.round((dauer - hh) * 60);
-    const cc = co2(K, s), zul = K.mPers - (Z.r.zuladung.schlepptau || 0);   // Personen + Nutzlast [kg]
+    const cc = co2(K, s), pers = Z.r.zuladung.personen, nl = Z.r.zuladung.nutzlast;
+    const ballast0 = s.ballast + s.ballastAbGesamt, versorgung = Math.max(0, ballast0 - (S.d.ballast || 0));   // freie Tragkraft beim Start [kg]
+    const zul = pers + nl + versorgung;                                       // Payload [kg]
     const z = [
       'Fahrtbericht Luftschiff-Simulator (Build ' + BUILD + ')',
       '==================================================',
@@ -717,6 +729,7 @@
       'Höchste Fahrt:   ' + de(st.vMax * 3.6) + ' km/h TAS',
       (K.verbrenner ? 'Kraftstoff:      ' + fk(K.energie0 - s.energie) + ' verbraucht, ' + fk(s.energie) + ' übrig' : 'Akku:            ' + de((1 - s.E / Math.max(K.E0, 1)) * 100) + ' % verbraucht'),
       'CO₂:             ' + fk(cc.kg) + ' aus ' + cc.text,
+      'Payload:         ' + fk(zul) + ' (Personen ' + fk(pers) + ', Nutzlast ' + fk(nl) + ', Versorgung/Fracht ' + fk(versorgung) + ' = freie Tragkraft beim Start)',
       ...vergleich(cc.kg, st.weg / 1000, zul),
       'Ballast:         ' + fk(s.ballastAbGesamt) + ' abgeworfen, ' + fk(s.ballast) + ' übrig',
       'Gas abgelassen:  ' + de(s.gasAb) + ' m³ (Normvolumen)',
@@ -765,13 +778,43 @@
     box.querySelector('#eEnde').onclick = () => { box.remove(); beenden(); };
   }
 
+  // ---------- Zurückspielen (Wunsch Nutzer 15.10.2026) ----------
+  // Alle 30 s Fahrtzeit wird ein Zwischenstand gemerkt (Zustand des Schiffs, Ort, Spur, Statistik); 40 Stände = 20 min.
+  function merken() {
+    const s = Z.F.s; if (!Z.staende) Z.staende = [];
+    const letzt = Z.staende[Z.staende.length - 1]; if (letzt && s.t - letzt.t < 30) return;
+    const kopie = JSON.parse(JSON.stringify(Object.assign({}, s, { anz: undefined, meldungen: [] })));
+    Z.staende.push({ t: s.t, s: kopie, lat: Z.lat, lon: Z.lon, lx: Z.lx, ly: Z.ly, grund: Z.grund, nTrack: Z.track.length, stat: JSON.parse(JSON.stringify(Z.stat)) });
+    if (Z.staende.length > 40) Z.staende.shift();
+  }
+  // Stand von etwa „sek“ Sekunden vor jetzt (sonst der älteste vorhandene); null, wenn keiner da ist
+  function zeitpunkt(sek) {
+    const L = Z.staende || [], t = Z.F.s.t; if (!L.length) return null;
+    let st = L[0]; for (const x of L) if (x.t <= t - sek) st = x;
+    if (t - st.t < 20) return null;
+    return { st, min: Math.max(1, Math.round((t - st.t) / 60)) };
+  }
+  function zurueck(st) {
+    const s = Z.F.s;
+    for (const k of Object.keys(s)) delete s[k];
+    Object.assign(s, JSON.parse(JSON.stringify(st.s)));
+    Object.assign(Z, { lat: st.lat, lon: st.lon, lx: st.lx, ly: st.ly, grund: st.grund, stat: JSON.parse(JSON.stringify(st.stat)), letzteLandung: s.landung, abbruchGezeigt: false });
+    Z.track = Z.track.slice(0, Math.max(1, st.nTrack)); if (Z.poly) Z.poly.setLatLngs(Z.track);
+    Z.staende = Z.staende.filter(x => x.t <= st.t);
+    Z.pause = true; Z.zr = Math.min(Z.zr, 10); zrAnzeigen(); apAnzeigen();
+    toast('Zurückgespielt auf ' + new Date(Z.W.startMs + s.t * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' – Pause. Zeitraffer wählen zum Weiterfahren.', 4000);
+  }
+
   // ---------- Landung ----------
   function landung(L) {
     const gut = L.gut, txt = `Sinken ${de(L.sinken, 1)} m/s · über Grund ${de(L.ueberGrund, 1)} m/s`;
     const box = document.createElement('div'); box.className = 'ende';
+    // „15 min zurück“ (Wunsch Nutzer 15.10.2026): mit Zeitraffer landet man leicht aus Versehen
+    const zur = zeitpunkt(900);
     box.innerHTML = `<div class="box"><b>${gut ? '✓ Gelandet' : '⚠ Harte Landung'}</b><div>${txt}</div><div class="desc">Gelungen gilt höchstens 1 m/s Sinken und 2 m/s über Grund. Möchtest du die Fahrt beenden?</div>
-      <div style="display:flex;gap:8px"><button class="btn s" id="eOk">Weiterfahren</button><button class="btn p" id="eEnde">Fahrt beenden</button></div></div>`;
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn s" id="eOk">Weiterfahren</button>${zur ? `<button class="btn s" id="eZur">↺ ${zur.min} min zurück</button>` : ''}<button class="btn p" id="eEnde">Fahrt beenden</button></div></div>`;
     $('#app').appendChild(box); Z.pause = true; zrAnzeigen();
+    if (zur) box.querySelector('#eZur').onclick = () => { box.remove(); zurueck(zur.st); };
     box.querySelector('#eOk').onclick = () => { box.remove(); if (Z) { Z.pause = false; zrAnzeigen(); } };
     box.querySelector('#eEnde').onclick = () => { box.remove(); beenden(); };
   }

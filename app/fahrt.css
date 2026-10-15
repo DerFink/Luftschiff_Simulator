@@ -1,3 +1,4 @@
+/* 2026-10-15 22:15 · fahrt.css 0.7: Dialoge über den Kartenknöpfen (z-index 1100) */
 /* 2026-10-15 10:10 · fahrt.css 0.6: Flugbildschirm ohne Textauswahl und Kopiermenü (Handy) */
 /* 2026-10-14 16:00 · fahrt.css 0.5: Konsole einklappbar (dunkel), TAS groß neben AGL, Beschleunigungsbalken, Fahrtenliste, Knopf Seitenansicht
    2026-10-14 14:30 · fahrt.css 0.4: Anzeige einklappbar mit Flugbegriffen, Vertikalprofil (dunkle Karte links, wie Gasballon), Prallhöhe NN und über Grund
@@ -70,7 +71,7 @@
   #app.wide .fz .rp .inst div:nth-child(4n){border-right:1px solid var(--line)}
   #app.wide .fz .rp .inst div:nth-child(3n){border-right:none}
 }
-.ende{position:absolute;inset:0;z-index:900;background:rgba(20,30,40,.45);display:flex;align-items:center;justify-content:center;padding:20px}
+.ende{position:absolute;inset:0;z-index:1100;background:rgba(20,30,40,.45);display:flex;align-items:center;justify-content:center;padding:20px}
 .ende .box{background:#fff;border-radius:9px;padding:16px;max-width:360px;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
 
 /* Anzeige auf der Karte oben rechts (wie Gasballon): Höhe über Grund groß, NN, Vario mit Beschleunigungsbalken */

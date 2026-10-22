@@ -1,3 +1,4 @@
+// 2026-10-22 22:50 · fahrt.js 1.8: Payload – 5 % des verbrauchten Kraftstoffs bleiben als Reserve an Bord
 // 2026-10-22 21:10 · fahrt.js 1.7: Payload enthält den nicht verbrauchten Kraftstoff (nur der Verbrauch der Fahrt wird abgezogen)
 // 2026-10-15 23:20 · fahrt.js 1.6: Umkehrschub-Knopf, Vektorknüppel (zweiter Knüppel, ⇧+Pfeile), Ton (Motor tief, Wind), Taste R/M
 // 2026-10-15 22:55 · fahrt.js 1.5: Ortssuche nach Namen beim Fahrt vorbereiten (Nominatim)
@@ -618,7 +619,8 @@
        also was beim Abwiegen über den eingeplanten Ballast hinaus an Bord genommen wird (statt Ballast könnten das
        Vorräte oder Fracht sein). Eingeplanter Ballast zählt nicht dazu.
        Kraftstoff (Vorgabe Nutzer 22.10.2026, wie im Nutzlast-Reichweiten-Diagramm beim Flugzeug): abgezogen wird nur der
-       Kraftstoff, den die Fahrt verbraucht hat; der übrige Tankinhalt hätte als Payload mitfahren können.
+       Kraftstoff, den die Fahrt verbraucht hat, plus 5 % davon als Reserve (22.10.2026); der übrige Tankinhalt hätte als
+       Payload mitfahren können.
        Akkus behalten ihre Masse und zählen nicht.
        Ohne Payload (z. B. RC, autonom) wird je km verglichen.                                                  */
   const VGL = [
@@ -757,7 +759,10 @@
     const dauer = s.t / 3600, hh = Math.floor(dauer), mm = Math.round((dauer - hh) * 60);
     const cc = co2(K, s), pers = Z.r.zuladung.personen, nl = Z.r.zuladung.nutzlast;
     const ballast0 = s.ballast + s.ballastAbGesamt, versorgung = Math.max(0, ballast0 - (S.d.ballast || 0));   // freie Tragkraft beim Start [kg]
-    const kraftRest = K.verbrenner ? Math.max(0, s.energie) : 0;             // nicht verbrauchter Kraftstoff [kg] ⇒ Payload
+    // Kraftstoff: abgezogen werden der Verbrauch der Fahrt und 5 % davon als Reserve (Vorgabe Nutzer 22.10.2026, wie die
+    // Streckenreserve im Nutzlast-Reichweiten-Diagramm); der übrige Tankinhalt zählt zur Payload
+    const verbraucht = K.verbrenner ? Math.max(0, K.energie0 - s.energie) : 0, reserve = 0.05 * verbraucht;
+    const kraftRest = K.verbrenner ? Math.max(0, s.energie - reserve) : 0;   // frei werdender Kraftstoff [kg] ⇒ Payload
     const zul = pers + nl + versorgung + kraftRest;                           // Payload [kg]
     const z = [
       'Fahrtbericht Luftschiff-Simulator (Build ' + BUILD + ')',
@@ -773,8 +778,8 @@
       'Höchste Fahrt:   ' + de(st.vMax * 3.6) + ' km/h TAS',
       (K.verbrenner ? 'Kraftstoff:      ' + fk(K.energie0 - s.energie) + ' verbraucht, ' + fk(s.energie) + ' übrig' : 'Akku:            ' + de((1 - s.E / Math.max(K.E0, 1)) * 100) + ' % verbraucht'),
       'CO₂:             ' + fk(cc.kg) + ' aus ' + cc.text,
-      'Payload:         ' + fk(zul) + ' (Personen ' + fk(pers) + ', Nutzlast ' + fk(nl) + ', Versorgung/Fracht ' + fk(versorgung) + ' = freie Tragkraft beim Start' + (K.verbrenner ? ', nicht verbrauchter Kraftstoff ' + fk(kraftRest) : '') + ')',
-      ...(K.verbrenner ? ['                 (abgezogen nur der verbrauchte Kraftstoff, wie im Nutzlast-Reichweiten-Diagramm)'] : []),
+      'Payload:         ' + fk(zul) + ' (Personen ' + fk(pers) + ', Nutzlast ' + fk(nl) + ', Versorgung/Fracht ' + fk(versorgung) + ' = freie Tragkraft beim Start' + (K.verbrenner ? ', übriger Kraftstoff ohne Reserve ' + fk(kraftRest) : '') + ')',
+      ...(K.verbrenner ? ['                 (abgezogen: verbrauchter Kraftstoff ' + fk(verbraucht) + ' + 5 % Reserve ' + fk(reserve) + ', wie im Nutzlast-Reichweiten-Diagramm)'] : []),
       ...vergleich(cc.kg, st.weg / 1000, zul),
       'Ballast:         ' + fk(s.ballastAbGesamt) + ' abgeworfen, ' + fk(s.ballast) + ' übrig',
       'Gas abgelassen:  ' + de(s.gasAb) + ' m³ (Normvolumen)',

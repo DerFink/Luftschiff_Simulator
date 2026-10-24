@@ -2,8 +2,8 @@
  [
   "LZ 120 „Bodensee“ (1919)",
   "Höchstfahrt nach 15 min Vollgas (km/h)",
-  131.94330553211987,
-  132.1788021734017,
+  131.94330133780397,
+  132.17879194735474,
   "km/h",
   "soll wie Auslegung in dieser Höhe"
  ],
@@ -27,7 +27,7 @@
   "LZ 120 „Bodensee“ (1919)",
   "Nicken mit Höhensteuerer: Rest 1 min nach 5° Anstoß (°)",
   0,
-  0.022495178396461188,
+  0.02250507171206117,
   "°",
   "größter Ausschlag 5.0°"
  ],
@@ -35,15 +35,15 @@
   "LZ 120 „Bodensee“ (1919)",
   "Gipfel nach Abwurf allen Ballasts: höchster Punkt (m)",
   1813.6769737543545,
-  1847.5521540981733,
+  1838.6821910447684,
   "m",
-  "Überschwingen erlaubt; Gas abgeblasen 2372 m³"
+  "Überschwingen erlaubt; Gas abgeblasen 2357 m³"
  ],
  [
   "LZ 120 „Bodensee“ (1919)",
   "Kraftstoff in 1 h Reise (kg)",
   156.30423028722018,
-  148.90340426798525,
+  148.90328393941604,
   "kg",
   "Auslegung: Leistung Reise"
  ],
@@ -51,15 +51,23 @@
   "LZ 120 „Bodensee“ (1919)",
   "Wendekreis bei vollem Ruder (Vielfaches der Länge)",
   null,
-  8.47763556402151,
+  4.46637949325753,
   "L",
-  "Erfahrung: 6–10 L"
+  "Größenordnung 4–8 L (Schätzung); Schiebewinkel 23°"
+ ],
+ [
+  "LZ 120 „Bodensee“ (1919)",
+  "Gieren ohne Kurs halten: Zeit bis 0,2 → 0,4 °/s (s)",
+  null,
+  11.100000000000001,
+  "s",
+  "Flossen 0.71 × Jones"
  ],
  [
   "LZ 120 „Bodensee“ (1919)",
   "Höhe halten 400 m (nach 10 min)",
   400,
-  401.49959284397835,
+  401.49751398316977,
   "m",
   "leicht 0,3 %, Nickwinkel -0.3°"
  ],
@@ -67,23 +75,23 @@
   "LZ 120 „Bodensee“ (1919)",
   "Höhe halten ohne Schub, 3 % zu schwer: Höhe nach 15 min (m)",
   300,
-  294.8824876001185,
+  322.09230452773727,
   "m",
-  "tiefster Punkt 222 m, Ballast abgeworfen 839 kg (3 % = 632 kg)"
+  "tiefster Punkt 229 m, Ballast abgeworfen 784 kg (3 % = 632 kg)"
  ],
  [
   "LZ 120 „Bodensee“ (1919)",
   "Position halten bei 5 m/s Wind: Abstand nach 30 min (m)",
   0,
-  0.6748509286667751,
+  64.02015258086094,
   "m",
   "Schub 0 %"
  ],
  [
   "Zeppelin NT 07",
   "Höchstfahrt nach 15 min Vollgas (km/h)",
-  128.49727816617704,
-  128.70900627578914,
+  128.49727197354056,
+  128.70899259490906,
   "km/h",
   "soll wie Auslegung in dieser Höhe"
  ],
@@ -107,7 +115,7 @@
   "Zeppelin NT 07",
   "Nicken mit Höhensteuerer: Rest 1 min nach 5° Anstoß (°)",
   0,
-  -0.0004326420064643183,
+  -0.000431425432662388,
   "°",
   "größter Ausschlag 5.0°"
  ],
@@ -115,15 +123,15 @@
   "Zeppelin NT 07",
   "Ballast ganz ab: Hülle platzt über der Prallhöhe bei (m)",
   null,
-  2966.8055561056876,
+  2966.2968462835543,
   "m",
-  "Prallhöhe 2600 m, Überdruck 2946 Pa, Platzdruck 2937 Pa (ohne Platzen läge der Gipfel bei 3444 m)"
+  "Prallhöhe 2600 m, Überdruck 2943 Pa, Platzdruck 2937 Pa (ohne Platzen läge der Gipfel bei 3444 m)"
  ],
  [
   "Zeppelin NT 07",
   "Kraftstoff in 1 h Reise (kg)",
   23.714683986836388,
-  22.58861177218978,
+  22.588617602687407,
   "kg",
   "Auslegung: Leistung Reise"
  ],
@@ -131,15 +139,23 @@
   "Zeppelin NT 07",
   "Wendekreis bei vollem Ruder (Vielfaches der Länge)",
   null,
-  7.3218367056100915,
+  4.6034836972716855,
   "L",
-  "Erfahrung: 6–10 L"
+  "Größenordnung 4–8 L (Schätzung); Schiebewinkel 22°"
+ ],
+ [
+  "Zeppelin NT 07",
+  "Gieren ohne Kurs halten: Zeit bis 0,2 → 0,4 °/s (s)",
+  null,
+  50.6,
+  "s",
+  "Flossen 1.00 × Jones"
  ],
  [
   "Zeppelin NT 07",
   "Höhe halten 400 m (nach 10 min)",
   400,
-  402.0988346478372,
+  402.09510160206594,
   "m",
   "leicht 0,3 %, Nickwinkel -0.4°"
  ],
@@ -147,23 +163,23 @@
   "Zeppelin NT 07",
   "Höhe halten ohne Schub, 3 % zu schwer: Höhe nach 15 min (m)",
   300,
-  334.838448955204,
+  330.1167670186623,
   "m",
-  "tiefster Punkt 233 m, Ballast abgeworfen 248 kg (3 % = 202 kg)"
+  "tiefster Punkt 239 m, Ballast abgeworfen 239 kg (3 % = 202 kg)"
  ],
  [
   "Zeppelin NT 07",
   "Position halten bei 5 m/s Wind: Abstand nach 30 min (m)",
   0,
-  0.0000521481558613762,
+  0.00003937491770547553,
   "m",
   "Schub 0 %"
  ],
  [
   "US Navy C-7",
   "Höchstfahrt nach 15 min Vollgas (km/h)",
-  98.788119076699,
-  99.27996950077184,
+  98.78805742891261,
+  99.27835270615017,
   "km/h",
   "soll wie Auslegung in dieser Höhe"
  ],
@@ -179,7 +195,7 @@
   "US Navy C-7",
   "Nicken ohne Höhensteuerer: Zeit bis 0,5° → 1° (s)",
   null,
-  4.7,
+  4.800000000000001,
   "s",
   "Flossen 0.67 × Jones"
  ],
@@ -187,7 +203,7 @@
   "US Navy C-7",
   "Nicken mit Höhensteuerer: Rest 1 min nach 5° Anstoß (°)",
   0,
-  -0.001776516499685232,
+  -0.0017601757191555256,
   "°",
   "größter Ausschlag 5.0°"
  ],
@@ -195,15 +211,15 @@
   "US Navy C-7",
   "Ballast ganz ab: Hülle platzt über der Prallhöhe bei (m)",
   null,
-  1721.716177494558,
+  1723.23252858985,
   "m",
-  "Prallhöhe 1219 m, Überdruck 4457 Pa, Platzdruck 4453 Pa (ohne Platzen läge der Gipfel bei 3036 m)"
+  "Prallhöhe 1219 m, Überdruck 4474 Pa, Platzdruck 4453 Pa (ohne Platzen läge der Gipfel bei 3036 m)"
  ],
  [
   "US Navy C-7",
   "Kraftstoff in 1 h Reise (kg)",
   31.194947034642514,
-  29.390589685439295,
+  29.392362891147172,
   "kg",
   "Auslegung: Leistung Reise"
  ],
@@ -211,15 +227,23 @@
   "US Navy C-7",
   "Wendekreis bei vollem Ruder (Vielfaches der Länge)",
   null,
-  8.770375817144476,
+  3.3958797293868566,
   "L",
-  "Erfahrung: 6–10 L"
+  "Größenordnung 4–8 L (Schätzung); Schiebewinkel 30°"
+ ],
+ [
+  "US Navy C-7",
+  "Gieren ohne Kurs halten: Zeit bis 0,2 → 0,4 °/s (s)",
+  null,
+  6,
+  "s",
+  "Flossen 0.67 × Jones"
  ],
  [
   "US Navy C-7",
   "Höhe halten 400 m (nach 10 min)",
   400,
-  408.4736436412704,
+  408.43587334180694,
   "m",
   "leicht 0,3 %, Nickwinkel -1.3°"
  ],
@@ -227,15 +251,15 @@
   "US Navy C-7",
   "Höhe halten ohne Schub, 3 % zu schwer: Höhe nach 15 min (m)",
   300,
-  325.4476308353574,
+  332.3876742747038,
   "m",
-  "tiefster Punkt 232 m, Ballast abgeworfen 183 kg (3 % = 149 kg)"
+  "tiefster Punkt 239 m, Ballast abgeworfen 177 kg (3 % = 149 kg)"
  ],
  [
   "US Navy C-7",
   "Position halten bei 5 m/s Wind: Abstand nach 30 min (m)",
   0,
-  0.000018629234685768365,
+  35.8053374226669,
   "m",
   "Schub 1 %"
  ]

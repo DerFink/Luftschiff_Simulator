@@ -1,3 +1,4 @@
+// 2026-10-24 23:30 · pruef04.js: Gierstabilität und Wendekreis mit der neuen Gierrechnung
 // 2026-10-15 21:55 · pruef04.js: Prall/halbstarr: Platzen über der Prallhöhe statt Gipfel
 // 2026-10-14 13:40 · pruef04.js: Höhe halten mit Gas und Ballast (3 % zu schwer, ohne Schub)
 // 2026-10-14 04:30 · pruef04.js: Nickstabilität mit/ohne Höhensteuerer, Gipfel als höchster Punkt
@@ -45,7 +46,11 @@ for (const id of ['lz120', 'nt07', 'c7']) {
   { const Fl = luft(r, 500, r.v_reise_kmh / 3.6); Fl.s.ap.fahrt = r.v_reise_kmh / 3.6; Fl.s.ap.hoehe = 500; Fl.s.sr = 1; F.lauf(Fl, 60);
     let xs = [], ys = []; for (let i = 0; i < 600; i++) { F.lauf(Fl, 1); xs.push(Fl.s.x); ys.push(Fl.s.y); }
     const D = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-    row(n, 'Wendekreis bei vollem Ruder (Vielfaches der Länge)', null, D / r.geo.L, 'L', 'Erfahrung: 6–10 L'); }
+    row(n, 'Wendekreis bei vollem Ruder (Vielfaches der Länge)', null, D / r.geo.L, 'L', 'Größenordnung 4–8 L (Schätzung); Schiebewinkel ' + (Fl.s.beta * 180 / Math.PI).toFixed(0) + '°'); }
+  // 6b Gieren ohne Kurs halten: Störung 0,2 °/s, Ruder mittig – Verdopplungszeit (klein = instabil, Jones-Kriterium)
+  { const Fl = luft(r, 500, r.v_reise_kmh / 3.6); Fl.s.ap.fahrt = r.v_reise_kmh / 3.6; Fl.s.ap.hoehe = 500; F.lauf(Fl, 30); Fl.s.r = 0.2 * Math.PI / 180;
+    let t2 = null; for (let i = 0; i < 1200 && t2 == null; i++) { F.lauf(Fl, 0.1); if (Math.abs(Fl.s.r) > 0.4 * Math.PI / 180) t2 = (i + 1) * 0.1; }
+    row(n, 'Gieren ohne Kurs halten: Zeit bis 0,2 → 0,4 °/s (s)', null, t2 == null ? 'stabil' : t2, 's', 'Flossen ' + (r.tail.Aplane / r.tail.A_jones).toFixed(2) + ' × Jones'); }
   // 7 Höhe halten: von 300 auf 400 m in Reisefahrt
   { const Fl = luft(r, 300, r.v_reise_kmh / 3.6, 0.003); Fl.s.ap.fahrt = r.v_reise_kmh / 3.6; Fl.s.ap.hoehe = 400; F.lauf(Fl, 600);
     row(n, 'Höhe halten 400 m (nach 10 min)', 400, Fl.s.h, 'm', 'leicht 0,3 %, Nickwinkel ' + (Fl.s.th * 180 / Math.PI).toFixed(1) + '°'); }

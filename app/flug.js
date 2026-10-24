@@ -1,3 +1,4 @@
+// 2026-10-24 23:20 · flug.js 1.4: Gieren und Schieben dynamisch (Munk-Moment der Hülle, Flossen, Seitenruder) statt fester Wenderadius
 // 2026-10-15 23:10 · flug.js 1.3: Umkehrschub (bis 40 %, halber Wirkungsgrad), Vektorsteuerung mit schwenkbaren Motorgruppen
 // 2026-10-15 21:50 · flug.js 1.2: Prall/halbstarr über der Prallhöhe: Innendruck nach Gasgleichung, Hüllenspannung, Platzen ⇒ Abbruch
 // 2026-10-15 10:20 · flug.js 1.1: Prallhöhe bleibt bis zum Erreichen stehen, Meldung Abblasen, Formgebung, Abbruch bei > 10 % fehlendem Volumen
@@ -23,7 +24,7 @@
        aus dem Anstellwinkel (Flossen und Querströmung der Hülle), Höhenruder.
        Momente: Hülle in Streifen (Munk-Anteil bis zur Ablösung, Querströmung; instabil, aber dämpfend), Flossen (stabil, dämpfend), Pendel aus dem
        tief liegenden Schwerpunkt, Trimm (Schwerpunkt vor/hinter der Auftriebsmitte), Schublinie unter der Achse.
-     – Kurs: Seitenruder ⇒ Drehgeschwindigkeit mit Verzögerung; Wenderadius nach Leitwerksgröße.
+     – Kurs: Gieren und Schieben wie das Nicken (Hülle in Streifen, Flossen, Seitenruder); seit 24.10.2026.
      – Gas: ein einziger Gassack zum Ablassen (Vereinfachung des Nutzers); über der Prallhöhe bläst Gas
        von selbst ab (Überdruckventile bzw. offener Appendix). Ballonets (Prall, Halbstarr) halten die Form.
      – Ballast: Abwurf schrittweise oder fortlaufend; Kraftstoff bzw. Akku wird verbraucht.
@@ -52,8 +53,10 @@
     const Ah = tl.elevator ? tl.Aplane : 0;
     // Senkrechte Flossen (für den Wenderadius); bei 1 oder 2 senkrechten Flossen ist alles senkrecht
     const Av = tl.planes === 2 ? tl.Aplane : tl.Atot;
-    // Querströmung der Hülle: Beiwert eines umströmten Zylinders, abgemindert für den Rotationskörper (Hoerner Kap. 3)
-    const Cdc = 0.6, Aseit = 0.7 * L * D;
+    // Querströmung der Hülle: Beiwert eines quer angeströmten Zylinders (≈ 1,2) mal Abminderung für den endlich langen
+    // Rotationskörper (η ≈ 0,65, Allen & Perkins) ⇒ 0,8 (bis 24.10.2026: 0,6; erhöht mit der neuen Gierrechnung, damit
+    // Schiebewinkel und Wendekreis bei vollem Ruder im üblichen Bereich liegen)
+    const Cdc = 0.8, Aseit = 0.7 * L * D;
     // Propeller: Standschub begrenzt die Kraft bei kleiner Fahrt (Strahltheorie, 80 % Gütegrad)
     const propD = Math.max(0.25, 0.55 * Math.pow(Math.max(a.kW, 0.005), 0.33));
     const Aprop = a.n * Math.PI * propD * propD / 4;
@@ -115,7 +118,7 @@
     const ballast = lift - leicht - ohneBallast;          // Ballast an Bord nach dem Abwiegen
     const s = {
       t: 0, x: 0, y: 0, h: opt.h0 || 0, hGrund: opt.hGrund || 0,
-      U: 0, w: 0, th: 0, q: 0, psi: opt.kurs || 0, r: 0,
+      U: 0, w: 0, th: 0, q: 0, psi: opt.kurs || 0, r: 0, v: 0,
       Vn: VnStart, ballast: Math.max(0, ballast), energie: K.energie0, E: K.E0, dT: 0,
       schub: 0, hr: 0, sr: 0, trimm: 0, ventil: 0, ballastAb: 0,   // Bedienung: Schub 0…1, Ruder −1…+1, Trimm −1…+1, Ventil 0…1, Ballast kg/s
       amBoden: true, landung: null, meldungen: [], gasAb: 0, ballastAbGesamt: 0,
@@ -271,24 +274,43 @@
       s.q += Msum / I * dt; s.th = clamp(s.th + s.q * dt, -0.6, 0.6);
     }
 
-    // --- Kurs: Seitenruder ⇒ Drehgeschwindigkeit mit Verzögerung (Wenderadius K.Rturn bei vollem Ruder) ---
-    // Bei kleiner Fahrt wirken die Ruder schwächer (Grenzschicht, Böen, kein Fahrtwind am Ruder):
-    // Wirkung f = U² / (U² + U0²), U0 = 12 % der Höchstgeschwindigkeit (mind. 2 m/s) ⇒ Wenderadius Rturn / f
-    const U0 = Math.max(2, 0.12 * K.vmax), fRud = s.U * s.U / (s.U * s.U + U0 * U0);
-    let rSoll = s.sr * Math.abs(s.U) * fRud / K.Rturn;
-    const tau = 1.5 * K.L / Math.max(Math.abs(s.U), 1);
-    // Gieren durch seitlichen Schub (Vektorsteuerung): Gleichgewicht mit der Dämpfung der Hülle (Querströmung, ~ r²) und
-    // der Flossen (~ U · r):  M = c1 · r·|r| + c2 · r  ⇒  r
-    if (Mgier) {
-      const c1 = 0.5 * rho * K.Cdc * K.D * Math.pow(K.L, 4) / 32, c2 = 0.5 * rho * Math.abs(s.U) * K.aeff * K.Av * K.lt * K.lt, m = Math.abs(Mgier);
-      rSoll += Math.sign(Mgier) * (-c2 + Math.sqrt(c2 * c2 + 4 * c1 * m)) / (2 * c1);
+    /* --- Gieren und Schieben (Wunsch Nutzer 24.10.2026: instabiles Kurvenverhalten bei kleinem Leitwerk) ---
+       Seitenbewegung wie das Nicken gerechnet: Schiebegeschwindigkeit v (Schiff nach rechts +) und Drehgeschwindigkeit r
+       (Bug nach rechts +) sind eigene Größen.
+         Hülle in Streifen: Querströmung (dämpft) und Potentialanteil bis zur Ablösung (Munk-Moment, dreht das Schiff
+           weiter aus der Anströmung ⇒ instabil); örtliche Quergeschwindigkeit v + r · (x_B − x)
+         Senkrechte Flossen: Kraft −½ ρ · a · A_v · U · (v − r · l_t) am Hebelarm l_t (stabilisiert und dämpft)
+         Seitenruder: Kraft am Leitwerk ½ ρ · a · A_v · τ · δ · U² (Ruder rechts ⇒ Heck nach links ⇒ Bug nach rechts);
+           bei kleiner Fahrt wirkt es von selbst schwach (~ U²)
+         Vektorsteuerung: Giermoment der seitlich geschwenkten Motoren
+       Bewegung: dv/dt = Y / m_y − U · r,  dr/dt = N / I  (m_y mit mitbewegter Luft k₂, I wie beim Nicken).
+       Ist das Leitwerk kleiner als nach dem Jones-Kriterium nötig, überwiegt das Munk-Moment: das Schiff läuft nicht
+       von selbst geradeaus, sondern dreht langsam in eine Kurve weg und muss gegengesteuert werden.            */
+    if (s.amBoden) { s.v = 0; s.r = 0; }
+    else {
+      const ua = s.U, vb = s.v || 0;
+      let Yh = 0, Nh = 0;
+      for (const e of K.st) {
+        const vl = vb + s.r * (K.xB - e.x);                                          // örtliche Quergeschwindigkeit
+        let f = -0.5 * rho * K.Cdc * 2 * e.r * vl * Math.abs(vl);                    // Querströmung
+        if (e.x < K.x0) f += rho * (K.k2 - K.k1) * ua * (-vl) * e.dA;                // Potentialanteil bis zur Ablösung
+        Yh += f * e.dx; Nh += f * e.dx * (K.xB - e.x);
+      }
+      const dSr = s.sr * K.ru.dmax, vt = vb - s.r * K.lt;
+      const Yf = -0.5 * rho * K.aeff * K.Av * ua * vt - 0.5 * rho * K.aeff * K.Av * K.ru.tau * dSr * ua * Math.abs(ua);
+      const Y = Yh + Yf, N = Nh - Yf * K.lt + Mgier;
+      const My = Mi + K.k2 * rho * K.Vol;
+      s.v = vb + (Y / My - ua * s.r) * dt;
+      s.r += N / I * dt;
+      s.beta = Math.atan2(-s.v, Math.max(Math.abs(ua), 0.1));                      // Schiebewinkel (Anzeige, Prüfung)
     }
-    s.r += (rSoll - s.r) * Math.min(1, dt / tau);
     s.psi = (s.psi + s.r * dt + 2 * Math.PI) % (2 * Math.PI);
 
     // --- Ort: Fahrt durch die Luft plus Wind ---
-    s.x += (s.U * Math.sin(s.psi) + wind.e) * dt * (s.amBoden ? 0 : 1);
-    s.y += (s.U * Math.cos(s.psi) + wind.n) * dt * (s.amBoden ? 0 : 1);
+    // vorwärts entlang des Bugs, seitlich (v) nach rechts vom Bug: rechts = (cos ψ, −sin ψ) in (Ost, Nord)
+    const vs = s.v || 0;
+    s.x += (s.U * Math.sin(s.psi) + vs * Math.cos(s.psi) + wind.e) * dt * (s.amBoden ? 0 : 1);
+    s.y += (s.U * Math.cos(s.psi) - vs * Math.sin(s.psi) + wind.n) * dt * (s.amBoden ? 0 : 1);
     s.h += s.w * dt;
 
     // --- Verbrauch ---

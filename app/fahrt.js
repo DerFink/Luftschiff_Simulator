@@ -1,3 +1,4 @@
+// 2026-10-24 23:40 · fahrt.js 1.9: Höhensteuerer wieder schaltbar (Knopf, Taste F), Bahn mit Schiebewinkel
 // 2026-10-22 22:50 · fahrt.js 1.8: Payload – 5 % des verbrauchten Kraftstoffs bleiben als Reserve an Bord
 // 2026-10-22 21:10 · fahrt.js 1.7: Payload enthält den nicht verbrauchten Kraftstoff (nur der Verbrauch der Fahrt wird abgezogen)
 // 2026-10-15 23:20 · fahrt.js 1.6: Umkehrschub-Knopf, Vektorknüppel (zweiter Knüppel, ⇧+Pfeile), Ton (Motor tief, Wind), Taste R/M
@@ -171,10 +172,10 @@
   function aufbauen() {
     const app = $('#app'); app.classList.add('wide');
     const zrB = ZR.map((z, i) => `<button data-z="${z}"${z === Z.zr ? ' class="on"' : ''}>×${z}</button>`).join('') + `<button data-z="${BOOST}" id="fBoost" title="Boost: gedrückt halten (24 h in etwa 3 s)">⚡</button>`;
-    // Höhensteuerer und „Fahrt halten“ sind vorerst ausgeblendet (Wunsch Nutzer 14.10.2026); der Höhensteuerer arbeitet weiter
+    // „Fahrt halten“ bleibt ausgeblendet (Wunsch Nutzer 14.10.2026); der Höhensteuerer ist seit 24.10.2026 wieder schaltbar
     const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Knüppel vor = sinken, zurück = steigen'], ['W S', 'Schub + / − (unten etwas feiner)  ·  X Schub aus'],
       ['B', 'Ballast: tippen = ' + fm(Z.stoss) + ', halten = laufend'], ['G', 'Gas ablassen (solange gedrückt)'], ['Q E', 'Trimm Heck / Trimm Bug'], ['R', 'Umkehrschub ein/aus'], ['⇧ + Pfeile', 'Vektorknüppel (wenn „Vektor“ an)'], ['M', 'Ton ein/aus'],
-      ['H K P', 'Höhe · Kurs · Position halten'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 halten: Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus'],
+      ['F', 'Höhensteuerer ein/aus (aus: Höhenruder direkt)'], ['H K P', 'Höhe · Kurs · Position halten'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 halten: Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus'],
       ['', 'Beim Steuern, Gas oder Ballast läuft ein Zeitraffer über ×10 kurz mit ×10']];
     app.innerHTML = `<div class="fz">
       <div class="top"><button class="lnk" id="fBack">■ Ende</button><b class="t">${escapeHtml(S.d.name)}</b><span style="display:flex;gap:8px;align-items:center"><button class="lnk" id="fTon" title="Ton ein/aus">🔊</button><span id="fUhr" style="white-space:nowrap"></span></span></div>
@@ -205,7 +206,7 @@
         <div class="joy joy2" id="fJoy2" style="display:none"><div class="stick"></div>${vektorBeschriftung()}</div>
       </div>
       <div class="apsrow" id="fApRow">
-        <button data-a="hoehe">Höhe halten</button><button data-a="kurs">Kurs halten</button><button data-a="pos">Position halten</button>
+        <button data-a="hs" title="Höhensteuerer: hält die Nicklage (wie der Mann am Höhenruder). Aus: Höhenruder direkt, Nicken kann sich aufschaukeln">Höhensteuerer</button><button data-a="hoehe">Höhe halten</button><button data-a="kurs">Kurs halten</button><button data-a="pos">Position halten</button>
       </div>
       <div class="rp" id="fRp"><div class="sec">Tastatur</div><div class="keys">${tasten.map(([k, t]) => `<span>${k ? k.split(' ').map(x => x === '…' || x === '·' ? x : '<kbd>' + x + '</kbd>').join(' ') : ''}</span><span>${t}</span>`).join('')}</div></div>
     </div>`;
@@ -290,6 +291,7 @@
       if (!neu) return;                                                       // ab hier nur einmal je Tastendruck
       if (k === 'b') { ballastStoss(); Z.bT = performance.now(); }
       if (k === 'q') s.trimm = Math.min(1, s.trimm + 0.25); if (k === 'e') s.trimm = Math.max(-1, s.trimm - 0.25);
+      if (k === 'f') assist('hs');                                         // Höhensteuerer ein/aus (wieder sichtbar seit 24.10.2026)
       if (k === 'h') assist('hoehe'); if (k === 'k') assist('kurs'); if (k === 'p') assist('pos');
       if (k === 'v') Z.seiteAn = !seiteSichtbar();
       if (k === 'r') umkehr(); if (k === 'm') tonSchalten();
@@ -337,7 +339,8 @@
   // Assistenten ein/aus; eigener Eingriff schaltet den betroffenen Assistenten ab (wie im Gasballon-Simulator)
   function assist(a) {
     const s = Z.F.s, ap = s.ap;
-    if (a === 'hs') { Z.hs = !Z.hs; if (!Z.hs) { ap.nick = null; ap.hoehe = null; } else ap.nick = 0; }
+    if (a === 'hs') { Z.hs = !Z.hs; if (!Z.hs) { ap.nick = null; ap.hoehe = null; } else ap.nick = 0;
+      toast(Z.hs ? 'Höhensteuerer an: hält die Nicklage' : 'Höhensteuerer aus: Höhenruder direkt – das Nicken kann sich aufschaukeln', 3000); }
     if (a === 'hoehe') { ap.hoehe = ap.hoehe == null ? Math.round(s.h) : null; if (ap.hoehe != null) Z.hs = true; if (ap.hoehe == null) ap.nick = Z.hs ? 0 : null; }
     if (a === 'kurs') { const w = Z.wJetzt || { e: 0, n: 0 }, ve = s.U * Math.sin(s.psi) + w.e, vn = s.U * Math.cos(s.psi) + w.n;
       ap.kurs = ap.kurs == null ? (Math.hypot(ve, vn) > 1 ? (Math.atan2(ve, vn) + 2 * Math.PI) % (2 * Math.PI) : s.psi) : null; ap.pos = null; }
@@ -481,12 +484,14 @@
     $('#fUhr').textContent = new Date(tMs).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + (window.innerWidth >= 900 ? ' Uhr' : '') + (Z.pause ? ' · Pause' : '');
     $('#fWind').innerHTML = `Wind <b>${de(wr.sp, wr.sp < 10 ? 1 : 0)} m/s</b> aus ${kompass(wr.d)} · ${de(s.h - Z.grund)} m über Grund`;
     $('#fQuelle').textContent = W.quelle;
-    const vg = s.amBoden ? 0 : Math.hypot(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n);   // am Boden steht das Schiff
+    // Bewegung über Grund mit Schiebegeschwindigkeit v (seitlich, rechts vom Bug): ge, gn in m/s nach Ost und Nord
+    const sv = s.v || 0, ge = s.U * Math.sin(s.psi) + sv * Math.cos(s.psi) + w.e, gn = s.U * Math.cos(s.psi) - sv * Math.sin(s.psi) + w.n;
+    const vg = s.amBoden ? 0 : Math.hypot(ge, gn);   // am Boden steht das Schiff
     const verbrauch = K.verbrenner ? K.sfc * (a.P || 0) / 3.6e6 : (a.P || 0);   // kg/s bzw. W
     const rest = K.verbrenner ? (verbrauch > 0 ? s.energie / verbrauch / 3600 : null) : (verbrauch > 0 ? s.E / verbrauch / 3600 : null);
     const frei = a.frei || 0, prall = s.prallAnz;          // Prallhöhe: bleibt stehen, bis das Schiff sie überschreitet
     const kurs = String(Math.round(s.psi / RAD + 360) % 360).padStart(3, '0') + '°';
-    const kgr = Math.atan2(s.U * Math.sin(s.psi) + w.e, s.U * Math.cos(s.psi) + w.n), kog = vg > 1 ? String(Math.round(kgr / RAD + 360) % 360).padStart(3, '0') + '°' : '–';
+    const kgr = Math.atan2(ge, gn), kog = vg > 1 ? String(Math.round(kgr / RAD + 360) % 360).padStart(3, '0') + '°' : '–';
     // Anzeige auf der Karte (wie im Gasballon-Simulator): oben groß AGL und TAS, grau darunter MSL und GS; links der
     // Beschleunigungsbalken (Wurzelskala, voll bei ±0,3 m/s², grün nach oben, rot nach unten). Eingeklappt: AGL, TAS, VS, Balken.
     const agl = s.h - Z.grund, acc = s.amBoden ? 0 : (s.acc || 0);

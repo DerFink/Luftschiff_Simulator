@@ -1,3 +1,4 @@
+// 2026-10-24 23:50 · sw.js v27: Build 2026-10-24.2
 // 2026-10-24 22:50 · sw.js v26: Build 2026-10-24.1
 // 2026-10-22 22:55 · sw.js v25: Build 2026-10-22.2
 // 2026-10-22 21:15 · sw.js v24: Build 2026-10-22.1
@@ -11,7 +12,7 @@
 // 2026-10-14 14:30 · sw.js v16: Build 2026-10-14.7 (gelaende.js neu)
 // 2026-10-14 16:00 · sw.js v15: Build 2026-10-14.6
 /* Bei jedem neuen Build VER erhöhen, damit Handys die neuen Dateien laden. */
-const VER = 'ls-v26';
+const VER = 'ls-v27';
 const FILES = ['./', 'index.html', 'core.js', 'models.js', 'viewer.js', 'lib/three.module.min.js', 'lib/OrbitControls.js', 'flug.js', 'wetter.js', 'profil.js', 'gelaende.js', 'fahrt.js', 'fahrt.css', 'lib/leaflet/leaflet.js', 'lib/leaflet/leaflet.css', 'manifest.json', 'icon-192.png', 'icon-512.png', 'icon-180.png', 'icon-maskable-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VER).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

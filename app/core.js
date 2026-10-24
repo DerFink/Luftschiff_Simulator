@@ -1,3 +1,4 @@
+// 2026-10-24 22:50 · core.js 0.18: Hinweis zu Starrluftschiffen unter 28.000 m³ neu formuliert (Wortlaut Nutzer)
 // 2026-10-15 23:00 · core.js 0.17: Motorgruppen mit Schwenk (Vektorsteuerung), Code SW
 // 2026-10-15 22:40 · core.js 0.16: Trimmzustand (buglastig/hecklastig/ausgetrimmt ±3°) statt Gondel-Vorschlägen
 // 2026-10-14 13:10 · core.js 0.15: Gerüst und Innenaufbau wählbar (Längsträger, Gaszellen, Kielart/-werkstoff/-länge, Zahl der Ballonets; Code GZ, KI, NB), Vorschlag der Gondelmaße
@@ -722,7 +723,7 @@
     if (!tl.elevator) warn.push('Nur ' + d.ltw.n + ' Finne(n): kein Höhenruder. Höhe nur über Schub, Ballast und Gas.');
     if (frei < 0) warn.push(`Zu schwer: Es fehlen ${fmtMass(-frei)} Auftrieb.`);
     if (d.bauweise === 'S' && d.zellen && geo.L / d.zellen > 20) warn.push(`Gaszellen: ${Math.round(geo.L / d.zellen)} m Ringabstand. Fällt eine Zelle aus, fehlen ${Math.round(100 / d.zellen)} % Auftrieb (${fmtMass(lift0 / d.zellen)}); lange Felder belasten die Längsträger.`);
-    if (d.bauweise === 'S' && d.V < 28300) warn.push('Burgess: Starrluftschiffe unter rund 28.000 m³ sind nicht effizient. Prall oder halbstarr prüfen.');
+    if (d.bauweise === 'S' && d.V < 28300) warn.push('Burgess warnt vor Starrluftschiffen mit weniger als 28.000 m³, hier muss genau auf die Auslegung geachtet werden.');   // Wortlaut Nutzer 24.10.2026
 
     return {
       d, geo, tail: tl, lift0, lpm, fill, prallhoehe, gasShare, Vraum, Vgas, struktur: struktur(d, geo),

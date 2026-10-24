@@ -1,3 +1,4 @@
+<!-- 2026-10-24 22:50 · Build 2026-10-24.1: Hinweis Starrluftschiffe unter 28.000 m³ neu formuliert -->
 <!-- 2026-10-22 22:55 · Build 2026-10-22.2: Payload – 5 % des verbrauchten Kraftstoffs als Reserve -->
 <!-- 2026-10-22 21:15 · Build 2026-10-22.1: Effizienz – Payload enthält den nicht verbrauchten Kraftstoff (nur der Verbrauch der Fahrt wird abgezogen) -->
 <!-- 2026-10-15 23:40 · Build 2026-10-15.3: Trimm im Baumenü (Schiff kippt, buglastig/hecklastig/ausgetrimmt), Ortssuche, Umkehrschub-Knopf, Ton, Vektorsteuerung (schwenkbare Motoren, zweiter Knüppel), App-Installation, Bugkappe für den Ankermast -->
@@ -169,7 +170,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-22.2';
+const BUILD = '2026-10-24.1';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -318,7 +319,7 @@ const STEPS = [
       { typ: 'num', key: 'ballonet', label: 'Ballonet-Volumen (alle zusammen)', unit: '%', min: 0, max: 50, step: 1, k: 0, when: d => d.bauweise === 'P' || d.bauweise === 'H', vorschlag: (d, r) => Math.ceil((1 - r.fill) * 100 + 5) },
       // Prall: Gondel innen aufgehängt (Lastgurt, Katenarie; Gondel direkt an der Hülle) oder außen an Seilen
       { typ: 'seg', key: '_aufh', label: 'Aufhängung der Gondel', when: d => d.bauweise === 'P' && (d.gondel === 'F' || d.gondel === 'K'), opts: [['I', 'Innen (Lastgurt)'], ['A', 'Außen (Seile)']] },
-    ], text: (d, r) => strukturText(d, r) + ({ S: 'Gerüst aus Ringen und Längsträgern, Gas in Zellen; Form unabhängig vom Gasdruck. Burgess: erst ab rund 28.000 m³ sinnvoll.', H: 'Prallhülle mit tragendem Kiel bzw. Innengerüst (Norge, Zeppelin NT). Ballonets halten den Überdruck.', P: 'Die Form hält allein der Überdruck; Ballonets mit Gebläse gleichen Höhenänderungen aus.', O: 'Unten offen mit kurzem Appendix wie ein Gasballon: kein Ballonet, Innendruck nur aus der Gassäule. Steigt das Schiff, entweicht Gas.' })[d.bauweise] },
+    ], text: (d, r) => strukturText(d, r) + ({ S: 'Gerüst aus Ringen und Längsträgern, Gas in Zellen; Form unabhängig vom Gasdruck. Burgess warnt vor Starrluftschiffen mit weniger als 28.000 m³, hier muss genau auf die Auslegung geachtet werden.', H: 'Prallhülle mit tragendem Kiel bzw. Innengerüst (Norge, Zeppelin NT). Ballonets halten den Überdruck.', P: 'Die Form hält allein der Überdruck; Ballonets mit Gebläse gleichen Höhenänderungen aus.', O: 'Unten offen mit kurzem Appendix wie ein Gasballon: kein Ballonet, Innendruck nur aus der Gassäule. Steigt das Schiff, entweicht Gas.' })[d.bauweise] },
   { id: 'ltw', titel: 'Leitwerk', frage: 'Wie viele Flossen bekommt das Leitwerk?', fields: [
       { typ: 'seg', key: 'ltw.n', label: 'Zahl der Flossen (Anzahl)', opts: [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6'], [7, '7'], [8, '8']], num: true },
       { typ: 'seg', key: 'ltw.anord', label: 'Anordnung', opts: d => ({ 1: [['|', 'oben'], ['u', 'unten']], 2: [['|', 'oben/unten'], ['V', 'V'], ['A', 'umgek. V']], 3: [['Y', 'Y'], ['L', 'umgek. Y']] }[d.ltw.n] || [['+', '+ Kreuz'], ['X', 'X']]) },

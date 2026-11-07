@@ -1,3 +1,4 @@
+// 2026-11-07 20:30 · flug.js 1.6: Längs- und Querbewegung gekoppelt (m_y·v·r bremst in der Kurve, m_x/m_y beim Schieben); Flossenabriss über den ganzen Anstellwinkel der Seitenflossen (Schieben + Drehen + Ruder), Abrisswinkel aus dem Seitenverhältnis; Pendelruder: Normalkraft senkrecht zur gedrehten Fläche (bremst bei großem Ausschlag); Widerstand des Seitenruders
 // 2026-11-07 18:00 · flug.js 1.5: Steuermodus 2/3 nach Chewie (Mischer Seite/Nick auf Leitwerk und Motorschwenk, Gier-Drehratenregler, Nickrate), Motorpaare je Motor (45°-Achse gegensinnig = Gieren), Seitenschub als Kraft, Ruderabriss bei großem Ausschlag, Teilschritte für kleine Schiffe (Höhensteuerer schlug sonst von Anschlag zu Anschlag), Dämpfung des Höhensteuerers auf Länge/Fahrt bezogen
 // 2026-10-24 23:20 · flug.js 1.4: Gieren und Schieben dynamisch (Munk-Moment der Hülle, Flossen, Seitenruder) statt fester Wenderadius
 // 2026-10-15 23:10 · flug.js 1.3: Umkehrschub (bis 40 %, halber Wirkungsgrad), Vektorsteuerung mit schwenkbaren Motorgruppen
@@ -58,6 +59,10 @@
     // Rotationskörper (η ≈ 0,65, Allen & Perkins) ⇒ 0,8 (bis 24.10.2026: 0,6; erhöht mit der neuen Gierrechnung, damit
     // Schiebewinkel und Wendekreis bei vollem Ruder im üblichen Bereich liegen)
     const Cdc = 0.8, Aseit = 0.7 * L * D;
+    /* Abriss der Seitenflossen (07.11.2026): Flossen mit kleinem Seitenverhältnis reißen später ab
+       (Hoerner, Fluid-Dynamic Lift: Seitenverhältnis 1 ≈ 35°, 2 ≈ 24°, 4 ≈ 18°). Näherung
+       α_S = 12° + 24°/Seitenverhältnis, begrenzt auf 15…40°. Darüber wächst die Normalkraft nur noch gedämpft. */
+    const finAS = clamp(12 + 24 / Math.max(tl.o.ar, 0.3), 15, 40) * Math.PI / 180;
     // Propeller: Standschub begrenzt die Kraft bei kleiner Fahrt (Strahltheorie, 80 % Gütegrad)
     const propD = Math.max(0.25, 0.55 * Math.pow(Math.max(a.kW, 0.005), 0.33));
     const Aprop = a.n * Math.PI * propD * propD / 4;
@@ -84,7 +89,7 @@
     // größer bei kleinem Seitenleitwerk oder schwächerem Ruder (Wendemoment ~ τ · größter Ausschlag)
     const Rturn = 3.5 * L * Math.sqrt(clamp(tl.A_jones / Math.max(Av, 1e-6), 0.5, 4)) * Math.sqrt(clamp(0.55 * 0.436 / (ru.tau * ru.dmax), 0.3, 5));
     return {
-      d, ru, L, D, Vol, Vs, R: geo.R, st, x0, bh: 2 * tl.b + 0.3 * geo.D, xB: geo.xB * L, vTab, cdTab, Ah, Av, aeff: tl.aeff, lt: tl.lt, k1: tl.k1, k2: tl.k2, Cdc, Aseit, Aprop, zT, Rturn,
+      d, ru, L, D, Vol, Vs, R: geo.R, st, x0, bh: 2 * tl.b + 0.3 * geo.D, xB: geo.xB * L, vTab, cdTab, Ah, Av, aeff: tl.aeff, finAS, lt: tl.lt, k1: tl.k1, k2: tl.k2, Cdc, Aseit, Aprop, zT, Rturn,
       P: a.n * a.kW * 1000, eta: a.eta || 0.7, verbrenner: a.art === 'V', sfc: a.sfc || 0.3, solarW: r.propulsion.solarW || 0,
       mLeer: r.mLeer, mPers: z.personen + z.nutzlast + z.schlepptau, ballast0: z.ballast, energie0: r.propulsion.mEnergie, E0: r.propulsion.E_J,
       Vgas: r.Vgas, lpm0: r.lpm, dx: r.trim.dx, BG: r.trim.BG, vmax: r.vmax,
@@ -321,7 +326,12 @@
       s.U = 0; s.w = 0; s.q = 0; s.th *= 0.9;
       if (Fup > 0) { s.amBoden = false; s.landung = null; s.tAb = s.t; s.aglMax = 0; }          // Zeitpunkt des Abhebens
     } else {
-      s.U += Ffwd / Mx * dt; s.w += Fup / Mz * dt;
+      /* Kopplung mit der Seitenbewegung (07.11.2026): im körperfesten System gilt m_x·du/dt = X + m_y·v·r.
+         Schiebt das Schiff in der Kurve nach außen (v und r mit entgegengesetztem Vorzeichen), bremst dieser Term:
+         die Querkraft der schräg angeströmten Hülle wirkt dann zum Teil gegen die Bahn. Vorher fehlte er, und das
+         Schiff hielt in der engsten Kurve fast die volle Fahrt. */
+      const Myq = Mi + K.k2 * rho * K.Vol;                                         // Seitenmasse mit mitbewegter Luft
+      s.U += (Ffwd / Mx + Myq / Mx * (s.v || 0) * (s.r || 0)) * dt; s.w += Fup / Mz * dt;
       s.acc = Fup / Mz;                                                            // Vertikalbeschleunigung (Anzeige am Vario)
       s.q += Msum / I * dt; s.th = clamp(s.th + s.q * dt, -0.6, 0.6);
     }
@@ -348,11 +358,32 @@
         if (e.x < K.x0) f += rho * (K.k2 - K.k1) * ua * (-vl) * e.dA;                // Potentialanteil bis zur Ablösung
         Yh += f * e.dx; Nh += f * e.dx * (K.xB - e.x);
       }
-      const dSr = K.ru.wirk(uT * K.ru.dmax), vt = vb - s.r * K.lt;           // Seitenruder (Mischer, Abriss)
-      const Yf = -0.5 * rho * K.aeff * K.Av * ua * vt - 0.5 * rho * K.aeff * K.Av * K.ru.tau * dSr * ua * Math.abs(ua);
+      /* Seitenflossen und Seitenruder (07.11.2026, Wunsch Nutzer: Chewie wendet enger):
+         Anstellwinkel an den Flossen α = −v_t/U − τ·δ aus Schieben, Drehen (v_t = v − r·l_t) und Ruder.
+         Normalkraft ½ ρ U² · A_v · a_eff · α, über dem Abrisswinkel α_S nur noch gedämpft (bis 1,3·α_S).
+         Klappe: Ausschlag mit Abriss der Klappe allein (wirk), Widerstand Hoerner k_d·sin²δ plus induziert.
+         Pendelruder: die ganze Fläche dreht um δ, τ = 1, kein eigener Klappenabriss; die Normalkraft steht
+         senkrecht auf der gedrehten Fläche ⇒ Seitenkraft N·cos δ und Längskraft N·sin δ (bei vollem Ausschlag
+         bremst das Ruder stark, wie am echten Chewie beobachtet).                                               */
+      const dSs = uT * K.ru.dmax, vt = vb - s.r * K.lt;                        // gestellter Ausschlag, Quergeschw. am Leitwerk
+      const dSr = K.ru.pendel ? dSs : K.ru.wirk(dSs);                         // wirksamer Ausschlag
+      const qv = 0.5 * rho * ua * Math.abs(ua);
+      let Yf = 0, Xf = 0;
+      if (Math.abs(ua) > 0.1) {
+        const al = -vt / ua - K.ru.tau * dSr, A = Math.abs(al), aS = K.finAS;
+        const sat = A <= aS ? A : aS + 0.3 * aS * Math.tanh((A - aS) / aS);    // Abriss: Normalkraft wächst gedämpft
+        const Nf = qv * K.aeff * K.Av * Math.sign(al) * sat;                  // Normalkraft der Flossen
+        if (K.ru.pendel) { Yf = Nf * Math.cos(dSs); Xf = Nf * Math.sin(dSs); }
+        else {
+          Yf = Nf;
+          const q2 = 0.5 * rho * ua * ua;
+          Xf = -(q2 * K.Av * K.ru.kd * Math.sin(dSs) ** 2 + (q2 > 1 ? Yf * Yf / (q2 * Math.PI * 0.8 * K.bh * K.bh) : 0)) * Math.sign(ua);
+        }
+      } else Yf = -0.5 * rho * K.aeff * K.Av * ua * vt;                        // fast im Stand: nur Dämpfung (klein)
+      s.U += Xf / Mx * dt;                                                     // Bremswirkung des Seitenruders
       const Y = Yh + Yf + Ty, N = Nh - Yf * K.lt + Mgier;                     // Ty: Seitenschub der geschwenkten Motoren
       const My = Mi + K.k2 * rho * K.Vol;
-      s.v = vb + (Y / My - ua * s.r) * dt;
+      s.v = vb + (Y / My - Mx / My * ua * s.r) * dt;                              // Kopplung: m_y·dv/dt = Y − m_x·U·r
       s.r += N / I * dt;
       s.beta = Math.atan2(-s.v, Math.max(Math.abs(ua), 0.1));                      // Schiebewinkel (Anzeige, Prüfung)
     }

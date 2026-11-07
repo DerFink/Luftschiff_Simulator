@@ -1,3 +1,4 @@
+// 2026-11-07 20:30 · pruef04.js: Chewie – Wende um 180° aus dem Geradeausflug (Durchmesser = Versatz quer zur Einflugrichtung)
 // 2026-11-07 19:40 · pruef04.js: Chewie-Kurve mit Höhe halten und kurzer Vorlauf (Akku 4,4 Wh)
 // 2026-11-07 19:00 · pruef04.js: Chewie – Wendekreis bei 60 % Schub im alten Modell, Mode 2 und Mode 3
 // 2026-10-24 23:30 · pruef04.js: Gierstabilität und Wendekreis mit der neuen Gierrechnung
@@ -84,4 +85,25 @@ require('fs').writeFileSync(__dirname + '/pruef04.json', JSON.stringify(out, nul
     for (let i = 0; i < 300; i++) { F.lauf(Fl, 0.1); xs.push(s.x); ys.push(s.y); }
     const D = (Math.max(...xs) - Math.min(...xs) + Math.max(...ys) - Math.min(...ys)) / 2;
     console.log(['Chewie', 'Wendekreis 60 % Schub, ' + name + ' (m)', '', D.toFixed(1), 'm', (D / r.geo.L).toFixed(1) + ' L, ' + (s.U * 3.6).toFixed(0) + ' km/h, Drehrate ' + (s.r * 180 / Math.PI).toFixed(0) + ' °/s'].join(' | '));
+  } }
+
+// ---- Chewie (07.11.2026): Wende um 180° aus dem Geradeausflug, wie am Pylon ----
+// Erst 15 s geradeaus mit festem Schub einschwingen, dann Seitenknüppel voll rechts, bis der Kurs um 180° gedreht hat.
+// Durchmesser = Versatz quer zur Einflugrichtung; Vorlauf = größte Strecke über den Einlenkpunkt hinaus.
+// Vorgabe Nutzer: echter Chewie wendet auch bei hoher Fahrt mit Radius unter 1,5 m (Durchmesser unter 3 m).
+{ const base = require('../../app/models.js').MODELS.find(m => m.id === 'chewie').d;
+  for (const schub of [0.6, 1.0]) for (const md of [2, 3]) {
+    const r = C.compute(JSON.parse(JSON.stringify(base))), Fl = F.start(r, { h0: 50 }), s = Fl.s;
+    s.amBoden = false; s.warOben = true; s.h = 50; s.ap.hoehe = 50; s.schub = schub; s.modus = md; F.lauf(Fl, 15);
+    const t0 = s.t, U0 = s.U, p0 = s.psi, x0 = s.x, y0 = s.y; let gedreht = 0, alt = s.psi, umin = 1e9, vor = 0;
+    s.sr = 1;
+    while (gedreht < Math.PI && s.t - t0 < 20) {
+      F.lauf(Fl, 0.01);
+      let dp = s.psi - alt; if (dp < -Math.PI) dp += 2 * Math.PI; if (dp > Math.PI) dp -= 2 * Math.PI;   // Kurswinkel über 0/360° hinweg
+      gedreht += dp; alt = s.psi; umin = Math.min(umin, s.U);
+      vor = Math.max(vor, (s.x - x0) * Math.sin(p0) + (s.y - y0) * Math.cos(p0));                        // längs der Einflugrichtung
+    }
+    const quer = Math.abs((s.x - x0) * Math.cos(p0) - (s.y - y0) * Math.sin(p0));                        // quer zur Einflugrichtung
+    console.log(['Chewie', 'Wende 180° bei ' + schub * 100 + ' % Schub, Mode ' + md + ' (Durchmesser m)', '< 3', quer.toFixed(1), 'm',
+      'Einflug ' + (U0 * 3.6).toFixed(0) + ' km/h, kleinste Fahrt ' + (umin * 3.6).toFixed(0) + ' km/h, Vorlauf ' + vor.toFixed(1) + ' m, Dauer ' + (s.t - t0).toFixed(1) + ' s'].join(' | '));
   } }

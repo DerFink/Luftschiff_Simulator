@@ -1,3 +1,4 @@
+// 2026-11-07 20:30 · models.js: Chewie mit Pendelrudern (Angabe Nutzer: ganze Flossen drehen, bremsen bei vollem Ausschlag stark)
 // 2026-11-07 18:45 · models.js: Chewie nach Nutzerangaben 0,25 m³, Akku 4S 300 mAh, Motoren GEPRC SpeedX2 1804 2450 KV (Leistung und übrige Massen angenommen)
 // 2026-10-14 14:20 · models.js: Zeppelin NT mit Innengerüst aus CFK (Kiel/Gerüst-Feld)
 // 2026-10-14 01:30 · models.js 0.8: Längslage der Motorgondeln LZ 120 (Foto), LZ 129 (Bauplan), Zeppelin NT
@@ -169,12 +170,12 @@
       // (2 Motoren 26 g, Regler, Propeller, 4 Schwenkservos, Halter), Elektronik ≈ 30 g (Teensy, IMU, Empfänger, 3 Leitwerksservos),
       // Hülle Tritax 27 g/m², Lage der Motoren 0,2 L, Schublinie auf Höhe der Achse.
       id: 'chewie', gruppe: 'Klein', jahr: 2026,
-      quelle: 'Vorgabe Nutzer: L/D 6, 0,25 m³, λ-Leitwerk bis 5 cm vor dem Heck, Ruder ±50°, Motorschwenk 45°-Achse mit Mischer (Mode 2/3), Akku 4S 300 mAh, Motoren GEPRC SpeedX2 1804 2450 KV; Leistung, Massen von Antrieb/Elektronik/Hülle und Motorlage Annahme',
+      quelle: 'Vorgabe Nutzer: L/D 6, 0,25 m³, λ-Leitwerk bis 5 cm vor dem Heck, Pendelruder ±50°, Motorschwenk 45°-Achse mit Mischer (Mode 2/3), Akku 4S 300 mAh, Motoren GEPRC SpeedX2 1804 2450 KV; Leistung, Massen von Antrieb/Elektronik/Hülle und Motorlage Annahme',
       d: {
         name: 'Chewie (Rennluftschiff)', bauweise: 'P', gas: 'He', reinheit: 0.99, V: 0.25,     // [N] 0,25 m³ ⇒ Länge ≈ 2,6 m bei L/D 6
         form: { LD: 6, m: 0.43, Cp: 0.66, r0: 0.6, r1: 0.15 },                                // [N] L/D 6
         huelle_gm2: 27, ballonet: 0, prallhoehe: 0,                                           // [A] Tritax
-        ltw: { n: 3, anord: 'L', faktor: 1, xTE: 0.981, dmax: 50 },                           // [N] λ-Leitwerk, Hinterkante 5 cm vor dem Heck (1 − 0,05/2,59), ±50°
+        ltw: { n: 3, anord: 'L', faktor: 1, xTE: 0.981, dmax: 50, pendel: true },             // [N] λ-Leitwerk, Hinterkante 5 cm vor dem Heck (1 − 0,05/2,59), ±50°, Pendelruder
         gondel: 'R', crew: 0, pax: 0, avionik: 0.03,                                         // [A] kg: Teensy, IMU, Empfänger, 3 Leitwerksservos
         antrieb: { art: 'E', n: 2, kW: 0.1, lage: 'R', xs: [0.2], zR: 0,                       // [N] 2 Motoren; [A] 0,1 kW je Motor, Lage, Schublinie auf Achshöhe
           eta: 0.5, kWh: 0.0044, whkg: 115, kgkW: 0.025,                                      // [N] 4S 300 mAh = 4,4 Wh (≈ 38 g); [A] kgkW so, dass der Antrieb ≈ 80 g wiegt

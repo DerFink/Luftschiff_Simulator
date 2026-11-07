@@ -1,3 +1,4 @@
+// 2026-11-07 18:00 · flug.js 1.5: Steuermodus 2/3 nach Chewie (Mischer Seite/Nick auf Leitwerk und Motorschwenk, Gier-Drehratenregler, Nickrate), Motorpaare je Motor (45°-Achse gegensinnig = Gieren), Seitenschub als Kraft, Ruderabriss bei großem Ausschlag, Teilschritte für kleine Schiffe (Höhensteuerer schlug sonst von Anschlag zu Anschlag), Dämpfung des Höhensteuerers auf Länge/Fahrt bezogen
 // 2026-10-24 23:20 · flug.js 1.4: Gieren und Schieben dynamisch (Munk-Moment der Hülle, Flossen, Seitenruder) statt fester Wenderadius
 // 2026-10-15 23:10 · flug.js 1.3: Umkehrschub (bis 40 %, halber Wirkungsgrad), Vektorsteuerung mit schwenkbaren Motorgruppen
 // 2026-10-15 21:50 · flug.js 1.2: Prall/halbstarr über der Prallhöhe: Innendruck nach Gasgleichung, Hüllenspannung, Platzen ⇒ Abbruch
@@ -90,7 +91,12 @@
       prall: d.bauweise === 'P' || d.bauweise === 'H', ballonet: (d.ballonet ?? 25) / 100, offen: d.bauweise === 'O',
       nB: (d.bauweise === 'P' || d.bauweise === 'H') ? (d.ballonets || 2) : 0,
       fest: d.huelle_gm2 * (d.festigkeit_Nm_je_gm2 || 60),
-      gruppen: (r.gruppen || []).some(g => g.schwenk.a !== 'N') ? r.gruppen : null,   // schwenkbare Motorgruppen (Vektorsteuerung)                     // Reißfestigkeit der Hülle [N/m] (wie Auslegung)      // Zahl der Ballonets (ab 2: Trimm durch Umpumpen)
+      gruppen: (r.gruppen || []).some(g => g.schwenk.a !== 'N') ? r.gruppen : null,
+      mitRuder: (r.gruppen || []).some(g => g.schwenk.a !== 'N' && g.schwenk.seite),   // Motorschwenk am Seiten-/Höhenruder (Mode 2/3)
+      // Steuerprofil für Mode 2/3 (nach Chewie, dRehmFlight-Mischer): Anteile des Seitenknüppels an Leitwerk (kT) und
+      // Motorschwenk (kM), Gier-Drehratenregler (rmax, gT, gM in je °/s), größter Nick-Sollwinkel (nickMax in Grad)
+      steuer: Object.assign({ kT2: 0.6, kM2: 1.28, kT3: 0.85, kM3: 1.125, rmax: 180, gT: 0.0014, gM: 0.0011, fade: 0.15, totband: 0.05,
+        nickMax: 30, nickRate: 45, nickRueck: 20, nickVor: 15, kMp: 1 }, d.steuer || {}),   // schwenkbare Motorgruppen (Vektorsteuerung)                     // Reißfestigkeit der Hülle [N/m] (wie Auslegung)      // Zahl der Ballonets (ab 2: Trimm durch Umpumpen)
     };
   }
   function cdAt(K, v) {                         // lineare Auswertung der Widerstandstabelle
@@ -139,7 +145,14 @@
      am Boden (z ≤ z0) 0. Darüber gilt der Wind aus dem Wetter unverändert.                                 */
   const Z0 = 0.1;
   function windFaktor(agl) { return agl <= Z0 ? 0 : agl >= 10 ? 1 : Math.log(agl / Z0) / Math.log(10 / Z0); }
+  /* Teilschritte für kleine Schiffe (07.11.2026): Nicken und Gieren eines Modells von wenigen Metern sind so schnell, dass
+     0,1 s je Schritt zu grob ist – der Höhensteuerer schlug dann jeden Schritt von Anschlag zu Anschlag (Chewie, RC-Blimp).
+     Größte Teilschrittweite 0,0025 s je m Länge (40 m und mehr: 0,1 s wie bisher), höchstens 20 Teilschritte.       */
   function schritt(F, dt, wind) {
+    const h = Math.min(0.1, 0.0025 * F.K.L), n = Math.min(20, Math.max(1, Math.ceil(dt / h - 1e-9)));
+    for (let i = 0; i < n; i++) schritt1(F, dt / n, wind);
+  }
+  function schritt1(F, dt, wind) {
     const K = F.K, s = F.s; wind = wind || { e: 0, n: 0 };
     const fw = windFaktor(s.h - s.hGrund); if (fw < 1) wind = Object.assign({}, wind, { e: wind.e * fw, n: wind.n * fw });
     assistenten(F, dt, wind);
@@ -208,6 +221,25 @@
     const va = s.U * c + s.w * sn, vn = -s.U * sn + s.w * c;
     const vnt = vn - s.q * K.lt;                               // Normalgeschwindigkeit am Leitwerk (dreht mit)
 
+    /* --- Steuermodus (Wunsch Nutzer 07.11.2026, nach dem dRehmFlight-Code von Chewie) ---
+       Modus 0 (Direkt): Seitenknüppel = Seitenruder, Motorschwenk nur über den Vektorknüppel (wie bisher).
+       Modus 2: Seitenknüppel steuert Leitwerk UND Motorschwenk (Vorsteuerung, Anteile kT2/kM2, Motor schon bei
+                ~80 % Knüppel am Anschlag); Höhenknüppel = Nick-Sollwinkel (±nickMax), Höhenruder und Motorschwenk
+                (gleichsinnig) halten ihn.
+       Modus 3: Drehraten. Seitenknüppel = Soll-Gierrate (Knüppel voll = rmax °/s), Vorsteuerung kT3/kM3 plus
+                Drehratenregler (gT/gM je °/s Abweichung), der hinter dem Totband über „fade“ Knüppelweg einblendet;
+                Höhenknüppel = Nickrate (siehe Assistenten).                                                       */
+    const st = K.steuer, md = s.modus || 0;
+    let uT = s.sr, uM = 0, hM = 0;
+    if (md === 2) { uT = clamp(st.kT2 * s.sr, -1, 1); uM = K.mitRuder ? clamp(st.kM2 * s.sr, -1, 1) : 0; }
+    if (md === 3) {
+      const a = Math.abs(s.sr), f = clamp((a - st.totband) / st.fade, 0, 1), err = s.sr * st.rmax - s.r * 180 / Math.PI;
+      uT = clamp(st.kT3 * s.sr + f * st.gT * err, -1, 1); uM = K.mitRuder ? clamp(st.kM3 * s.sr + f * st.gM * err, -1, 1) : 0;
+      s.r3soll = s.sr * st.rmax;
+    }
+    if (md >= 2 && K.mitRuder) hM = clamp(-st.kMp * s.hr, -1, 1);      // Ruder + = Bug tief ⇒ Schub vorn nach unten
+    s.uT = uT; s.uM = uM;
+
     // --- Schub: Leistung · η / Fahrt, höchstens Standschub ---
     const leer = K.verbrenner ? s.energie <= 0 : s.E <= 0;
     // Umkehrschub (Knopf „Umkehr“, Wunsch Nutzer 15.10.2026): höchstens 40 % der Leistung, Wirkungsgrad rückwärts halb so groß
@@ -218,18 +250,38 @@
        Gruppen mit Querachse (Q) und 45°-Achse (S) nach oben/unten, vh (links/rechts) Gruppen mit Hochachse (H) seitlich.
        Winkel δ = Knüppel × Schwenkbereich (max bzw. |min|). Je Gruppe: Längsschub T·cos δ, Hochschub T·sin δ (S: · 1/√2),
        Seitenschub T·sin δ (H). Hochschub vor/hinter der Auftriebsmitte nickt, Seitenschub dreht (Gieren).            */
-    let Tx = T, Tz = 0, Mvz = 0, Mgier = 0;
-    if (K.gruppen && (s.vq || s.vh)) {
+    /* Je Motor eines Paars getrennt (07.11.2026): Nickanteil gleichsinnig, Gieranteil gegensinnig.
+       Vorzeichen: δ > 0 kippt den Schub nach oben und – bei der 45°-Achse – nach außen (links am linken, rechts am
+       rechten Motor). Gieren nach rechts: rechter Motor δ > 0 (oben-rechts), linker δ < 0 (unten-rechts) ⇒ beide
+       Seitenanteile nach rechts, Hochanteile heben sich auf (Rollen nicht gerechnet).
+       Querachse (Q): nur Nick (Hochschub). Hochachse (H): Seitenschub. Seitenkraft vor der Auftriebsmitte dreht den Bug. */
+    let Tx = T, Tz = 0, Ty = 0, Mvz = 0, Mgier = 0;
+    if (K.gruppen && (s.vq || s.vh || uM || hM)) {
       Tx = 0;
+      const deg = (v, q) => (v >= 0 ? v * q.max : -v * q.min) * Math.PI / 180;
       for (const g of K.gruppen) {
-        const Tg = T * g.anteil, q = g.schwenk, v = q.a === 'H' ? (s.vh || 0) : (s.vq || 0);
-        const del = (q.a === 'N' ? 0 : v >= 0 ? v * q.max : -v * q.min) * Math.PI / 180;
-        Tx += Tg * Math.cos(del);
-        if (q.a === 'Q' || q.a === 'S') { const tz = Tg * Math.sin(del) * (q.a === 'S' ? Math.SQRT1_2 : 1); Tz += tz; Mvz += tz * (K.xB - g.x * K.L); }
-        if (q.a === 'H') { const ty = Tg * Math.sin(Math.abs(del)) * Math.sign(v); Mgier += ty * Math.abs(g.x * K.L - K.xB); }   // Knüppel rechts ⇒ Bug nach rechts
+        const q = g.schwenk, arm = K.xB - g.x * K.L, mischt = q.seite && md >= 2;
+        if (q.a === 'N') { Tx += T * g.anteil; continue; }
+        const nick = clamp((s.vq || 0) + (mischt ? hM : 0), -1, 1);              // gleichsinnig (hoch/runter)
+        // Gierkommando: + = Bug nach rechts. Liegt die Gruppe hinter der Auftriebsmitte (arm < 0), muss der Schub
+        // nach links zeigen, damit der Bug nach rechts dreht ⇒ Vorzeichen umkehren.
+        const gier = clamp((q.a === 'H' ? (s.vh || 0) : 0) + (mischt ? uM : 0), -1, 1) * (arm >= 0 ? 1 : -1);
+        let motoren;                                                              // [Seite (−1 links, +1 rechts, 0 Mitte), Kommando]
+        if (q.a === 'H') motoren = g.paar ? [[-1, gier], [1, gier]] : [[0, gier]];
+        else if (q.a === 'S' && g.paar) motoren = [[-1, nick - gier], [1, nick + gier]];
+        else motoren = g.paar ? [[-1, nick], [1, nick]] : [[0, nick]];
+        for (const [seite, v] of motoren) {
+          const Tm = T * g.anteil / motoren.length, del = deg(clamp(v, -1, 1), q);
+          Tx += Tm * Math.cos(del);
+          let tz = 0, ty = 0;
+          if (q.a === 'Q') tz = Tm * Math.sin(del);
+          if (q.a === 'S') { tz = Tm * Math.sin(del) * Math.SQRT1_2; ty = seite * Tm * Math.sin(del) * Math.SQRT1_2; }   // Mitte: Seitenanteil nicht gerechnet (wie bisher)
+          if (q.a === 'H') ty = Tm * Math.sin(del);
+          Tz += tz; Mvz += tz * arm; Ty += ty; Mgier += ty * arm;
+        }
       }
     }
-    s.vTz = Tz;                                                                   // für Anzeige/Prüfung
+    s.vTz = Tz; s.vTy = Ty;                                                       // für Anzeige/Prüfung
 
     // --- Luftkräfte ---
     const cd = cdAt(K, Math.abs(va)) * (schlaff ? 1.3 : 1);
@@ -237,8 +289,8 @@
     // Flossen: Anstellwinkel am Leitwerk −vnt/va; Höhenruder: + = Kraft nach oben am Heck ⇒ Bug tief,
     // Ruderwirkung 45 % der Flossenwirkung je Einheit Ausschlag (Ruder etwa ein Drittel der Flossentiefe)
     // Ausschlag: hr = ±1 entspricht dem größten Ausschlag (Klappe 25°, Pendel 15°); Ruderwirkung τ aus der Rudergröße
-    const dRud = s.hr * K.ru.dmax;
-    const Zf = -0.5 * rho * K.aeff * K.Ah * va * vnt + 0.5 * rho * K.aeff * K.Ah * K.ru.tau * dRud * va * Math.abs(va);
+    const dRud = s.hr * K.ru.dmax, dRudW = K.ru.wirk(dRud);              // gestellter und wirksamer Ausschlag
+    const Zf = -0.5 * rho * K.aeff * K.Ah * va * vnt + 0.5 * rho * K.aeff * K.Ah * K.ru.tau * dRudW * va * Math.abs(va);
     // Widerstand durch Ruderausschlag (Hoerner, einfache Klappe) und induzierter Widerstand der Flossenkraft
     const qa = 0.5 * rho * va * va;
     const Drud = K.Ah > 0 ? qa * K.Ah * K.ru.kd * Math.sin(dRud) ** 2 + (qa > 1 ? Zf * Zf / (qa * Math.PI * 0.8 * K.bh * K.bh) : 0) : 0;
@@ -296,9 +348,9 @@
         if (e.x < K.x0) f += rho * (K.k2 - K.k1) * ua * (-vl) * e.dA;                // Potentialanteil bis zur Ablösung
         Yh += f * e.dx; Nh += f * e.dx * (K.xB - e.x);
       }
-      const dSr = s.sr * K.ru.dmax, vt = vb - s.r * K.lt;
+      const dSr = K.ru.wirk(uT * K.ru.dmax), vt = vb - s.r * K.lt;           // Seitenruder (Mischer, Abriss)
       const Yf = -0.5 * rho * K.aeff * K.Av * ua * vt - 0.5 * rho * K.aeff * K.Av * K.ru.tau * dSr * ua * Math.abs(ua);
-      const Y = Yh + Yf, N = Nh - Yf * K.lt + Mgier;
+      const Y = Yh + Yf + Ty, N = Nh - Yf * K.lt + Mgier;                     // Ty: Seitenschub der geschwenkten Motoren
       const My = Mi + K.k2 * rho * K.Vol;
       s.v = vb + (Y / My - ua * s.r) * dt;
       s.r += N / I * dt;
@@ -401,7 +453,20 @@
     // Höhensteuerer (wie der Mann am Höhenruder der Zeppeline): hält den vorgegebenen Nickwinkel ap.nick.
     // Luftschiffe mit Flossen unter dem Jones-Kriterium sind im Nicken leicht instabil; ohne ihn muss man
     // selbst dauernd nachsteuern. Bei kleiner Fahrt wirkt das Ruder kaum.
-    if (ap.nick != null) s.hr = clamp(-12 * (ap.nick - s.th) + 40 * s.q, -1, 1);   // Ruder + = Bug tief
+    /* Steuermodus 3 (Chewie, Nicken nach Drehrate): Der Höhenknüppel s.ny lässt den Soll-Nickwinkel mit nickRate °/s
+       wandern (Knüppel voll), höchstens ±nickMax und höchstens nickVor Grad vor dem echten Nickwinkel. Lässt man los,
+       läuft der Sollwert mit nickRueck °/s auf 0 zurück (Schiff richtet sich wieder auf).                           */
+    if ((s.modus || 0) === 3 && ap.hoehe == null && ap.nick != null) {
+      const st = K.steuer, R = Math.PI / 180, ny = s.ny || 0;
+      if (Math.abs(ny) > st.totband) ap.nick += ny * st.nickRate * R * dt;
+      else ap.nick -= Math.sign(ap.nick) * Math.min(Math.abs(ap.nick), st.nickRueck * R * dt);
+      ap.nick = clamp(clamp(ap.nick, -st.nickMax * R, st.nickMax * R), s.th - st.nickVor * R, s.th + st.nickVor * R);
+    }
+    // Dämpfung auf die Eigenzeit des Schiffs bezogen (07.11.2026): Bei kleinen, schnellen Schiffen (Chewie, RC-Blimp,
+    // Länge/Fahrt < 2 s) schlug der feste Anteil 40·q das Ruder jeden Schritt von Anschlag zu Anschlag (Grenzzyklus,
+    // hoher Ruderwiderstand). Große Schiffe (Länge/Fahrt ≥ 2 s) bleiben unverändert.
+    const fq = Math.min(1, K.L / Math.max(Math.abs(s.U), 2) / 2);
+    if (ap.nick != null) s.hr = clamp(-12 * fq * (ap.nick - s.th) + 40 * fq * s.q, -1, 1);   // Ruder + = Bug tief
   }
 
   /* -----------------------------------------------------------------------------------------------

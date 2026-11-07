@@ -1,3 +1,4 @@
+// 2026-11-07 18:30 · fahrt.js 2.0: Steuermodus Direkt / Mode 2 / Mode 3 nach Chewie (Knopf und Taste N), Höhenknüppel je Modus Nickwinkel bzw. Nickrate
 // 2026-10-24 23:40 · fahrt.js 1.9: Höhensteuerer wieder schaltbar (Knopf, Taste F), Bahn mit Schiebewinkel
 // 2026-10-22 22:50 · fahrt.js 1.8: Payload – 5 % des verbrauchten Kraftstoffs bleiben als Reserve an Bord
 // 2026-10-22 21:10 · fahrt.js 1.7: Payload enthält den nicht verbrauchten Kraftstoff (nur der Verbrauch der Fahrt wird abgezogen)
@@ -175,7 +176,7 @@
     // „Fahrt halten“ bleibt ausgeblendet (Wunsch Nutzer 14.10.2026); der Höhensteuerer ist seit 24.10.2026 wieder schaltbar
     const tasten = [['← →', 'Seitenruder (loslassen: Ruder mittig)'], ['↑ ↓', 'Knüppel vor = sinken, zurück = steigen'], ['W S', 'Schub + / − (unten etwas feiner)  ·  X Schub aus'],
       ['B', 'Ballast: tippen = ' + fm(Z.stoss) + ', halten = laufend'], ['G', 'Gas ablassen (solange gedrückt)'], ['Q E', 'Trimm Heck / Trimm Bug'], ['R', 'Umkehrschub ein/aus'], ['⇧ + Pfeile', 'Vektorknüppel (wenn „Vektor“ an)'], ['M', 'Ton ein/aus'],
-      ['F', 'Höhensteuerer ein/aus (aus: Höhenruder direkt)'], ['H K P', 'Höhe · Kurs · Position halten'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 halten: Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus'],
+      ['F', 'Höhensteuerer ein/aus (aus: Höhenruder direkt)'], ['N', 'Steuermodus: Direkt → Mode 2 → Mode 3 (nach Chewie)'], ['H K P', 'Höhe · Kurs · Position halten'], ['1 … 7', 'Zeitraffer ×1 … ×1000  ·  8 halten: Boost (24 h ≈ 3 s)  ·  Leertaste Pause'], ['V', 'Seitenansicht ein/aus'],
       ['', 'Beim Steuern, Gas oder Ballast läuft ein Zeitraffer über ×10 kurz mit ×10']];
     app.innerHTML = `<div class="fz">
       <div class="top"><button class="lnk" id="fBack">■ Ende</button><b class="t">${escapeHtml(S.d.name)}</b><span style="display:flex;gap:8px;align-items:center"><button class="lnk" id="fTon" title="Ton ein/aus">🔊</button><span id="fUhr" style="white-space:nowrap"></span></span></div>
@@ -206,7 +207,7 @@
         <div class="joy joy2" id="fJoy2" style="display:none"><div class="stick"></div>${vektorBeschriftung()}</div>
       </div>
       <div class="apsrow" id="fApRow">
-        <button data-a="hs" title="Höhensteuerer: hält die Nicklage (wie der Mann am Höhenruder). Aus: Höhenruder direkt, Nicken kann sich aufschaukeln">Höhensteuerer</button><button data-a="hoehe">Höhe halten</button><button data-a="kurs">Kurs halten</button><button data-a="pos">Position halten</button>
+        <button data-a="hs" title="Höhensteuerer: hält die Nicklage (wie der Mann am Höhenruder). Aus: Höhenruder direkt, Nicken kann sich aufschaukeln">Höhensteuerer</button><button data-a="hoehe">Höhe halten</button><button data-a="kurs">Kurs halten</button><button data-a="pos">Position halten</button><button id="fMod" title="Steuermodus nach dem Rennluftschiff Chewie. Direkt: Knüppel = Ruder. Mode 2: Seitenknüppel stellt Leitwerk und Motorschwenk gemeinsam, Höhenknüppel = Nickwinkel bis ±30°. Mode 3: Seitenknüppel = Drehrate (Regler), Höhenknüppel = Nickrate">Direkt</button>
       </div>
       <div class="rp" id="fRp"><div class="sec">Tastatur</div><div class="keys">${tasten.map(([k, t]) => `<span>${k ? k.split(' ').map(x => x === '…' || x === '·' ? x : '<kbd>' + x + '</kbd>').join(' ') : ''}</span><span>${t}</span>`).join('')}</div></div>
     </div>`;
@@ -294,6 +295,7 @@
       if (k === 'f') assist('hs');                                         // Höhensteuerer ein/aus (wieder sichtbar seit 24.10.2026)
       if (k === 'h') assist('hoehe'); if (k === 'k') assist('kurs'); if (k === 'p') assist('pos');
       if (k === 'v') Z.seiteAn = !seiteSichtbar();
+      if (k === 'n') modus();
       if (k === 'r') umkehr(); if (k === 'm') tonSchalten();
       if (k === ' ') { Z.pause = !Z.pause; zrAnzeigen(); }
       if (k >= '1' && k <= '7') { Z.zr = ZR[+k - 1]; Z.pause = false; zrAnzeigen(); }
@@ -314,6 +316,8 @@
     $('#fTd').onclick = () => { s.trimm = Math.max(-1, s.trimm - 0.25); };
     // Umkehrschub (eigener Knopf, Wunsch Nutzer 15.10.2026): Schubhebel wirkt rückwärts, höchstens 40 % Leistung
     $('#fUmk').onclick = umkehr;
+    $('#fMod').onclick = modus;
+    { const b = $('#fMod'), m = Z.F.s.modus || 0; b.textContent = m ? 'Mode ' + m : 'Direkt'; b.classList.toggle('on', !!m); }   // Stand nach Fortsetzen
     // Vektorknüppel ein/aus; beim Ausschalten schwenken die Motoren zurück auf 0°
     $('#fVek').onclick = vektor;
     $('#fTon').onclick = () => tonSchalten();
@@ -377,7 +381,14 @@
     for (const [id, an] of [['fBal', k.b], ['fGas', k.g], ['fTu', k.q], ['fTd', k.e]]) { const b = document.getElementById(id); if (b && !b.dataset.halten) b.classList.toggle('akt', !!an); }
     // Höhe halten löst sich erst bei deutlichem Eingriff: mindestens 30 % Knüppel nach vorn oder hinten (Wunsch Nutzer 15.10.)
     if (Math.abs(ny) >= 0.3 && ap.hoehe != null) { ap.hoehe = null; apAnzeigen(); }
-    if (ap.hoehe == null) { if (Z.hs) ap.nick = Math.max(-1, Math.min(1, ny)) * 8 * RAD; else { ap.nick = null; s.hr = -Math.max(-1, Math.min(1, ny)); } }
+    // Steuermodus (Chewie, 07.11.2026): Mode 2 = Knüppel gibt den Nickwinkel bis ±nickMax vor, Mode 3 = Knüppel gibt die
+    // Nickrate vor (Sollwinkel wandert, siehe flug.js Assistenten). Beide brauchen den Höhensteuerer und schalten ihn ein.
+    s.ny = Math.max(-1, Math.min(1, ny));
+    if (ap.hoehe == null) {
+      if (s.modus === 2) ap.nick = s.ny * Z.F.K.steuer.nickMax * RAD;
+      else if (s.modus === 3) { if (ap.nick == null) ap.nick = s.th; }
+      else if (Z.hs) ap.nick = s.ny * 8 * RAD; else { ap.nick = null; s.hr = -s.ny; }
+    }
     s.ventil = (k.g || Z.gasKnopf) ? 1 : 0;
     // Taste B: tippen = ein Stoß (beim Drücken), länger als 0,35 s halten = laufend 2 Stöße je Sekunde
     if (k.b && performance.now() - (Z.bT || 0) > 350) { s.ballastAb = 2 * Z.stoss; Z.keysB = true; }
@@ -835,6 +846,19 @@
 
   // ---------- Umkehrschub und Vektorknüppel ----------
   function umkehr() { const s = Z.F.s; s.umkehr = !s.umkehr; $('#fUmk').classList.toggle('akt', s.umkehr); toast(s.umkehr ? 'Umkehrschub: Schubhebel wirkt rückwärts (höchstens 40 %)' : 'Umkehrschub aus'); }
+  /* Steuermodus umschalten (Wunsch Nutzer 07.11.2026): Direkt → Mode 2 → Mode 3 → Direkt.
+     Mode 2/3 brauchen den Höhensteuerer (sie geben einen Nickwinkel bzw. eine Nickrate vor) und schalten ihn ein.
+     Wie die Modi wirken, steht in flug.js (schritt, Abschnitt Steuermodus, und Assistenten).                        */
+  function modus() {
+    const s = Z.F.s, ap = s.ap;
+    s.modus = s.modus === 2 ? 3 : s.modus === 3 ? 0 : 2;
+    if (s.modus) { Z.hs = true; if (ap.nick == null) ap.nick = s.th; } else if (Z.hs) ap.nick = 0;
+    const b = $('#fMod'); b.textContent = s.modus ? 'Mode ' + s.modus : 'Direkt'; b.classList.toggle('on', !!s.modus);
+    toast(s.modus === 2 ? 'Mode 2: Seitenknüppel stellt Leitwerk und Motorschwenk' + (Z.F.K.mitRuder ? '' : ' (kein Motor ist mit dem Ruder gemischt – nur Leitwerk)') + ', Höhenknüppel = Nickwinkel bis ±' + Z.F.K.steuer.nickMax + '°'
+      : s.modus === 3 ? 'Mode 3: Seitenknüppel = Drehrate (voll = ' + Z.F.K.steuer.rmax + ' °/s), Regler hält sie; Höhenknüppel = Nickrate'
+      : 'Direkt: Knüppel = Ruder', 3500);
+    apAnzeigen();
+  }
   function vektor() {
     if (!Z.F.K.gruppen) return;
     Z.vektor = !Z.vektor; $('#fVek').classList.toggle('akt', Z.vektor);

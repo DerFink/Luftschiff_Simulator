@@ -1,3 +1,4 @@
+// 2026-11-07 19:00 · pruef04.js: Chewie – Wendekreis bei 60 % Schub im alten Modell, Mode 2 und Mode 3
 // 2026-10-24 23:30 · pruef04.js: Gierstabilität und Wendekreis mit der neuen Gierrechnung
 // 2026-10-15 21:55 · pruef04.js: Prall/halbstarr: Platzen über der Prallhöhe statt Gipfel
 // 2026-10-14 13:40 · pruef04.js: Höhe halten mit Gas und Ballast (3 % zu schwer, ohne Schub)
@@ -70,3 +71,16 @@ require('fs').writeFileSync(__dirname + '/pruef04.json', JSON.stringify(out, nul
   F.lauf(Fl, 1800, () => ({ e: 10, n: 0 }));
   const kog = Math.atan2(Fl.s.U * Math.sin(Fl.s.psi) + 10, Fl.s.U * Math.cos(Fl.s.psi)) * 180 / Math.PI;
   console.log(['LZ 120', 'Kurs halten 000° bei 10 m/s Seitenwind: Kurs über Grund (°)', 0, kog.toFixed(1), '°', 'Bug ' + (Fl.s.psi * 180 / Math.PI - 360).toFixed(1) + '°, Versatz nach Ost ' + Math.round(Fl.s.x) + ' m auf ' + Math.round(Fl.s.y / 1000) + ' km'].join(' | ')); }
+
+// ---- Chewie (07.11.2026): Kurve bei 60 % Schub, Seitenknüppel voll rechts – altes Modell (Leitwerk ±25°), Mode 2, Mode 3 ----
+// Erwartung: ±50° und Motorschwenk verkleinern den Wendekreis; Mode 3 (Drehratenregler) am engsten.
+{ const base = require('../../app/models.js').MODELS.find(m => m.id === 'chewie').d;
+  for (const [name, md, mod] of [['altes Modell (±25°, ohne Schwenk)', 0, d => { d.ltw.dmax = 25; delete d.antrieb.schwenk; }], ['Mode 2', 2, () => {}], ['Mode 3', 3, () => {}]]) {
+    const d = JSON.parse(JSON.stringify(base)); mod(d);
+    const r = C.compute(d), Fl = F.start(r, { h0: 50 }), s = Fl.s;
+    s.amBoden = false; s.warOben = true; s.h = 50; s.ap.hoehe = null; s.ap.nick = 0; s.schub = 0.6; s.modus = md; F.lauf(Fl, 40);
+    s.sr = 1; F.lauf(Fl, 20); const xs = [], ys = [];
+    for (let i = 0; i < 300; i++) { F.lauf(Fl, 0.1); xs.push(s.x); ys.push(s.y); }
+    const D = (Math.max(...xs) - Math.min(...xs) + Math.max(...ys) - Math.min(...ys)) / 2;
+    console.log(['Chewie', 'Wendekreis 60 % Schub, ' + name + ' (m)', '', D.toFixed(1), 'm', (D / r.geo.L).toFixed(1) + ' L, ' + (s.U * 3.6).toFixed(0) + ' km/h, Drehrate ' + (s.r * 180 / Math.PI).toFixed(0) + ' °/s'].join(' | '));
+  } }

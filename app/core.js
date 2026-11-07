@@ -1,3 +1,4 @@
+// 2026-11-07 18:40 · core.js 0.19: Höhe der Schublinie bei Gondeln am Rumpf einstellbar (antrieb.zR, Code ZT); größter Ruderausschlag einstellbar (ltw.dmax, Code T 12. Feld) mit gedämpfter Wirkung über dem Abrisswinkel; Motorschwenk mit Ruder mischbar (Code SW 4. Feld R)
 // 2026-10-24 22:50 · core.js 0.18: Hinweis zu Starrluftschiffen unter 28.000 m³ neu formuliert (Wortlaut Nutzer)
 // 2026-10-15 23:00 · core.js 0.17: Motorgruppen mit Schwenk (Vektorsteuerung), Code SW
 // 2026-10-15 22:40 · core.js 0.16: Trimmzustand (buglastig/hecklastig/ausgetrimmt ±3°) statt Gondel-Vorschlägen
@@ -433,7 +434,8 @@
      Rückgabe je Gruppe: Name, Anteil am Gesamtschub, Längslage x (Anteil ab Bug), Schwenk {a, min, max}.             */
   function motorGruppen(d, nac, gx) {
     const a = d.antrieb, n = Math.max(1, a.n | 0), sw = a.schwenk || [], G = [];
-    const mit = (i) => { const q = sw[i] || {}; return { a: q.a || 'N', min: q.min ?? (q.a === 'H' ? -60 : -20), max: q.max ?? (q.a === 'H' ? 60 : 90) }; };
+    // seite: Schwenk wird in Steuermodus 2/3 mit dem Seiten- und Höhenruder gemischt (Chewie, 07.11.2026; im Code 4. Feld „R“)
+    const mit = (i) => { const q = sw[i] || {}; return { a: q.a || 'N', min: q.min ?? (q.a === 'H' ? -60 : -20), max: q.max ?? (q.a === 'H' ? 60 : 90), seite: q.r === 'R' }; };
     if (a.lage === 'R') {
       nac.xp.forEach((x, i) => G.push({ name: 'Motorpaar ' + (i + 1), anteil: 2 / n, x, paar: true }));
       if (nac.mitte) G.push({ name: nac.heck ? 'Heckmotor' : nac.mitte === 2 ? 'Mittelgondel (2 Motoren)' : 'Mittelgondel', anteil: nac.mitte / n, x: nac.xm, paar: false });
@@ -472,21 +474,29 @@
        Pendel  τ = 1
      Größter Ausschlag: Klappe 25°, Pendel 15° (darüber reißt die Strömung ab).
      Ruderwiderstand: Klappe ΔC_D = 0,9 · E · sin²δ (Hoerner Kap. 13), Pendel ΔC_D = 0,1 · sin²δ (nur Profil).     */
+  /* Größter Ruderausschlag einstellbar (Wunsch Nutzer 07.11.2026, Chewie: Servos ±50°): ltw.dmax in Grad.
+     Über dem Abrisswinkel dS (Klappe 25°, Pendel 15°) wächst die Wirkung nur noch gedämpft:
+       wirksam = δ                                    für |δ| ≤ dS
+       wirksam = dS + ½·dS·tanh((|δ| − dS)/(½·dS))    darüber (höchstens 1,5·dS, z. B. 50° Klappe ⇒ 37° wirksam)
+     Der Widerstand (kd·sin²δ) wird mit dem vollen gestellten Ausschlag gerechnet.                                    */
   function ruder(ltw) {
-    if (ltw && ltw.pendel) return { E: 1, tau: 1, dmax: 15 * Math.PI / 180, kd: 0.1, pendel: true };
+    const pend = !!(ltw && ltw.pendel), dS = (pend ? 15 : 25) * Math.PI / 180;
+    const dmax = (ltw && ltw.dmax > 0 ? Math.min(ltw.dmax, 80) : pend ? 15 : 25) * Math.PI / 180;
+    const wirk = d => { const a = Math.abs(d); return a <= dS ? d : Math.sign(d) * (dS + 0.5 * dS * Math.tanh((a - dS) / (0.5 * dS))); };
+    if (pend) return { E: 1, tau: 1, dmax, dS, wirk, kd: 0.1, pendel: true };
     const E = Math.min(0.6, Math.max(0.05, (ltw && ltw.ruder) || 0.3));
-    return { E, tau: Math.min(1, 1.03 * Math.pow(E, 0.52)), dmax: 25 * Math.PI / 180, kd: 0.9 * E, pendel: false };
+    return { E, tau: Math.min(1, 1.03 * Math.pow(E, 0.52)), dmax, dS, wirk, kd: 0.9 * E, pendel: false };
   }
   function schubHebel(d, geo) {
     const a = d.antrieb;
     if (a.lage === 'H') return 0;
     if (a.lage === 'G') { const g = gondola(d, geo, d._hang || 0, 20); return geo.R + Math.max(g.ga || 0, 0) + (g.h || 0) / 2; }
-    return 0.6 * geo.R;
+    return (a.zR != null ? a.zR : 0.6) * geo.R;   // Gondeln am Rumpf: 0,6 R unter der Achse; einstellbar (Chewie: Motoren seitlich auf Achshöhe ⇒ 0)
   }
   function trimDrag(d, geo, tl, v, rho, T) {
     if (!tl.elevator || T <= 0 || v <= 0.1) return { D: 0, Ze: 0, delta: 0 };
     const q = 0.5 * rho * v * v, Ah = tl.Aplane, Ze = T * schubHebel(d, geo) / Math.max(tl.lt, 0.1);
-    const ru = ruder(d.ltw), CL = Ze / (q * Ah), delta = Math.min(Math.abs(CL) / (tl.aeff * ru.tau), ru.dmax);
+    const ru = ruder(d.ltw), CL = Ze / (q * Ah), delta = Math.min(Math.abs(CL) / (tl.aeff * ru.tau), Math.min(ru.dmax, ru.dS));
     const bh = 2 * tl.b + 0.3 * geo.D;
     const D = q * Ah * ru.kd * Math.pow(Math.sin(delta), 2) + Ze * Ze / (q * Math.PI * 0.8 * bh * bh);
     return { D, Ze, delta };
@@ -911,14 +921,15 @@
     if (d.bauweise === 'S' && (d.traeger || d.zellen)) p.push('GZ:' + (d.traeger || '') + ',' + (d.zellen || ''));
     if (d.bauweise === 'H' && (d.kiel || d.kwerk || d.kiellaenge)) p.push('KI:' + (d.kiel || '') + ',' + (d.kwerk || '') + ',' + (d.kiellaenge ? num(d.kiellaenge) : ''));
     if ((d.bauweise === 'P' || d.bauweise === 'H') && d.ballonets) p.push('NB:' + d.ballonets);
-    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : '', d.ltw.gm2 ? num(d.ltw.gm2) : '', d.ltw.xTE != null ? num(d.ltw.xTE) : '', d.ltw.ruder != null ? num(d.ltw.ruder) : '', d.ltw.pendel ? 'P' : ''].join(',').replace(/,+$/, ''));
+    p.push('T:' + [d.ltw.n, d.ltw.anord, num(d.ltw.faktor || 1), d.ltw.A_ebene ? num(d.ltw.A_ebene) : '', d.ltw.ar ? num(d.ltw.ar) : '', d.ltw.lam != null ? num(d.ltw.lam) : '', d.ltw.sweep != null ? num(d.ltw.sweep) : '', d.ltw.gm2 ? num(d.ltw.gm2) : '', d.ltw.xTE != null ? num(d.ltw.xTE) : '', d.ltw.ruder != null ? num(d.ltw.ruder) : '', d.ltw.pendel ? 'P' : '', d.ltw.dmax ? num(d.ltw.dmax) : ''].join(',').replace(/,+$/, ''));
     p.push(('K:' + [d.gondel, d.gform || '', d.gabstand != null ? num(d.gabstand) : '', d.gseile || '', d.gx != null ? num(d.gx) : ''].join(',')).replace(/,+$/, ''), 'C:' + d.crew, 'P:' + d.pax);
     const en = (a.art === 'E' || a.art === 'S') ? num(a.kWh) + ',' + num(a.whkg) : num(a.kraftstoff) + ',' + num(a.sfc);
     // Antrieb: Art, Zahl, kW je Motor, Lage, η, Energie (kWh, Wh/kg bzw. kg Kraftstoff, sfc), Motorgondeln, kg/kW
     p.push(('A:' + [a.art, a.n, num(a.kW), a.lage, num(a.eta)].join(',') + ',' + en + ',' + (nacelles(a).g !== a.n ? nacelles(a).g : '') + ',' + (a.kgkW ? num(a.kgkW) : '') + ',' + (a.mg === 'O' ? 'O' : '') + ',' + (a.ungerade === 'H' ? 'H' : '') + ',' + (a.xs ? a.xs.map(num).join(';') : '') + ',' + (a.xm != null ? num(a.xm) : '')).replace(/,+$/, ''));
     if (d.latten && d.latten.len) p.push('LA:' + d.latten.n + ',' + num(d.latten.len));
     // Schwenkbare Motoren je Gruppe: Achse, min, max in Grad (nur wenn mindestens eine Gruppe schwenkbar ist)
-    if (a.schwenk && a.schwenk.some(q => q && q.a && q.a !== 'N')) p.push('SW:' + a.schwenk.map(q => !q || !q.a || q.a === 'N' ? 'N' : [q.a, q.min != null ? num(q.min) : '', q.max != null ? num(q.max) : ''].join(',').replace(/,+$/, '')).join(';'));
+    if (a.zR != null) p.push('ZT:' + num(a.zR));                     // Schublinie unter der Achse (Anteil des Radius), nur Gondeln am Rumpf
+    if (a.schwenk && a.schwenk.some(q => q && q.a && q.a !== 'N')) p.push('SW:' + a.schwenk.map(q => !q || !q.a || q.a === 'N' ? 'N' : [q.a, q.min != null ? num(q.min) : '', q.max != null ? num(q.max) : '', q.r === 'R' ? 'R' : ''].join(',').replace(/,+$/, '')).join(';'));
     p.push('S:' + num(d.v_reise), 'BL:' + num(d.ballast));
     if (d.nutzlast) p.push('NL:' + num(d.nutzlast));
     if (d.avionik) p.push('AV:' + num(d.avionik));
@@ -957,7 +968,7 @@
         case 'GZ': if (n[0]) d.traeger = +n[0]; if (n[1]) d.zellen = +n[1]; break;          // Längsträger, Gaszellen (Anzahl)
         case 'KI': if (n[0]) d.kiel = n[0]; if (n[1]) d.kwerk = n[1]; if (n[2]) d.kiellaenge = +n[2]; break;   // Kielart, Werkstoff, Länge
         case 'NB': d.ballonets = +v; break;                                                 // Zahl der Ballonets
-        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; if (n[7]) d.ltw.gm2 = +n[7]; if (n[8]) d.ltw.xTE = +n[8]; if (n[9]) d.ltw.ruder = +n[9]; if (n[10] === 'P') d.ltw.pendel = true; break;
+        case 'T': d.ltw = { n: +n[0], anord: n[1] || '+', faktor: +(n[2] || 1) }; if (n[3]) d.ltw.A_ebene = +n[3]; if (n[4]) d.ltw.ar = +n[4]; if (n[5]) d.ltw.lam = +n[5]; if (n[6]) d.ltw.sweep = +n[6]; if (n[7]) d.ltw.gm2 = +n[7]; if (n[8]) d.ltw.xTE = +n[8]; if (n[9]) d.ltw.ruder = +n[9]; if (n[10] === 'P') d.ltw.pendel = true; if (n[11]) d.ltw.dmax = +n[11]; break;
         case 'K': d.gondel = n[0]; if (n[1]) d.gform = n[1]; if (n[2] !== undefined && n[2] !== '') d.gabstand = +n[2]; if (n[3]) d.gseile = +n[3]; if (n[4]) d.gx = +n[4]; break;
         case 'C': d.crew = +v; break;
         case 'P': d.pax = +v; break;
@@ -979,7 +990,8 @@
         case 'GA': d.gasanteil = +v; break;
         case 'XT': d.xtank = +v; break;
         case 'LA': d.latten = { n: +n[0], len: +n[1] }; break;
-        case 'SW': d.antrieb.schwenk = v.split(';').map(t => { const q = t.split(','); const o = { a: q[0] || 'N' }; if (q[1]) o.min = +q[1]; if (q[2]) o.max = +q[2]; return o; }); break;   // Schwenk je Motorgruppe
+        case 'ZT': d.antrieb.zR = +v; break;                               // Schublinie unter der Achse
+        case 'SW': d.antrieb.schwenk = v.split(';').map(t => { const q = t.split(','); const o = { a: q[0] || 'N' }; if (q[1]) o.min = +q[1]; if (q[2]) o.max = +q[2]; if (q[3] === 'R') o.r = 'R'; return o; }); break;   // Schwenk je Motorgruppe
         case 'MP': d.m_person = +v; break;
         case 'GD': if (n[0]) d.gl = +n[0]; if (n[1]) d.gb = +n[1]; if (n[2]) d.gh = +n[2]; break;
       }

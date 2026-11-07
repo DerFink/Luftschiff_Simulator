@@ -250,6 +250,16 @@
   "rolle": "Prüfung"
  },
  {
+  "schiff": "Chewie (Rennluftschiff)",
+  "groesse": "Speicher-Code: Abweichung freie Nutzlast (% vom Auftrieb)",
+  "soll": null,
+  "ist": 0,
+  "einheit": "%",
+  "abw": null,
+  "quelle": "soll unter 0,2 %",
+  "rolle": "Prüfung"
+ },
+ {
   "schiff": "Zeppelin NT 07",
   "groesse": "Speicher-Code: Heckmotor erhalten (1 = ja)",
   "soll": null,

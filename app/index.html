@@ -1,3 +1,4 @@
+<!-- 2026-11-07 19:10 · Build 2026-11-07.1: Steuermodus Direkt/Mode 2/Mode 3 nach Chewie, Motorschwenk mit Ruder mischbar, Ruderausschlag und Schublinie einstellbar, Modell Chewie, Teilschritte für kleine Schiffe -->
 <!-- 2026-10-24 23:50 · Build 2026-10-24.2: Gieren dynamisch (kleines Leitwerk ⇒ richtungsinstabil), Höhensteuerer wieder schaltbar -->
 <!-- 2026-10-24 22:50 · Build 2026-10-24.1: Hinweis Starrluftschiffe unter 28.000 m³ neu formuliert -->
 <!-- 2026-10-22 22:55 · Build 2026-10-22.2: Payload – 5 % des verbrauchten Kraftstoffs als Reserve -->
@@ -171,7 +172,7 @@ button{font:inherit;border:none;background:none;color:inherit;cursor:pointer}
             4. Eckdaten-Leiste   5. Ergebnis   6. Speichern/Laden   7. Start
    Die 3D-Vorschau kommt aus viewer.js (Modul) und wird über window.LSView angesprochen.
    ================================================================================================ */
-const BUILD = '2026-10-24.2';
+const BUILD = '2026-11-07.1';
 const C = LSCore, MODELS = LSModels.MODELS;
 
 /* ---------------- 1. Zustand und Hilfsfunktionen ---------------- */
@@ -332,6 +333,8 @@ const STEPS = [
       // Ruder: Klappe (Anteil der Flossenfläche) oder Pendelleitwerk (ganze Flosse dreht)
       { typ: 'seg', key: '_ruder', label: 'Ruder', opts: [['K', 'Ruderklappe'], ['P', 'Pendelleitwerk']] },
       { typ: 'num', key: 'ltw.ruder', label: 'Rudergröße (Anteil der Flossenfläche)', min: 0.1, max: 0.6, step: 0.01, k: 0, pct: true, when: d => !d.ltw.pendel, def: () => 0.3, vorschlag: () => 0.3 },
+      // Größter Ruderausschlag (Wunsch Nutzer 07.11.2026, Chewie ±50°): über dem Abrisswinkel (Klappe 25°, Pendel 15°) wächst die Wirkung nur gedämpft
+      { typ: 'num', key: 'ltw.dmax', label: 'Größter Ruderausschlag (Servoweg je Richtung)', unit: '°', min: 5, max: 80, step: 1, k: 0, def: d => (d && d.ltw && d.ltw.pendel) ? 15 : 25, vorschlag: d => (d && d.ltw && d.ltw.pendel) ? 15 : 25 },
       { typ: 'num', key: 'ltw.sweep', label: 'Pfeilung der Vorderkante', unit: '°', min: 0, max: 75, step: 1, k: 0, vorschlag: () => C.LTW_ANNAHMEN.sweep, def: () => C.LTW_ANNAHMEN.sweep },
     ], text: (d, r) => { const t = r.tail; return `<b>Vorschlag nach Jones</b> (Burgess S. 103): ${de(t.A_jones, 1)} m² je Ebene bei Hebelarm ${de(t.lt, 1)} m (Auftriebsschwerpunkt → Neutralpunkt der Flossen), k₂−k₁ = ${de(t.dk, 3)} aus L/D ${de(r.geo.L / r.geo.D, 2)} und Auftriebsanstieg ${de(t.a, 2)}/rad (Λ, Pfeilung). Statisch neutral wären ${de(t.A_static, 1)} m², Burgess-Faustwert ${de(t.A_burgess, 1)} m².<br>` +
       (d.ltw.A_ebene ? `Dieses Modell hat die bekannte Fläche ${de(t.Aplane, 1)} m² je Ebene (Quelle im Modell). Der Regler „Größe“ ersetzt sie.` : `Gewählt: ${de(t.Aplane, 1)} m² je Ebene, ${t.n} Flossen à ${de(t.Afin, 1)} m², Masse ${fm(r.leer.leitwerk)}.`) +
@@ -384,6 +387,8 @@ const STEPS = [
       { typ: 'num', key: 'antrieb.kWh', label: 'Akku', unit: 'kWh', min: 0.001, max: 5000, log: true, k: 3, when: d => d.antrieb.art !== 'V', vorschlag: (d, r) => r.Preise * 8 / 3.6e6 / 0.85 * 3.6 },
       { typ: 'num', key: 'antrieb.whkg', label: 'Energiedichte Akku', unit: 'Wh/kg', min: 80, max: 400, step: 5, k: 0, when: d => d.antrieb.art !== 'V', vorschlag: () => 180 },
       { typ: 'num', key: 'antrieb.kraftstoff', label: 'Kraftstoff', unit: 'kg', min: 0, max: 100000, log0: true, k: 0, when: d => d.antrieb.art === 'V', vorschlag: (d, r) => r.Preise * 24 / 3.6e6 * (d.antrieb.sfc || 0.3) },
+      // Schublinie unter der Rumpfachse bei Gondeln am Rumpf (07.11.2026): Schub unter der Achse hebt den Bug (bei kleinen, schnellen Schiffen stark)
+      { typ: 'num', key: 'antrieb.zR', label: 'Schublinie unter der Rumpfachse (Anteil des Radius)', min: 0, max: 1.5, step: 0.05, k: 2, when: d => d.antrieb.lage === 'R', def: () => 0.6, vorschlag: () => 0.6 },
       // Lage der Tanks bzw. Akkus (Trimm); ohne Wahl: Starr/Halbstarr neben dem Laufgang verteilt, sonst in der Gondel
       { typ: 'num', key: 'xtank', label: d => d.antrieb.art === 'V' ? 'Lage der Tanks (Mitte)' : 'Lage der Akkus (Mitte)', lfrac: true, min: 0.05, max: 0.95, step: 0.001, k: 3, def: () => S.r.trim.xT },
       // Vektorsteuerung (Vorgabe Nutzer 15.10.2026): je Motorgruppe schwenkbar um Querachse (Schub hoch/runter), Hochachse
@@ -393,6 +398,9 @@ const STEPS = [
           opts: [['N', 'nein'], ['Q', 'Querachse'], ['H', 'Hochachse'], ['S', '45° nach unten']] },
         { typ: 'num', key: 'antrieb.schwenk.' + i + '.max', label: d => ((S.r.gruppen[i] || {}).schwenk || {}).a === 'H' ? 'Schwenk nach rechts' : 'Schwenk nach oben', unit: '°', min: 0, max: 180, step: 1, k: 0, when: d => !!(S.r && S.r.gruppen[i]) && S.r.gruppen[i].schwenk.a !== 'N', def: () => S.r.gruppen[i].schwenk.max },
         { typ: 'num', key: 'antrieb.schwenk.' + i + '.min', label: d => ((S.r.gruppen[i] || {}).schwenk || {}).a === 'H' ? 'Schwenk nach links (negativ)' : 'Schwenk nach unten (negativ)', unit: '°', min: -180, max: 0, step: 1, k: 0, when: d => !!(S.r && S.r.gruppen[i]) && S.r.gruppen[i].schwenk.a !== 'N', def: () => S.r.gruppen[i].schwenk.min },
+        // Mischung mit der Steuerung (Chewie, 07.11.2026): in Mode 2/3 schwenkt die Gruppe mit dem Seiten- und Höhenruder
+        // (Paare an der 45°-Achse gegensinnig = Gieren, gleichsinnig = Nicken)
+        { typ: 'seg', key: 'antrieb.schwenk.' + i + '.r', label: 'mit Ruder gemischt (Steuermodus 2/3)', when: d => !!(S.r && S.r.gruppen[i]) && S.r.gruppen[i].schwenk.a !== 'N', def: () => S.r.gruppen[i].schwenk.seite ? 'R' : '', opts: [['', 'nein'], ['R', 'ja']] },
       ]),
       { typ: 'num', key: 'antrieb.eta', label: 'Propellerwirkungsgrad', min: 0.3, max: 0.9, step: 0.01, k: 0, pct: true, vorschlag: d => d.V < 50 ? 0.5 : 0.7 },
     ], text: (d, r) => `<b>Vorschlag nach Burgess:</b> P = ρ·v³·V<sup>2/3</sup>/K mit K = ${d.bauweise === 'S' ? '63,5' : '40'} für ${de((d.v_ziel || d.v_reise * 1.3))} km/h ⇒ ${fp(r.P_burgess)} gesamt. Antrieb ${fm(r.leer.antrieb)}, Energie ${fm(r.propulsion.mEnergie)}.` + (d.antrieb.lage === 'R' ? (N => `<br>Motorgondeln am Rumpf: ${N.paare ? N.paare + (N.paare > 1 ? ' Paare' : ' Paar') + ' links/rechts auf gleicher Länge' : ''}${N.paare && N.mitte ? ', ' : ''}${N.heck ? 'ein Motor ganz am Heck' : N.mitte ? 'Mittelgondel unter der Hülle mit ' + (N.mitte === 2 ? 'zwei Motoren hintereinander auf einen Propeller' : 'einem Motor') : ''} ⇒ ${N.g} Gondeln.`)(C.nacelles(d.antrieb)) : '') + vektorText(r) },
@@ -543,7 +551,8 @@ function applySuggestions() {
 function vektorText(r) {
   const G = (r.gruppen || []).filter(g => g.schwenk.a !== 'N'); if (!G.length) return '';
   const vz = G.filter(g => g.schwenk.a !== 'H').map(g => g.name).join(', '), sz = G.filter(g => g.schwenk.a === 'H').map(g => g.name).join(', ');
-  return '<br><b>Vektorknüppel im Flug:</b> ' + (vz ? 'vor/zurück = ' + vz + ' Schub hoch/runter' : '') + (vz && sz ? ' · ' : '') + (sz ? 'links/rechts = ' + sz + ' seitlich (Gieren)' : '') + '. Paare schwenken gleichsinnig.';
+  return '<br><b>Vektorknüppel im Flug:</b> ' + (vz ? 'vor/zurück = ' + vz + ' Schub hoch/runter' : '') + (vz && sz ? ' · ' : '') + (sz ? 'links/rechts = ' + sz + ' seitlich (Gieren)' : '') + '. Paare schwenken gleichsinnig.'
+    + (G.some(g => g.schwenk.seite) ? ' <b>Steuermodus 2/3:</b> ' + G.filter(g => g.schwenk.seite).map(g => g.name).join(', ') + ' schwenkt mit dem Ruder (Paare an der 45°-Achse gegensinnig = Gieren, gleichsinnig = Nicken).' : '');
 }
 // Gerüst und Innenaufbau in Worten (Schritt Bauweise)
 function strukturText(d, r) {

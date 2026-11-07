@@ -1,4 +1,4 @@
-// 2026-11-07 18:40 · core.js 0.19: Höhe der Schublinie bei Gondeln am Rumpf einstellbar (antrieb.zR, Code ZT); größter Ruderausschlag einstellbar (ltw.dmax, Code T 12. Feld) mit gedämpfter Wirkung über dem Abrisswinkel; Motorschwenk mit Ruder mischbar (Code SW 4. Feld R)
+// 2026-11-07 18:40 · core.js 0.19: kleine Zahlen im Speicher-Code mit 4 gültigen Ziffern; Höhe der Schublinie bei Gondeln am Rumpf einstellbar (antrieb.zR, Code ZT); größter Ruderausschlag einstellbar (ltw.dmax, Code T 12. Feld) mit gedämpfter Wirkung über dem Abrisswinkel; Motorschwenk mit Ruder mischbar (Code SW 4. Feld R)
 // 2026-10-24 22:50 · core.js 0.18: Hinweis zu Starrluftschiffen unter 28.000 m³ neu formuliert (Wortlaut Nutzer)
 // 2026-10-15 23:00 · core.js 0.17: Motorgruppen mit Schwenk (Vektorsteuerung), Code SW
 // 2026-10-15 22:40 · core.js 0.16: Trimmzustand (buglastig/hecklastig/ausgetrimmt ±3°) statt Gondel-Vorschlägen
@@ -909,7 +909,8 @@
      ----------------------------------------------------------------------------------------------- */
   function encode(d) {
     const f = d.form, a = d.antrieb, p = [];
-    const num = x => String(+(+x).toFixed(3)).replace(/^0\./, '.');
+    // Zahlen im Code: 3 Nachkommastellen, kleine Werte (unter 1) mit 4 gültigen Ziffern (z. B. Akku 0,0044 kWh, 07.11.2026)
+    const num = x => String(Math.abs(+x) < 1 && +x !== 0 ? +(+x).toPrecision(4) : +(+x).toFixed(3)).replace(/^0\./, '.').replace(/^-0\./, '-.');
     const txt = t => String(t || '').replace(/[|\r\n]/g, ' ').trim();
     p.push('LS1', 'N:' + txt(d.name), 'B:' + d.bauweise, 'G:' + d.gas, 'R:' + num(d.reinheit), 'V:' + num(d.V));
     p.push('F:' + [f.LD, f.m, f.Cp, f.r0, f.r1].map(num).join(','));
